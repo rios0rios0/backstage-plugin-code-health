@@ -103,12 +103,10 @@
       "<rootDir>",
       "<rootDir>/../test"
     ],
-    "setupFilesAfterEnv": [
-      "<rootDir>/../test/setup.ts"
-    ],
     "collectCoverageFrom": [
       "**/*.{ts,tsx}",
       "!**/*.d.ts",
+      "!setupTests.ts",
       "!domain/entities/repository.ts",
       "!domain/entities/contributor.ts",
       "!domain/entities/release.ts",
