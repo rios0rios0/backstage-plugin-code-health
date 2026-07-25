@@ -1,9 +1,13 @@
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import Box from "@material-ui/core/Box";
+import Checkbox from "@material-ui/core/Checkbox";
+import FormControlLabel from "@material-ui/core/FormControlLabel";
+import Link from "@material-ui/core/Link";
+import Paper from "@material-ui/core/Paper";
+import Typography from "@material-ui/core/Typography";
+import { makeStyles } from "@material-ui/core/styles";
+import type { ColumnDef, ColumnFiltersState, SortingState } from "@tanstack/react-table";
 import {
-  type ColumnDef,
-  type ColumnFiltersState,
-  type SortingState,
-  flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
@@ -13,6 +17,9 @@ import {
 import type { Repository } from "../../domain/entities/repository";
 import { BadgeStatusCell } from "./badge_status_cell";
 import { ComplianceBadge } from "./compliance_badge";
+import { DataTable, PaginationControls } from "./data_table";
+import { EmptyCell } from "./empty_cell";
+import { StateChip } from "./state_chip";
 import { StatusBadge } from "./status_badge";
 
 interface RepositoryTableProps {
@@ -34,43 +41,93 @@ const formatRelativeDate = (dateString: string): string => {
   return `${Math.floor(diffDays / 365)}y ago`;
 };
 
-const BranchesCell = ({ branches, defaultBranch }: { branches: string[]; defaultBranch: string }) => {
+const useBranchStyles = makeStyles((theme) => ({
+  anchor: { position: "relative" },
+  overlay: { position: "fixed", inset: 0, zIndex: theme.zIndex.modal - 1 },
+  popup: {
+    position: "absolute",
+    left: 0,
+    top: "100%",
+    zIndex: theme.zIndex.modal,
+    marginTop: theme.spacing(0.5),
+    width: 224,
+    maxHeight: 240,
+    overflowY: "auto",
+  },
+  list: { listStyle: "none", margin: 0, padding: theme.spacing(0.5, 0) },
+  item: { padding: theme.spacing(0.5, 1.5) },
+  monospace: { fontFamily: "monospace" },
+}));
+
+const BranchesCell = ({
+  branches,
+  defaultBranch,
+}: {
+  branches: string[];
+  defaultBranch: string;
+}) => {
+  const classes = useBranchStyles();
   const [open, setOpen] = useState(false);
   const nonDefault = branches.filter((b) => b !== defaultBranch);
-  const count = nonDefault.length;
 
   const toggle = useCallback(() => setOpen((prev) => !prev), []);
 
   return (
-    <div className="relative">
-      <button
-        type="button"
+    <div className={classes.anchor}>
+      <StateChip
+        tone="neutral"
+        label={String(nonDefault.length)}
         onClick={toggle}
-        className="rounded border border-gray-300 px-2 py-0.5 text-xs tabular-nums hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700"
-      >
-        {count}
-      </button>
+        ariaExpanded={open}
+      />
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={toggle} />
-          <div className="absolute left-0 top-full z-20 mt-1 max-h-60 w-56 overflow-y-auto rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-600 dark:bg-gray-800">
+          <div
+            data-testid="branches-overlay"
+            className={classes.overlay}
+            onClick={toggle}
+            aria-hidden="true"
+          />
+          <Paper elevation={8} className={classes.popup} role="menu" aria-label="Branches">
             {nonDefault.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">No extra branches</p>
+              <Box p={1.5}>
+                <Typography variant="caption" color="textSecondary">
+                  No extra branches
+                </Typography>
+              </Box>
             ) : (
-              <ul className="py-1">
+              <ul className={classes.list}>
                 {nonDefault.map((branch) => (
-                  <li key={branch} className="px-3 py-1 text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700">
-                    {branch}
+                  <li key={branch} className={classes.item}>
+                    <Typography variant="caption">{branch}</Typography>
                   </li>
                 ))}
               </ul>
             )}
-          </div>
+          </Paper>
         </>
       )}
     </div>
   );
 };
+
+const DefaultBranchCell = ({ branch }: { branch: string }) => {
+  const classes = useBranchStyles();
+  const isNonStandard = branch !== "main";
+
+  if (isNonStandard) {
+    return <StateChip tone="warning" label={branch} title="Default branch is not 'main'" />;
+  }
+
+  return (
+    <Typography variant="caption" className={classes.monospace}>
+      {branch}
+    </Typography>
+  );
+};
+
+const MetricCell = ({ value }: { value: string | number | null }) =>
+  value === null ? <EmptyCell /> : <Typography variant="body2">{value}</Typography>;
 
 const columns: ColumnDef<Repository>[] = [
   {
@@ -79,33 +136,20 @@ const columns: ColumnDef<Repository>[] = [
     cell: ({ row }) => {
       const repo = row.original;
       return (
-        <div>
-          <div className="flex items-center gap-2">
-            <a
-              href={repo.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-            >
+        <Box>
+          <Box display="flex" alignItems="center" gridGap={8}>
+            <Link href={repo.url} target="_blank" rel="noopener noreferrer">
               {repo.fullName}
-            </a>
-            {repo.isArchived && (
-              <span className="rounded bg-orange-100 px-1.5 py-0.5 text-xs text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
-                archived
-              </span>
-            )}
-            {repo.isFork && (
-              <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                fork
-              </span>
-            )}
-          </div>
+            </Link>
+            {repo.isArchived && <StateChip tone="warning" label="archived" />}
+            {repo.isFork && <StateChip tone="info" label="fork" />}
+          </Box>
           {repo.description && (
-            <p className="mt-0.5 max-w-md truncate text-xs text-gray-400 dark:text-gray-500">
+            <Typography variant="caption" color="textSecondary" noWrap component="p">
               {repo.description}
-            </p>
+            </Typography>
           )}
-        </div>
+        </Box>
       );
     },
     filterFn: "includesString",
@@ -113,18 +157,7 @@ const columns: ColumnDef<Repository>[] = [
   {
     accessorKey: "defaultBranch",
     header: "Default Branch",
-    cell: ({ getValue }) => {
-      const branch = getValue<string>();
-      const isNonStandard = branch !== "main";
-      return (
-        <span className={`text-xs font-mono ${isNonStandard ? "rounded bg-amber-100 px-1.5 py-0.5 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400" : "text-gray-700 dark:text-gray-300"}`}>
-          {branch}
-          {isNonStandard && (
-            <span className="ml-1 not-italic" title="Default branch is not 'main'">{"\u26A0"}</span>
-          )}
-        </span>
-      );
-    },
+    cell: ({ getValue }) => <DefaultBranchCell branch={getValue<string>()} />,
     filterFn: "includesString",
   },
   {
@@ -178,13 +211,7 @@ const columns: ColumnDef<Repository>[] = [
     header: "Language",
     cell: ({ getValue }) => {
       const lang = getValue<string | null>();
-      return lang ? (
-        <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">
-          {lang}
-        </span>
-      ) : (
-        <span className="text-xs text-gray-400 dark:text-gray-500">-</span>
-      );
+      return lang ? <StateChip tone="info" label={lang} /> : <EmptyCell />;
     },
     filterFn: "includesString",
   },
@@ -194,19 +221,16 @@ const columns: ColumnDef<Repository>[] = [
     header: "Release",
     cell: ({ row }) => {
       const release = row.original.latestRelease;
-      if (!release) return <span className="text-xs text-gray-400 dark:text-gray-500">-</span>;
+      if (!release) return <EmptyCell />;
       return (
-        <a
-          href={release.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-        >
-          <span className="font-mono">{release.tagName}</span>
-          <span className="ml-1 text-gray-400 dark:text-gray-500">
+        <Link href={release.url} target="_blank" rel="noopener noreferrer">
+          <Typography variant="caption" component="span" style={{ fontFamily: "monospace" }}>
+            {release.tagName}
+          </Typography>{" "}
+          <Typography variant="caption" component="span" color="textSecondary">
             {formatRelativeDate(release.publishedAt)}
-          </span>
-        </a>
+          </Typography>
+        </Link>
       );
     },
     filterFn: "includesString",
@@ -218,9 +242,11 @@ const columns: ColumnDef<Repository>[] = [
     cell: ({ row }) => {
       const tag = row.original.latestTag;
       return tag ? (
-        <span className="font-mono text-xs">{tag.name}</span>
+        <Typography variant="caption" style={{ fontFamily: "monospace" }}>
+          {tag.name}
+        </Typography>
       ) : (
-        <span className="text-xs text-gray-400 dark:text-gray-500">-</span>
+        <EmptyCell />
       );
     },
     filterFn: "includesString",
@@ -229,25 +255,23 @@ const columns: ColumnDef<Repository>[] = [
     accessorKey: "updatedAt",
     header: "Updated",
     cell: ({ getValue }) => (
-      <span className="text-xs text-gray-500 dark:text-gray-400">
+      <Typography variant="caption" color="textSecondary">
         {formatRelativeDate(getValue<string>())}
-      </span>
+      </Typography>
     ),
     enableColumnFilter: false,
   },
   {
     accessorKey: "visibility",
     header: "Visibility",
-    cell: ({ getValue }) => {
-      const v = getValue<string>();
-      return v === "PRIVATE" ? (
-        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-          private
-        </span>
+    cell: ({ getValue }) =>
+      getValue<string>() === "PRIVATE" ? (
+        <StateChip tone="neutral" label="private" />
       ) : (
-        <span className="text-xs text-gray-400 dark:text-gray-500">public</span>
-      );
-    },
+        <Typography variant="caption" color="textSecondary">
+          public
+        </Typography>
+      ),
     meta: { filterType: "select", options: ["", "PUBLIC", "PRIVATE"] },
     filterFn: (row, _columnId, filterValue) => {
       if (!filterValue) return true;
@@ -260,11 +284,11 @@ const columns: ColumnDef<Repository>[] = [
     header: "Quality Gate",
     cell: ({ row }) => {
       const status = row.original.sonarMetrics?.qualityGateStatus;
-      if (!status || status === "NONE") return <span className="text-xs text-gray-400 dark:text-gray-500">-</span>;
+      if (!status || status === "NONE") return <EmptyCell />;
       return status === "OK" ? (
-        <span className="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-800 dark:bg-green-900/30 dark:text-green-400">Passed</span>
+        <StateChip tone="success" label="Passed" />
       ) : (
-        <span className="rounded bg-red-100 px-1.5 py-0.5 text-xs text-red-800 dark:bg-red-900/30 dark:text-red-400">Failed</span>
+        <StateChip tone="error" label="Failed" />
       );
     },
     meta: { filterType: "select", options: ["", "OK", "ERROR"] },
@@ -277,28 +301,28 @@ const columns: ColumnDef<Repository>[] = [
     id: "sonarBugs",
     accessorFn: (row) => row.sonarMetrics?.bugs ?? null,
     header: "Bugs",
-    cell: ({ getValue }) => <span className="text-sm text-gray-700 dark:text-gray-300">{getValue<number | null>() ?? "-"}</span>,
+    cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
     id: "sonarSmells",
     accessorFn: (row) => row.sonarMetrics?.codeSmells ?? null,
     header: "Smells",
-    cell: ({ getValue }) => <span className="text-sm text-gray-700 dark:text-gray-300">{getValue<number | null>() ?? "-"}</span>,
+    cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
     id: "sonarVulns",
     accessorFn: (row) => row.sonarMetrics?.vulnerabilities ?? null,
     header: "Vulns",
-    cell: ({ getValue }) => <span className="text-sm text-gray-700 dark:text-gray-300">{getValue<number | null>() ?? "-"}</span>,
+    cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
     id: "sonarHotspots",
     accessorFn: (row) => row.sonarMetrics?.securityHotspots ?? null,
     header: "Hotspots",
-    cell: ({ getValue }) => <span className="text-sm text-gray-700 dark:text-gray-300">{getValue<number | null>() ?? "-"}</span>,
+    cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
@@ -307,7 +331,7 @@ const columns: ColumnDef<Repository>[] = [
     header: "Coverage",
     cell: ({ getValue }) => {
       const v = getValue<number | null>();
-      return <span className="text-sm text-gray-700 dark:text-gray-300">{v !== null ? `${v.toFixed(1)}%` : "-"}</span>;
+      return <MetricCell value={v !== null ? `${v.toFixed(1)}%` : null} />;
     },
     enableColumnFilter: false,
   },
@@ -317,7 +341,7 @@ const columns: ColumnDef<Repository>[] = [
     header: "Dups",
     cell: ({ getValue }) => {
       const v = getValue<number | null>();
-      return <span className="text-sm text-gray-700 dark:text-gray-300">{v !== null ? `${v.toFixed(1)}%` : "-"}</span>;
+      return <MetricCell value={v !== null ? `${v.toFixed(1)}%` : null} />;
     },
     enableColumnFilter: false,
   },
@@ -325,53 +349,10 @@ const columns: ColumnDef<Repository>[] = [
     id: "sonarDebt",
     accessorFn: (row) => row.sonarMetrics?.technicalDebt ?? null,
     header: "Debt",
-    cell: ({ getValue }) => <span className="text-sm text-gray-700 dark:text-gray-300">{getValue<string | null>() ?? "-"}</span>,
+    cell: ({ getValue }) => <MetricCell value={getValue<string | null>()} />,
     enableColumnFilter: false,
   },
 ];
-
-const ColumnFilter = ({ column }: { column: { getFilterValue: () => unknown; setFilterValue: (v: unknown) => void; columnDef: ColumnDef<Repository> } }) => {
-  const meta = column.columnDef.meta as { filterType?: string; options?: string[] } | undefined;
-
-  if (meta?.filterType === "select") {
-    return (
-      <select
-        value={(column.getFilterValue() as string) ?? ""}
-        onChange={(e) => column.setFilterValue(e.target.value || undefined)}
-        className="w-full rounded border border-gray-200 px-1.5 py-1 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-      >
-        <option value="">All</option>
-        {meta.options?.filter(Boolean).map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
-        ))}
-      </select>
-    );
-  }
-
-  return (
-    <input
-      type="text"
-      value={(column.getFilterValue() as string) ?? ""}
-      onChange={(e) => column.setFilterValue(e.target.value || undefined)}
-      placeholder="Filter..."
-      className="w-full rounded border border-gray-200 px-1.5 py-1 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-    />
-  );
-};
-
-const LoadingSkeleton = () => (
-  <tbody>
-    {Array.from({ length: 8 }, (_, i) => (
-      <tr key={i} className="animate-pulse">
-        {Array.from({ length: columns.length }, (_, j) => (
-          <td key={j} className="px-3 py-3">
-            <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
-          </td>
-        ))}
-      </tr>
-    ))}
-  </tbody>
-);
 
 export const RepositoryTable = ({
   repositories,
@@ -405,116 +386,58 @@ export const RepositoryTable = ({
 
   if (!isLoading && repositories.length === 0) {
     return (
-      <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-        No repositories found.
-      </div>
+      <Box py={6} textAlign="center">
+        <Typography color="textSecondary">No repositories found.</Typography>
+      </Box>
     );
   }
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+      <Box
+        display="flex"
+        alignItems="center"
+        justifyContent="space-between"
+        flexWrap="wrap"
+        mb={1}
+        gridGap={8}
+      >
+        <Box display="flex" alignItems="center" gridGap={16}>
+          <Typography variant="body2" color="textSecondary">
             {table.getFilteredRowModel().rows.length} of {totalCount} repositories
-          </p>
-          <label className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-            Archived
-          </label>
-          <label className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-            <input type="checkbox" checked={showForks} onChange={(e) => setShowForks(e.target.checked)} />
-            Forks
-          </label>
-        </div>
-        {table.getPageCount() > 1 && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={!table.getCanPreviousPage()}
-              onClick={() => table.previousPage()}
-              className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-gray-600"
-            >
-              Previous
-            </button>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}
-            </span>
-            <button
-              type="button"
-              disabled={!table.getCanNextPage()}
-              onClick={() => table.nextPage()}
-              className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-gray-600"
-            >
-              Next
-            </button>
-          </div>
-        )}
-      </div>
+          </Typography>
+          <FormControlLabel
+            label="Archived"
+            control={
+              <Checkbox
+                size="small"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+            }
+          />
+          <FormControlLabel
+            label="Forks"
+            control={
+              <Checkbox
+                size="small"
+                checked={showForks}
+                onChange={(e) => setShowForks(e.target.checked)}
+              />
+            }
+          />
+        </Box>
+        <PaginationControls
+          pageIndex={table.getState().pagination.pageIndex}
+          pageCount={table.getPageCount()}
+          canPreviousPage={table.getCanPreviousPage()}
+          canNextPage={table.getCanNextPage()}
+          onPrevious={() => table.previousPage()}
+          onNext={() => table.nextPage()}
+        />
+      </Box>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-800">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <Fragment key={headerGroup.id}>
-                <tr>
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      scope="col"
-                      aria-sort={
-                        header.column.getIsSorted()
-                          ? header.column.getIsSorted() === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : "none"
-                      }
-                      className="whitespace-nowrap px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                    >
-                      <button
-                        type="button"
-                        className="inline-flex w-full items-center text-left cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        {header.column.getIsSorted() && (
-                          <span className="ml-1" aria-hidden="true">
-                            {header.column.getIsSorted() === "asc" ? "\u25B2" : "\u25BC"}
-                          </span>
-                        )}
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-                <tr className="border-t border-gray-100 dark:border-gray-700">
-                  {headerGroup.headers.map((header) => (
-                    <th key={header.id} className="px-3 py-1.5">
-                      {header.column.getCanFilter() ? (
-                        <ColumnFilter column={header.column as never} />
-                      ) : null}
-                    </th>
-                  ))}
-                </tr>
-              </Fragment>
-            ))}
-          </thead>
-          {isLoading ? (
-            <LoadingSkeleton />
-          ) : (
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="whitespace-nowrap px-3 py-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          )}
-        </table>
-      </div>
+      <DataTable table={table} isLoading={isLoading} skeletonRows={8} />
     </>
   );
 };

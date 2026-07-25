@@ -5,7 +5,7 @@ import type { BadgeRepository } from "../domain/repositories/badge_repository";
 import type { ComplianceRepository } from "../domain/repositories/compliance_repository";
 import type { RepositoryRepository } from "../domain/repositories/repository_repository";
 import type { SonarRepository } from "../domain/repositories/sonar_repository";
-import type { DashboardService } from "../domain/services/dashboard_service";
+import type { PlatformDashboardService } from "../domain/services/dashboard_service";
 
 const BATCH_SIZE = 10;
 
@@ -17,7 +17,7 @@ const getOwnerFromFullName = (fullName: string): string => {
   return parts.length >= 3 ? `${parts[0]}/${parts[1]}` : parts[0];
 };
 
-export class GitHubDashboardService implements DashboardService {
+export class GitHubDashboardService implements PlatformDashboardService {
   private readonly repositoryRepository: RepositoryRepository;
   private readonly sonarRepository: SonarRepository;
   private readonly complianceRepository: ComplianceRepository;

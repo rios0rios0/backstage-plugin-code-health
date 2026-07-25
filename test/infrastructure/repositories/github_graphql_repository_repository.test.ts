@@ -1,13 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GitHubGraphQLRepositoryRepository } from "../../../src/infrastructure/repositories/github_graphql_repository_repository";
 
-vi.mock("../../../src/infrastructure/http/graphql_client", () => ({
-  graphqlRequest: vi.fn(),
-}));
+import { createStubGraphQLClient } from "../../doubles/stub_http_clients";
 
-import { graphqlRequest } from "../../../src/infrastructure/http/graphql_client";
-
-const mockedGraphql = vi.mocked(graphqlRequest);
+let mockedGraphql: ReturnType<typeof createStubGraphQLClient>["request"];
 
 const createNode = (overrides: Record<string, unknown> = {}) => ({
   id: "R_1",
@@ -40,7 +36,9 @@ describe("GitHubGraphQLRepositoryRepository", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    repository = new GitHubGraphQLRepositoryRepository();
+    const stub = createStubGraphQLClient();
+    mockedGraphql = stub.request;
+    repository = new GitHubGraphQLRepositoryRepository(stub.client);
   });
 
   it("should return mapped repositories from single page response", async () => {

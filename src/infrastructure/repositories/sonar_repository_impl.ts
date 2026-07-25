@@ -1,8 +1,10 @@
 import type { SonarMetrics, QualityGateStatus } from "../../domain/entities/sonar_metrics";
+import type { SonarType } from "../../domain/entities/sonar_type";
 import type { AuthorIssues, SonarRepository } from "../../domain/repositories/sonar_repository";
+import type { SonarClient } from "../http/sonar_client";
 
 export interface SonarConfig {
-  type: "cloud" | "qube";
+  type: SonarType;
   token: string;
   baseUrl: string;
   organization?: string;
@@ -70,21 +72,17 @@ const parseMeasures = (measures: SonarMeasure[], qualityGate: QualityGateStatus)
   };
 };
 
-const sonarFetch = async <T>(token: string, url: string): Promise<T> => {
-  const response = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!response.ok) throw new Error(`Sonar API error: ${response.status}`);
-  return (await response.json()) as T;
-};
-
 export class SonarRepositoryImpl implements SonarRepository {
+  private readonly client: SonarClient;
   private readonly config: SonarConfig;
-  private readonly apiBase: string;
 
-  constructor(config: SonarConfig) {
+  constructor(client: SonarClient, config: SonarConfig) {
+    this.client = client;
     this.config = config;
-    this.apiBase = `${config.baseUrl.replace(/\/$/, "")}/api`;
+  }
+
+  private request<T>(path: string): Promise<T> {
+    return this.client.get<T>(this.config.token, this.config.baseUrl, path);
   }
 
   async listProjectKeys(): Promise<string[]> {
@@ -93,8 +91,9 @@ export class SonarRepositoryImpl implements SonarRepository {
         this.config.type === "cloud" && this.config.organization
           ? `&organization=${encodeURIComponent(this.config.organization)}`
           : "";
-      const url = `${this.apiBase}/projects/search?ps=500${orgParam}`;
-      const data = await sonarFetch<SonarProjectSearchResponse>(this.config.token, url);
+      const data = await this.request<SonarProjectSearchResponse>(
+        `/api/projects/search?ps=500${orgParam}`,
+      );
       return data.components.map((c) => c.key);
     } catch {
       return [];
@@ -104,13 +103,11 @@ export class SonarRepositoryImpl implements SonarRepository {
   async getProjectMetrics(projectKey: string): Promise<SonarMetrics | null> {
     try {
       const [measuresData, gateData] = await Promise.all([
-        sonarFetch<SonarMeasuresResponse>(
-          this.config.token,
-          `${this.apiBase}/measures/component?component=${encodeURIComponent(projectKey)}&metricKeys=${METRIC_KEYS}`,
+        this.request<SonarMeasuresResponse>(
+          `/api/measures/component?component=${encodeURIComponent(projectKey)}&metricKeys=${METRIC_KEYS}`,
         ),
-        sonarFetch<SonarQualityGateResponse>(
-          this.config.token,
-          `${this.apiBase}/qualitygates/project_status?projectKey=${encodeURIComponent(projectKey)}`,
+        this.request<SonarQualityGateResponse>(
+          `/api/qualitygates/project_status?projectKey=${encodeURIComponent(projectKey)}`,
         ).catch(() => null),
       ]);
 
@@ -131,8 +128,9 @@ export class SonarRepositoryImpl implements SonarRepository {
 
     try {
       for (;;) {
-        const url = `${this.apiBase}/issues/search?componentKeys=${encodeURIComponent(projectKey)}&statuses=OPEN,CONFIRMED&ps=${pageSize}&p=${page}`;
-        const data = await sonarFetch<SonarIssuesResponse>(this.config.token, url);
+        const data = await this.request<SonarIssuesResponse>(
+          `/api/issues/search?componentKeys=${encodeURIComponent(projectKey)}&statuses=OPEN,CONFIRMED&ps=${pageSize}&p=${page}`,
+        );
 
         for (const issue of data.issues) {
           const author = issue.author || "unknown";

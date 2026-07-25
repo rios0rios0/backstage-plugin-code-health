@@ -1,7 +1,7 @@
 import type { WakaTimeMetrics } from "../../domain/entities/wakatime_metrics";
 import type { WakaTimeRepository } from "../../domain/repositories/wakatime_repository";
+import type { WakaTimeClient } from "../http/wakatime_client";
 
-const WAKATIME_API = "https://wakatime.com/api/v1";
 const BATCH_SIZE = 5;
 
 interface WakaTimeMember {
@@ -20,18 +20,12 @@ interface WakaTimeSummariesResponse {
   data: WakaTimeSummaryDay[];
 }
 
-const wakaFetch = async <T>(token: string, url: string): Promise<T> => {
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) throw new Error(`WakaTime API error: ${response.status}`);
-  return (await response.json()) as T;
-};
-
 export class WakaTimeRepositoryImpl implements WakaTimeRepository {
+  private readonly client: WakaTimeClient;
   private readonly token: string;
 
-  constructor(token: string) {
+  constructor(client: WakaTimeClient, token: string) {
+    this.client = client;
     this.token = token;
   }
 
@@ -40,9 +34,9 @@ export class WakaTimeRepositoryImpl implements WakaTimeRepository {
 
     let members: WakaTimeMember[];
     try {
-      const response = await wakaFetch<WakaTimeMembersResponse>(
+      const response = await this.client.get<WakaTimeMembersResponse>(
         this.token,
-        `${WAKATIME_API}/orgs/${encodeURIComponent(organization)}/members`,
+        `/orgs/${encodeURIComponent(organization)}/members`,
       );
       members = response.data;
     } catch {
@@ -54,9 +48,9 @@ export class WakaTimeRepositoryImpl implements WakaTimeRepository {
       const summaries = await Promise.all(
         batch.map(async (member) => {
           try {
-            const response = await wakaFetch<WakaTimeSummariesResponse>(
+            const response = await this.client.get<WakaTimeSummariesResponse>(
               this.token,
-              `${WAKATIME_API}/users/${encodeURIComponent(member.user.username)}/summaries?range=last_30_days`,
+              `/users/${encodeURIComponent(member.user.username)}/summaries?range=last_30_days`,
             );
             const totalSeconds = response.data.reduce(
               (sum, day) => sum + day.grand_total.total_seconds,

@@ -1,6 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { GitforgeConfig } from "../../../src/domain/entities/gitforge_config";
+import { EMPTY_GITFORGE_CONFIG } from "../../../src/domain/entities/gitforge_config";
 import { SettingsPage } from "../../../src/presentation/pages/settings_page";
+
+const configWith = (overrides: Partial<GitforgeConfig>): GitforgeConfig => ({
+  ...EMPTY_GITFORGE_CONFIG,
+  ...overrides,
+  proxied: { ...EMPTY_GITFORGE_CONFIG.proxied, ...overrides.proxied },
+});
 
 const defaultProps = {
   token: "ghp_test123",
@@ -209,5 +217,56 @@ describe("SettingsPage", () => {
 
     // then
     expect(onUpdateWakaTime).toHaveBeenCalledWith(null);
+  });
+
+  it("should lock the fields an administrator pinned in app-config", () => {
+    // given
+    const config = configWith({ platform: "github", organization: "acme" });
+
+    // when
+    render(<SettingsPage {...defaultProps} config={config} />);
+    fireEvent.click(screen.getAllByText("Edit")[0]);
+
+    // then
+    expect(screen.getByText(/cannot be changed here/)).toBeInTheDocument();
+    expect(screen.getByLabelText("GitHub Username")).toBeDisabled();
+    expect(screen.getByLabelText("Personal Access Token")).not.toBeDisabled();
+  });
+
+  it("should explain that a proxied platform needs no personal token", () => {
+    // given
+    const config = configWith({ proxied: { github: true } });
+
+    // when
+    render(<SettingsPage {...defaultProps} config={config} />);
+    fireEvent.click(screen.getAllByText("Edit")[0]);
+
+    // then
+    expect(screen.getByText(/no personal token is needed/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Personal Access Token")).toBeDisabled();
+  });
+
+  it("should report Sonar as connected when it is reached through a proxy", () => {
+    // given
+    const config = configWith({ proxied: { sonar: true } });
+    const props = { ...defaultProps, sonarToken: null, sonarType: null };
+
+    // when
+    render(<SettingsPage {...props} config={config} />);
+
+    // then
+    expect(screen.getAllByText("Connected")).toHaveLength(3);
+  });
+
+  it("should call onForgetCredentials when the user clears everything", () => {
+    // given
+    const onForgetCredentials = vi.fn();
+    render(<SettingsPage {...defaultProps} onForgetCredentials={onForgetCredentials} />);
+
+    // when
+    fireEvent.click(screen.getByText("Forget all credentials"));
+
+    // then
+    expect(onForgetCredentials).toHaveBeenCalled();
   });
 });

@@ -1,11 +1,32 @@
 /// <reference types="vitest/config" />
-import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+/** Everything a Backstage app already provides is kept out of the bundle. */
+const EXTERNAL = [
+  /^react($|\/)/,
+  /^react-dom($|\/)/,
+  /^react\/jsx-runtime$/,
+  /^react-router-dom($|\/)/,
+  /^@backstage\//,
+  /^@material-ui\//,
+  /^@tanstack\//,
+];
+
 export default defineConfig({
-  base: "/gitforge-dashboard/",
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
+  build: {
+    target: "es2022",
+    sourcemap: true,
+    lib: {
+      entry: "src/index.ts",
+      formats: ["es"],
+      fileName: "index",
+    },
+    rollupOptions: {
+      external: EXTERNAL,
+    },
+  },
   test: {
     globals: true,
     environment: "jsdom",
@@ -21,7 +42,6 @@ export default defineConfig({
       exclude: [
         // Type-only files (interfaces, type aliases, no executable code)
         "src/**/*.d.ts",
-        "src/domain/entities/platform.ts",
         "src/domain/entities/repository.ts",
         "src/domain/entities/contributor.ts",
         "src/domain/entities/release.ts",
@@ -31,14 +51,17 @@ export default defineConfig({
         "src/domain/repositories/**",
         "src/domain/services/**",
         "src/service/mappers/*_node.ts",
-        // Entry point (single ReactDOM.createRoot call)
-        "src/main/main.tsx",
+        // Public surface: re-exports and Backstage extension/DI wiring, exercised
+        // once the plugin is mounted in a real app
+        "src/index.ts",
+        "src/plugin.ts",
+        "src/routes.ts",
+        "src/main/api_refs.ts",
+        "src/main/apis.ts",
+        // Root orchestrator; needs a full Backstage app context (router, theme, config)
+        "src/main/router.tsx",
         // Uses IndexedDB (unavailable in jsdom); 46 lines with in-memory fallback
         "src/infrastructure/crypto/crypto_key_store.ts",
-        // Root orchestrator with async init + many wired dependencies; tested indirectly via page/component tests
-        "src/main/app.tsx",
-        // Trivial wrapper (12 lines) delegating entirely to AuthGate which is fully tested
-        "src/presentation/pages/login_page.tsx",
       ],
       thresholds: {
         lines: 90,

@@ -1,9 +1,8 @@
 import type { ComplianceStatus } from "../../domain/entities/compliance_status";
 import { computeComplianceColor } from "../../domain/entities/compliance_status";
 import type { ComplianceRepository } from "../../domain/repositories/compliance_repository";
-import { adoRequest } from "../http/ado_rest_client";
+import type { AdoRestClient } from "../http/ado_rest_client";
 
-const ADO_API = "https://dev.azure.com";
 const API_VERSION = "api-version=7.1";
 const BUILD_VALIDATION_TYPE_ID = "0609b952-1397-4640-95ec-e00a01b2c241";
 
@@ -28,6 +27,12 @@ interface AdoListResponse<T> {
 }
 
 export class AdoComplianceRepository implements ComplianceRepository {
+  private readonly client: AdoRestClient;
+
+  constructor(client: AdoRestClient) {
+    this.client = client;
+  }
+
   async getComplianceStatus(
     token: string,
     owner: string,
@@ -87,8 +92,8 @@ export class AdoComplianceRepository implements ComplianceRepository {
     project: string,
     name: string,
   ): Promise<AdoBuildDefinition[]> {
-    const url = `${ADO_API}/${org}/${project}/_apis/build/definitions?name=${encodeURIComponent(name)}&${API_VERSION}`;
-    const response = await adoRequest<AdoListResponse<AdoBuildDefinition>>(token, url);
+    const path = `/${org}/${project}/_apis/build/definitions?name=${encodeURIComponent(name)}&${API_VERSION}`;
+    const response = await this.client.get<AdoListResponse<AdoBuildDefinition>>(token, path);
     return response.value;
   }
 
@@ -97,8 +102,8 @@ export class AdoComplianceRepository implements ComplianceRepository {
     org: string,
     project: string,
   ): Promise<AdoPolicyConfiguration[]> {
-    const url = `${ADO_API}/${org}/${project}/_apis/policy/configurations?${API_VERSION}`;
-    const response = await adoRequest<AdoListResponse<AdoPolicyConfiguration>>(token, url);
+    const path = `/${org}/${project}/_apis/policy/configurations?${API_VERSION}`;
+    const response = await this.client.get<AdoListResponse<AdoPolicyConfiguration>>(token, path);
     return response.value;
   }
 }

@@ -4,49 +4,63 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A client-side-only TypeScript + React dashboard deployed on GitHub Pages. It displays CI workflow status, releases, tags, compliance checks, and contributor metrics across repositories from GitHub (GraphQL API) and Azure DevOps (REST API). Integrates with SonarCloud and WakaTime for additional metrics. No backend server — runs entirely in the browser.
+A [Backstage](https://backstage.io) frontend plugin published as `@rios0rios0/backstage-plugin-gitforge-dashboard`.
+It displays CI workflow status, releases, tags, compliance checks and contributor metrics for
+repositories from GitHub (GraphQL API) and Azure DevOps (REST API), enriched with SonarCloud/SonarQube
+and WakaTime data. There is no backend of its own: requests either go straight from the browser to each
+provider, or through a Backstage `proxy` endpoint when one is configured.
 
 ## Commands
 
 ```bash
 corepack enable        # Enable Yarn Berry via corepack (first time only)
 yarn install           # Install dependencies
-yarn dev               # Start dev server with hot reload
-yarn build             # Type-check and build for production
+yarn build             # Emit dist/ (ES module + type declarations)
+yarn typecheck         # Type-check without emitting
 make lint              # Run ESLint via pipeline scripts
 make test              # Run Vitest via pipeline scripts
 make sast              # Run full SAST suite (CodeQL, Semgrep, Trivy, Hadolint, Gitleaks)
 ```
 
-**Never run `eslint`, `vitest`, or SAST tools directly.** Always use `make` targets which invoke the [rios0rios0/pipelines](https://github.com/rios0rios0/pipelines) scripts.
+**Never run `eslint`, `vitest`, or SAST tools directly.** Always use `make` targets which invoke the
+[rios0rios0/pipelines](https://github.com/rios0rios0/pipelines) scripts.
+
+This package is a library, so there is no dev server. To exercise it, `yarn build && yarn link` and
+link it into a Backstage app.
 
 ## Architecture
 
 5-Layer Frontend Clean Architecture. Dependencies always point inward toward Domain.
 
 ```
+src/plugin.ts         → createPlugin + createRoutableExtension
+src/routes.ts         → rootRouteRef and its sub-routes
 src/domain/           → Entities, contracts (ports), pure filter/sort functions
-src/service/          → Business logic, platform-specific mappers (GitHub GraphQL + ADO REST)
-src/infrastructure/   → GitHub GraphQL & ADO REST clients, Web Crypto AES-GCM encrypted auth
-src/presentation/     → React components, hooks, pages (dashboard, contributors, settings)
-src/main/             → DI wiring via factories, platform-aware app entry point
+src/service/          → Business logic, platform mappers, settings resolution
+src/infrastructure/   → fetchApi-based clients, proxy-aware endpoint resolution, AES-GCM crypto
+src/presentation/     → Material UI components, hooks, pages
+src/main/             → Backstage utility APIs, ApiRefs, DI wiring, router
 ```
 
 ### Key Files
 
 | File | Purpose |
 |------|---------|
+| `config.d.ts` | Backstage config schema for the `gitforgeDashboard` key (no secrets, frontend-visible only) |
+| `src/plugin.ts` | Plugin definition and the `GitforgeDashboardPage` routable extension |
+| `src/main/api_refs.ts` | The four `ApiRef` tokens the plugin exposes |
+| `src/main/apis.ts` | `createApiFactory` wiring; builds the HTTP clients from `fetchApi` + `discoveryApi` |
+| `src/main/router.tsx` | `Page`/`Header`/`TabbedLayout` composition and the setup gate |
+| `src/main/gitforge_dashboard_api.ts` | `DashboardService` implementation; rebuilds its object graph per call |
+| `src/main/gitforge_contributors_api.ts` | `ContributorService` implementation |
+| `src/service/settings_resolver.ts` | Merges app-config over user settings; decides whether a token is needed |
+| `src/infrastructure/http/endpoint_resolver.ts` | Chooses between a direct base URL and a Backstage proxy path |
+| `src/infrastructure/services/backstage_config_service.ts` | Reads `gitforgeDashboard` into the `GitforgeConfig` entity |
+| `src/infrastructure/services/deferred_authentication_service.ts` | Makes the async encrypted store usable as a synchronous utility API |
+| `src/infrastructure/services/encrypted_authentication_service.ts` | Web Crypto AES-GCM encrypted token storage |
 | `src/domain/entities/dashboard_filter.ts` | Filter/sort logic (pure functions, no side effects) |
 | `src/domain/entities/compliance_status.ts` | Compliance check entity and color computation logic |
-| `src/domain/entities/platform.ts` | Platform abstraction (GitHub / Azure DevOps) |
-| `src/infrastructure/repositories/github_compliance_repository.ts` | GitHub compliance checks via GraphQL (workflow file + branch protection) |
-| `src/infrastructure/repositories/ado_compliance_repository.ts` | ADO compliance checks via REST (build definitions + policy configurations) |
-| `src/infrastructure/repositories/github_graphql_repository_repository.ts` | Core GraphQL query that bulk-fetches repos + CI + releases + tags |
-| `src/infrastructure/http/ado_rest_client.ts` | Azure DevOps REST API client |
-| `src/infrastructure/services/encrypted_authentication_service.ts` | Web Crypto AES-GCM encrypted token storage |
-| `src/service/mappers/graphql_repository_mapper.ts` | Maps raw GraphQL response to domain entities |
-| `src/presentation/hooks/use_repositories.ts` | Central data fetching hook with loading/error states |
-| `src/main/app.tsx` | Root component with auth check and DI wiring |
+| `src/presentation/components/data_table.tsx` | Shared TanStack + Material UI table renderer |
 
 ### Conventions
 
@@ -55,12 +69,17 @@ src/main/             → DI wiring via factories, platform-aware app entry poin
 - **BDD tests** with `// given`, `// when`, `// then` blocks
 - **Stubs over Mocks** — test doubles in `test/doubles/`
 - **Builders** for test data — `test/builders/repository_builder.ts`
+- Material UI **v4** (`@material-ui/core`), matching what `@backstage/core-components` uses
+- React **18** and `react-router-dom` **v6**, matching the Backstage peer ranges
 
 ## Testing
 
-A comprehensive test suite covers domain logic, service layer, infrastructure, and presentation components. All tests use Vitest + Testing Library.
+A comprehensive test suite covers domain logic, service layer, infrastructure, and presentation
+components. All tests use Vitest + Testing Library, with `TestApiProvider` from `@backstage/test-utils`
+for the few components that resolve a Backstage utility API.
 
-Coverage thresholds enforced at 90%+ lines/functions/statements and 77%+ branches. CI posts a coverage PR comment, test result annotations, and uploads the HTML coverage report as an artifact.
+Coverage thresholds enforced at 90%+ lines/functions/statements and 77%+ branches. CI posts a coverage
+PR comment, test result annotations, and uploads the HTML coverage report as an artifact.
 
 ```bash
 make test              # Full suite (ALWAYS use this)
@@ -68,6 +87,7 @@ yarn test              # Quick check during development
 yarn test:watch        # Watch mode for TDD
 ```
 
-## Deployment
+## Release
 
-Deployed to GitHub Pages via `.github/workflows/default.yaml`. CI runs `rios0rios0/pipelines/.github/workflows/yarn-library.yaml`, then builds and deploys to Pages on push to `main`.
+CI runs `rios0rios0/pipelines/.github/workflows/yarn-library.yaml` on every push and pull request.
+The package is published to npm from a tag; there is no deployment target.

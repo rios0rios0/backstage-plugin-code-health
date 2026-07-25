@@ -1,22 +1,65 @@
 import { useCallback, useEffect, useState } from "react";
+import Paper from "@material-ui/core/Paper";
+import Typography from "@material-ui/core/Typography";
+import { makeStyles } from "@material-ui/core/styles";
 import type { BadgeColor, BadgeStatus } from "../../domain/entities/badge_status";
+import { EmptyCell } from "./empty_cell";
+import type { ChipTone } from "./state_chip";
+import { StateChip } from "./state_chip";
 
-const COLOR_STYLES: Record<BadgeColor, { bg: string; text: string; label: string }> = {
-  green: { bg: "bg-green-100 dark:bg-green-900/30", text: "text-green-800 dark:text-green-400", label: "Complete" },
-  yellow: { bg: "bg-yellow-100 dark:bg-yellow-900/30", text: "text-yellow-800 dark:text-yellow-400", label: "Incomplete" },
+const COLOR_STYLES: Record<BadgeColor, { tone: ChipTone; label: string }> = {
+  green: { tone: "success", label: "Complete" },
+  yellow: { tone: "warning", label: "Incomplete" },
 };
+
+const useStyles = makeStyles((theme) => ({
+  anchor: {
+    position: "relative",
+  },
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: theme.zIndex.modal - 1,
+  },
+  popup: {
+    position: "absolute",
+    left: 0,
+    top: "100%",
+    zIndex: theme.zIndex.modal,
+    marginTop: theme.spacing(0.5),
+    width: 256,
+  },
+  list: {
+    listStyle: "none",
+    margin: 0,
+    padding: theme.spacing(0.5, 0),
+  },
+  item: {
+    display: "flex",
+    alignItems: "center",
+    gap: theme.spacing(1),
+    padding: theme.spacing(0.5, 1.5),
+  },
+  present: {
+    color: theme.palette.success.main,
+  },
+  missing: {
+    color: theme.palette.error.main,
+  },
+}));
 
 interface BadgeStatusCellProps {
   status: BadgeStatus | null;
 }
 
 export const BadgeStatusCell = ({ status }: BadgeStatusCellProps) => {
+  const classes = useStyles();
   const [open, setOpen] = useState(false);
   const toggle = useCallback(() => setOpen((prev) => !prev), []);
   const close = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) return undefined;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") close();
     };
@@ -24,43 +67,28 @@ export const BadgeStatusCell = ({ status }: BadgeStatusCellProps) => {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, close]);
 
-  if (!status) return <span className="text-xs text-gray-400 dark:text-gray-500">-</span>;
+  if (!status) return <EmptyCell />;
 
-  const style = COLOR_STYLES[status.color];
+  const { tone, label } = COLOR_STYLES[status.color];
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={open}
-        aria-haspopup="true"
-        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium cursor-pointer ${style.bg} ${style.text}`}
-      >
-        {style.label}
-      </button>
+    <div className={classes.anchor}>
+      <StateChip tone={tone} label={label} onClick={toggle} ariaExpanded={open} />
       {open && (
         <>
-          <div data-testid="badge-overlay" className="fixed inset-0 z-10" onClick={close} />
-          <div
-            role="menu"
-            aria-label="Badge details"
-            className="absolute left-0 top-full z-20 mt-1 w-64 rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-600 dark:bg-gray-800"
-          >
-            <ul className="py-1">
+          <div data-testid="badge-overlay" className={classes.overlay} onClick={close} />
+          <Paper elevation={8} role="menu" aria-label="Badge details" className={classes.popup}>
+            <ul className={classes.list}>
               {status.checks.map((check) => (
-                <li
-                  key={check.label}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 dark:text-gray-300"
-                >
-                  <span className={check.present ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"}>
-                    {check.present ? "\u2713" : "\u2717"}
+                <li key={check.label} className={classes.item}>
+                  <span className={check.present ? classes.present : classes.missing}>
+                    {check.present ? "✓" : "✗"}
                   </span>
-                  {check.label}
+                  <Typography variant="caption">{check.label}</Typography>
                 </li>
               ))}
             </ul>
-          </div>
+          </Paper>
         </>
       )}
     </div>

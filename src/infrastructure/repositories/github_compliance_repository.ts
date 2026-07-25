@@ -1,7 +1,7 @@
 import type { ComplianceStatus } from "../../domain/entities/compliance_status";
 import { computeComplianceColor } from "../../domain/entities/compliance_status";
 import type { ComplianceRepository } from "../../domain/repositories/compliance_repository";
-import { graphqlRequest } from "../http/graphql_client";
+import type { GraphQLClient } from "../http/graphql_client";
 
 const COMPLIANCE_QUERY = `
 query ComplianceCheck($owner: String!, $name: String!, $expression: String!) {
@@ -42,6 +42,12 @@ const patternMatchesBranch = (pattern: string, branch: string): boolean => {
 };
 
 export class GitHubComplianceRepository implements ComplianceRepository {
+  private readonly client: GraphQLClient;
+
+  constructor(client: GraphQLClient) {
+    this.client = client;
+  }
+
   async getComplianceStatus(
     token: string,
     owner: string,
@@ -49,7 +55,7 @@ export class GitHubComplianceRepository implements ComplianceRepository {
     defaultBranch: string,
   ): Promise<ComplianceStatus | null> {
     try {
-      const data = await graphqlRequest<ComplianceQueryResponse>(token, COMPLIANCE_QUERY, {
+      const data = await this.client.request<ComplianceQueryResponse>(token, COMPLIANCE_QUERY, {
         owner,
         name: repoName,
         expression: `HEAD:.github/workflows/default.yaml`,

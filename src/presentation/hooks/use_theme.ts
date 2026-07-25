@@ -1,26 +1,38 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTheme as useMuiTheme } from "@material-ui/core/styles";
+import { appThemeApiRef, useApi } from "@backstage/core-plugin-api";
 
 export type Theme = "light" | "dark";
 
-const STORAGE_KEY = "gitforge-dashboard:theme";
-
-const getInitialTheme = (): Theme => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "light" || stored === "dark") return stored;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-};
-
+/**
+ * Reads and toggles the theme owned by the Backstage app rather than keeping a
+ * plugin-local copy, so the plugin stays in sync with the sidebar theme picker.
+ */
 export const useTheme = () => {
-  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const appThemeApi = useApi(appThemeApiRef);
+  const muiTheme = useMuiTheme();
+  const [activeThemeId, setActiveThemeId] = useState<string | undefined>(() =>
+    appThemeApi.getActiveThemeId(),
+  );
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
-    localStorage.setItem(STORAGE_KEY, theme);
-  }, [theme]);
+    const subscription = appThemeApi.activeThemeId$().subscribe({
+      next: setActiveThemeId,
+    });
+    return () => subscription.unsubscribe();
+  }, [appThemeApi]);
+
+  const theme: Theme = activeThemeId
+    ? activeThemeId === "dark"
+      ? "dark"
+      : "light"
+    : muiTheme.palette.type === "dark"
+      ? "dark"
+      : "light";
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => (prev === "light" ? "dark" : "light"));
-  }, []);
+    appThemeApi.setActiveThemeId(theme === "light" ? "dark" : "light");
+  }, [appThemeApi, theme]);
 
   return { theme, toggleTheme };
 };

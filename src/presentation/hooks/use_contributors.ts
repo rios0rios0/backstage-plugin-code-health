@@ -12,8 +12,7 @@ export interface UseContributorsResult {
 
 export const useContributors = (
   contributorService: ContributorService,
-  token: string | null,
-  username: string | null,
+  enabled: boolean,
 ): UseContributorsResult => {
   const [contributors, setContributors] = useState<Contributor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -22,29 +21,23 @@ export const useContributors = (
 
   const fetchContributors = useCallback(
     async (dateFrom: string | null = null, dateTo: string | null = null) => {
-      if (!token || !username) return;
+      if (!enabled) return;
 
       setIsLoading(true);
       setError(null);
 
       try {
-        const data = await contributorService.listContributors(
-          token,
-          username,
-          dateFrom,
-          dateTo,
-        );
+        const data = await contributorService.listContributors(dateFrom, dateTo);
         setContributors(data);
         setLastFetchedAt(new Date());
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Failed to fetch contributors";
+        const message = err instanceof Error ? err.message : "Failed to fetch contributors";
         setError(message);
       } finally {
         setIsLoading(false);
       }
     },
-    [contributorService, token, username],
+    [contributorService, enabled],
   );
 
   useEffect(() => {

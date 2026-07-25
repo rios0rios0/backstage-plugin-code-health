@@ -4,6 +4,7 @@ import type { ContributorService } from "../../src/domain/services/contributor_s
 export class StubContributorService implements ContributorService {
   private result: Contributor[] = [];
   private error: Error | null = null;
+  readonly calls: { dateFrom: string | null; dateTo: string | null }[] = [];
 
   withContributors(contributors: Contributor[]): this {
     this.result = contributors;
@@ -16,11 +17,10 @@ export class StubContributorService implements ContributorService {
   }
 
   async listContributors(
-    _token: string,
-    _username: string,
-    _dateFrom: string | null,
-    _dateTo: string | null,
+    dateFrom: string | null,
+    dateTo: string | null,
   ): Promise<Contributor[]> {
+    this.calls.push({ dateFrom, dateTo });
     if (this.error) throw this.error;
     return this.result;
   }

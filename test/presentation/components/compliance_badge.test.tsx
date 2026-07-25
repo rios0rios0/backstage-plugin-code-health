@@ -77,10 +77,10 @@ describe("ComplianceBadge", () => {
     render(<ComplianceBadge status={status} />);
 
     // then
-    const badge = screen.getByText("Partial");
-    expect(badge.getAttribute("title")).toContain("\u2713 Pipeline exists");
-    expect(badge.getAttribute("title")).toContain("\u2717 Build policy on PRs");
-    expect(badge.getAttribute("title")).toContain("\u2713 Build policy expiration");
-    expect(badge.getAttribute("title")).toContain("\u2713 Branch protection");
+    const badge = screen.getByText("Partial").closest("[title]");
+    expect(badge?.getAttribute("title")).toContain("\u2713 Pipeline exists");
+    expect(badge?.getAttribute("title")).toContain("\u2717 Build policy on PRs");
+    expect(badge?.getAttribute("title")).toContain("\u2713 Build policy expiration");
+    expect(badge?.getAttribute("title")).toContain("\u2713 Branch protection");
   });
 });

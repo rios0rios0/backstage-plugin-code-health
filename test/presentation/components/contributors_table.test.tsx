@@ -25,7 +25,7 @@ describe("ContributorsTable", () => {
     );
 
     // then
-    const skeletonRows = container.querySelectorAll("tr.animate-pulse");
+    const skeletonRows = container.querySelectorAll("[data-testid=\"loadingRow\"]");
     expect(skeletonRows.length).toBeGreaterThan(0);
   });
 
@@ -72,7 +72,7 @@ describe("ContributorsTable", () => {
 
     // then
     const rateEl = screen.getByText("85.0%");
-    expect(rateEl.className).toContain("text-green");
+    expect(rateEl.getAttribute("data-tone")).toBe("good");
   });
 
   it("should render approval rate with yellow color for rate >= 50 and < 80", () => {
@@ -94,7 +94,7 @@ describe("ContributorsTable", () => {
     // then
     const rateElements = screen.getAllByText("65.0%");
     const approvalRateEl = rateElements[0];
-    expect(approvalRateEl.className).toContain("text-yellow");
+    expect(approvalRateEl.getAttribute("data-tone")).toBe("fair");
   });
 
   it("should render approval rate with red color for rate < 50", () => {
@@ -116,7 +116,7 @@ describe("ContributorsTable", () => {
     // then
     const rateElements = screen.getAllByText("30.0%");
     const approvalRateEl = rateElements[0];
-    expect(approvalRateEl.className).toContain("text-red");
+    expect(approvalRateEl.getAttribute("data-tone")).toBe("poor");
   });
 
   it("should show WakaTime columns when any contributor has wakaTimeMetrics", () => {

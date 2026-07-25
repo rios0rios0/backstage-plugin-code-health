@@ -1,7 +1,7 @@
 import type { BadgeStatus } from "../../domain/entities/badge_status";
 import { parseBadgesFromReadme } from "../../domain/entities/badge_status";
 import type { BadgeRepository } from "../../domain/repositories/badge_repository";
-import { graphqlRequest } from "../http/graphql_client";
+import type { GraphQLClient } from "../http/graphql_client";
 
 const BADGE_QUERY = `
 query BadgeCheck($owner: String!, $name: String!) {
@@ -20,13 +20,19 @@ interface BadgeQueryResponse {
 }
 
 export class GitHubBadgeRepository implements BadgeRepository {
+  private readonly client: GraphQLClient;
+
+  constructor(client: GraphQLClient) {
+    this.client = client;
+  }
+
   async getBadgeStatus(
     token: string,
     owner: string,
     repoName: string,
   ): Promise<BadgeStatus | null> {
     try {
-      const data = await graphqlRequest<BadgeQueryResponse>(token, BADGE_QUERY, {
+      const data = await this.client.request<BadgeQueryResponse>(token, BADGE_QUERY, {
         owner,
         name: repoName,
       });

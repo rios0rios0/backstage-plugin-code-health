@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { DashboardPage } from "../../../src/presentation/pages/dashboard_page";
 import { StubDashboardService } from "../../doubles/stub_dashboard_service";
@@ -11,13 +11,7 @@ describe("DashboardPage", () => {
     const service = new StubDashboardService().withRepositories(repos);
 
     // when
-    render(
-      <DashboardPage
-        dashboardService={service}
-        token="token"
-        username="user"
-      />,
-    );
+    render(<DashboardPage dashboardService={service} />);
 
     // then
     await waitFor(() => {
@@ -30,13 +24,7 @@ describe("DashboardPage", () => {
     const service = new StubDashboardService().withError(new Error("Server error"));
 
     // when
-    render(
-      <DashboardPage
-        dashboardService={service}
-        token="token"
-        username="user"
-      />,
-    );
+    render(<DashboardPage dashboardService={service} />);
 
     // then
     await waitFor(() => {
@@ -44,24 +32,33 @@ describe("DashboardPage", () => {
     });
   });
 
-  it("should call onRefetchRef with refetch function", async () => {
+  it("should render the refresh controls", async () => {
     // given
     const service = new StubDashboardService().withRepositories([]);
-    const onRefetchRef = vi.fn();
 
     // when
-    render(
-      <DashboardPage
-        dashboardService={service}
-        token="token"
-        username="user"
-        onRefetchRef={onRefetchRef}
-      />,
-    );
+    render(<DashboardPage dashboardService={service} />);
 
     // then
     await waitFor(() => {
-      expect(onRefetchRef).toHaveBeenCalledWith(expect.any(Function));
+      expect(screen.getByText("Refresh")).toBeInTheDocument();
     });
+    expect(screen.getByLabelText("Auto refresh interval")).toBeInTheDocument();
+  });
+
+  it("should not fetch when disabled", async () => {
+    // given
+    const service = new StubDashboardService().withRepositories([
+      RepositoryBuilder.create().withName("test-repo").build(),
+    ]);
+
+    // when
+    render(<DashboardPage dashboardService={service} enabled={false} />);
+
+    // then
+    await waitFor(() => {
+      expect(screen.getByText("No repositories found.")).toBeInTheDocument();
+    });
+    expect(service.callCount).toBe(0);
   });
 });

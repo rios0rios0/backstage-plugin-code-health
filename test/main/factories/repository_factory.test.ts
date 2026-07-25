@@ -17,12 +17,15 @@ import { GitHubGraphQLRepositoryRepository } from "../../../src/infrastructure/r
 import { GitHubGraphQLContributorRepository } from "../../../src/infrastructure/repositories/github_graphql_contributor_repository";
 import { SonarRepositoryImpl, NoOpSonarRepository } from "../../../src/infrastructure/repositories/sonar_repository_impl";
 import { WakaTimeRepositoryImpl, NoOpWakaTimeRepository } from "../../../src/infrastructure/repositories/wakatime_repository_impl";
+import { createStubClients } from "../../doubles/stub_http_clients";
 
 describe("repository_factory", () => {
+  const clients = createStubClients();
+
   describe("createRepositoryRepository", () => {
     it("should return GitHubGraphQLRepositoryRepository for github", () => {
       // given / when
-      const repo = createRepositoryRepository("github");
+      const repo = createRepositoryRepository("github", clients);
 
       // then
       expect(repo).toBeInstanceOf(GitHubGraphQLRepositoryRepository);
@@ -30,7 +33,7 @@ describe("repository_factory", () => {
 
     it("should return AdoRestRepositoryRepository for azure-devops", () => {
       // given / when
-      const repo = createRepositoryRepository("azure-devops");
+      const repo = createRepositoryRepository("azure-devops", clients);
 
       // then
       expect(repo).toBeInstanceOf(AdoRestRepositoryRepository);
@@ -40,7 +43,7 @@ describe("repository_factory", () => {
   describe("createContributorRepository", () => {
     it("should return GitHubGraphQLContributorRepository for github", () => {
       // given / when
-      const repo = createContributorRepository("github");
+      const repo = createContributorRepository("github", clients);
 
       // then
       expect(repo).toBeInstanceOf(GitHubGraphQLContributorRepository);
@@ -48,7 +51,7 @@ describe("repository_factory", () => {
 
     it("should return AdoRestContributorRepository for azure-devops", () => {
       // given / when
-      const repo = createContributorRepository("azure-devops");
+      const repo = createContributorRepository("azure-devops", clients);
 
       // then
       expect(repo).toBeInstanceOf(AdoRestContributorRepository);
@@ -61,7 +64,7 @@ describe("repository_factory", () => {
       const config = { type: "cloud" as const, token: "tok", baseUrl: "https://sonar.io" };
 
       // when
-      const repo = createSonarRepository(config);
+      const repo = createSonarRepository(clients, config);
 
       // then
       expect(repo).toBeInstanceOf(SonarRepositoryImpl);
@@ -69,7 +72,7 @@ describe("repository_factory", () => {
 
     it("should return NoOpSonarRepository when no config", () => {
       // given / when
-      const repo = createSonarRepository();
+      const repo = createSonarRepository(clients);
 
       // then
       expect(repo).toBeInstanceOf(NoOpSonarRepository);
@@ -79,7 +82,7 @@ describe("repository_factory", () => {
   describe("createWakaTimeRepository", () => {
     it("should return WakaTimeRepositoryImpl when token is provided", () => {
       // given / when
-      const repo = createWakaTimeRepository("waka-token");
+      const repo = createWakaTimeRepository(clients, "waka-token");
 
       // then
       expect(repo).toBeInstanceOf(WakaTimeRepositoryImpl);
@@ -87,7 +90,7 @@ describe("repository_factory", () => {
 
     it("should return NoOpWakaTimeRepository when no token", () => {
       // given / when
-      const repo = createWakaTimeRepository();
+      const repo = createWakaTimeRepository(clients);
 
       // then
       expect(repo).toBeInstanceOf(NoOpWakaTimeRepository);
@@ -97,7 +100,7 @@ describe("repository_factory", () => {
   describe("createComplianceRepository", () => {
     it("should return GitHubComplianceRepository for github", () => {
       // given / when
-      const repo = createComplianceRepository("github");
+      const repo = createComplianceRepository("github", clients);
 
       // then
       expect(repo).toBeInstanceOf(GitHubComplianceRepository);
@@ -105,7 +108,7 @@ describe("repository_factory", () => {
 
     it("should return AdoComplianceRepository for azure-devops", () => {
       // given / when
-      const repo = createComplianceRepository("azure-devops");
+      const repo = createComplianceRepository("azure-devops", clients);
 
       // then
       expect(repo).toBeInstanceOf(AdoComplianceRepository);
@@ -115,7 +118,7 @@ describe("repository_factory", () => {
   describe("createBadgeRepository", () => {
     it("should return GitHubBadgeRepository for github", () => {
       // given / when
-      const repo = createBadgeRepository("github");
+      const repo = createBadgeRepository("github", clients);
 
       // then
       expect(repo).toBeInstanceOf(GitHubBadgeRepository);
@@ -123,7 +126,7 @@ describe("repository_factory", () => {
 
     it("should return AdoBadgeRepository for azure-devops", () => {
       // given / when
-      const repo = createBadgeRepository("azure-devops");
+      const repo = createBadgeRepository("azure-devops", clients);
 
       // then
       expect(repo).toBeInstanceOf(AdoBadgeRepository);

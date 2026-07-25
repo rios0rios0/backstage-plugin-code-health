@@ -3,7 +3,7 @@ import type { SonarMetrics } from "../domain/entities/sonar_metrics";
 import type { ContributorRepository } from "../domain/repositories/contributor_repository";
 import type { AuthorIssues, SonarRepository } from "../domain/repositories/sonar_repository";
 import type { WakaTimeRepository } from "../domain/repositories/wakatime_repository";
-import type { ContributorService } from "../domain/services/contributor_service";
+import type { PlatformContributorService } from "../domain/services/contributor_service";
 
 const aggregateProjectMetrics = (
   metricsArray: (SonarMetrics | null)[],
@@ -84,7 +84,7 @@ const matchContributorToAuthor = (
   }) ?? null;
 };
 
-export class GitHubContributorService implements ContributorService {
+export class GitHubContributorService implements PlatformContributorService {
   private readonly contributorRepository: ContributorRepository;
   private readonly sonarRepository: SonarRepository;
   private readonly wakaTimeRepository: WakaTimeRepository;

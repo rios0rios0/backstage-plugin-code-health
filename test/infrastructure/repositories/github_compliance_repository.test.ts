@@ -1,13 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GitHubComplianceRepository } from "../../../src/infrastructure/repositories/github_compliance_repository";
 
-vi.mock("../../../src/infrastructure/http/graphql_client", () => ({
-  graphqlRequest: vi.fn(),
-}));
+import { createStubGraphQLClient } from "../../doubles/stub_http_clients";
 
-import { graphqlRequest } from "../../../src/infrastructure/http/graphql_client";
-
-const mockedGraphql = vi.mocked(graphqlRequest);
+let mockedGraphql: ReturnType<typeof createStubGraphQLClient>["request"];
 
 const createResponse = (overrides: {
   object?: { byteSize: number } | null;
@@ -30,7 +26,9 @@ describe("GitHubComplianceRepository", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    repository = new GitHubComplianceRepository();
+    const stub = createStubGraphQLClient();
+    mockedGraphql = stub.request;
+    repository = new GitHubComplianceRepository(stub.client);
   });
 
   it("should return green when all conditions are met", async () => {

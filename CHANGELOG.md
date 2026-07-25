@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- added Backstage plugin scaffolding: `gitforgeDashboardPlugin`, the routable `GitforgeDashboardPage` extension, `rootRouteRef` with `contributors` and `settings` sub-routes, and a `config.d.ts` schema for the `gitforgeDashboard` key
+- added four Backstage utility APIs (`gitforgeAuthApiRef`, `gitforgeConfigApiRef`, `gitforgeDashboardApiRef`, `gitforgeContributorsApiRef`) so an integrator can swap any of them for their own implementation
+- added Backstage proxy support: configuring `proxyPath` for GitHub, Azure DevOps, Sonar or WakaTime routes those calls through the Backstage backend, which attaches the credential, so no token reaches the browser
+- added administrator-managed settings — `platform`, `organization`, `refreshIntervalMs` and the Sonar flavour pinned in `app-config.yaml` override user settings and render read-only, with an explanatory note on each affected card
+- added a theme toggle backed by Backstage's `appThemeApi`, keeping the plugin in sync with the app's theme picker
+
+### Changed
+
+- **BREAKING CHANGE:** converted the project from a standalone GitHub Pages single-page app into the publishable Backstage frontend plugin `@rios0rios0/backstage-plugin-gitforge-dashboard`; `yarn build` now emits a library in `dist/` instead of a deployable site, and the GitHub Pages deployment job was removed
+- **BREAKING CHANGE:** replaced Tailwind CSS with Material UI `v4` and `@backstage/core-components` so the dashboard inherits the host app's theme; `Page`, `Header` and `TabbedLayout` now provide the navigation that the custom `Navigation` component used to
+- **BREAKING CHANGE:** downgraded React from `19` to `18` and added `react-router-dom` `v6`, matching the peer ranges of `@backstage/core-plugin-api` and `@backstage/core-components`
+- **BREAKING CHANGE:** narrowed `DashboardService` and `ContributorService` to take no credentials — tokens and the target organization are now resolved internally from app-config and user settings; the platform-specific implementations moved behind `PlatformDashboardService` and `PlatformContributorService`
+- changed every HTTP client to go through Backstage's `fetchApi` and a proxy-aware `EndpointResolver` instead of calling `fetch` with hard-coded base URLs, and repositories now receive their client through the constructor
+- changed the credential store to initialize lazily behind `DeferredAuthenticationService`, so the encrypted store can be exposed as a synchronous Backstage utility API and a failing key store degrades to the setup screen instead of breaking the app
+
+### Removed
+
+- removed the standalone app entry points (`index.html`, `src/main/main.tsx`, `src/main/app.tsx`, `src/index.css`) and the `Navigation`, `DashboardHeader` and `LoginPage` components they carried
+- removed the Tailwind toolchain (`tailwindcss`, `@tailwindcss/vite`) and `eslint-plugin-react-refresh`
+
 ## [0.2.2] - 2026-05-08
 
 ### Added

@@ -1,8 +1,12 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { GitforgeConfig } from "../../domain/entities/gitforge_config";
 import type { Platform } from "../../domain/entities/platform";
-import type { AuthenticationService } from "../../domain/services/authentication_service";
+import { isPlatform } from "../../domain/entities/platform";
+import type { SonarType } from "../../domain/entities/sonar_type";
+import { isSonarType } from "../../domain/entities/sonar_type";
+import type { AsyncAuthenticationService } from "../../domain/services/authentication_service";
 
-export type SonarType = "cloud" | "qube";
+export type { SonarType };
 
 export interface SonarLoginInfo {
   type: SonarType;
@@ -16,6 +20,8 @@ export interface LoginCredentials {
 }
 
 export interface UseAuthenticationResult {
+  /** False until the encrypted credential store finished unwrapping its key. */
+  isReady: boolean;
   token: string | null;
   username: string | null;
   sonarToken: string | null;
@@ -23,78 +29,98 @@ export interface UseAuthenticationResult {
   sonarUrl: string | null;
   wakaTimeToken: string | null;
   platform: Platform | null;
-  isAuthenticated: boolean;
-  login: (token: string, username: string, credentials: LoginCredentials, platform: Platform) => void;
+  /** Platform after applying the value pinned in `app-config.yaml`. */
+  effectivePlatform: Platform | null;
+  /** Organization after applying the value pinned in `app-config.yaml`. */
+  effectiveOrganization: string | null;
+  /** True when the plugin has everything it needs to call the platform. */
+  isConfigured: boolean;
+  login: (
+    token: string,
+    username: string,
+    credentials: LoginCredentials,
+    platform: Platform,
+  ) => void;
   logout: () => void;
   updateVcsCredentials: (token: string, username: string, platform: Platform) => void;
   updateSonarConfig: (sonar: SonarLoginInfo | null) => void;
   updateWakaTimeToken: (token: string | null) => void;
 }
 
-const isValidSonarType = (value: string | null): value is SonarType => value === "cloud" || value === "qube";
+interface StoredCredentials {
+  token: string | null;
+  username: string | null;
+  sonarToken: string | null;
+  sonarType: SonarType | null;
+  sonarUrl: string | null;
+  wakaTimeToken: string | null;
+  platform: Platform | null;
+}
 
-const isValidPlatform = (value: string | null): value is Platform => value === "github" || value === "azure-devops";
+const EMPTY_CREDENTIALS: StoredCredentials = {
+  token: null,
+  username: null,
+  sonarToken: null,
+  sonarType: null,
+  sonarUrl: null,
+  wakaTimeToken: null,
+  platform: null,
+};
 
-export const useAuthentication = (authService: AuthenticationService): UseAuthenticationResult => {
-  const [token, setToken] = useState<string | null>(() => authService.getToken());
-  const [username, setUsername] = useState<string | null>(() => authService.getUsername());
-  const [sonarToken, setSonarToken] = useState<string | null>(() => authService.getSonarToken());
-  const [sonarType, setSonarType] = useState<SonarType | null>(() => {
-    const stored = authService.getSonarType();
-    return isValidSonarType(stored) ? stored : null;
-  });
-  const [sonarUrl, setSonarUrl] = useState<string | null>(() => authService.getSonarUrl());
-  const [wakaTimeToken, setWakaTimeToken] = useState<string | null>(() => authService.getWakaTimeToken());
-  const [platform, setPlatform] = useState<Platform | null>(() => {
-    const stored = authService.getPlatform();
-    return isValidPlatform(stored) ? stored : null;
-  });
+const readCredentials = (authService: AsyncAuthenticationService): StoredCredentials => {
+  const storedSonarType = authService.getSonarType();
+  const storedPlatform = authService.getPlatform();
 
-  const login = useCallback(
-    (newToken: string, newUsername: string, credentials: LoginCredentials, newPlatform: Platform) => {
-      authService.setToken(newToken);
-      authService.setUsername(newUsername);
-      authService.setPlatform(newPlatform);
-      setToken(newToken);
-      setUsername(newUsername);
-      setPlatform(newPlatform);
-      if (credentials.sonar) {
-        if (credentials.sonar.url) {
-          authService.setSonarUrl(credentials.sonar.url);
-        } else {
-          authService.clearSonar();
-        }
-        authService.setSonarToken(credentials.sonar.token);
-        authService.setSonarType(credentials.sonar.type);
-        setSonarToken(credentials.sonar.token);
-        setSonarType(credentials.sonar.type);
-        setSonarUrl(credentials.sonar.url ?? null);
-      } else {
-        authService.clearSonar();
-        setSonarToken(null);
-        setSonarType(null);
-        setSonarUrl(null);
-      }
-      if (credentials.wakaTimeToken) {
-        authService.setWakaTimeToken(credentials.wakaTimeToken);
-        setWakaTimeToken(credentials.wakaTimeToken);
-      } else {
-        authService.clearWakaTimeToken();
-        setWakaTimeToken(null);
-      }
-    },
-    [authService],
+  return {
+    token: authService.getToken(),
+    username: authService.getUsername(),
+    sonarToken: authService.getSonarToken(),
+    sonarType: isSonarType(storedSonarType) ? storedSonarType : null,
+    sonarUrl: authService.getSonarUrl(),
+    wakaTimeToken: authService.getWakaTimeToken(),
+    platform: isPlatform(storedPlatform) ? storedPlatform : null,
+  };
+};
+
+const applySonar = (
+  authService: AsyncAuthenticationService,
+  sonar: SonarLoginInfo | null,
+): Pick<StoredCredentials, "sonarToken" | "sonarType" | "sonarUrl"> => {
+  if (!sonar) {
+    authService.clearSonar();
+    return { sonarToken: null, sonarType: null, sonarUrl: null };
+  }
+
+  if (sonar.url) {
+    authService.setSonarUrl(sonar.url);
+  } else {
+    authService.clearSonar();
+  }
+  authService.setSonarToken(sonar.token);
+  authService.setSonarType(sonar.type);
+
+  return { sonarToken: sonar.token, sonarType: sonar.type, sonarUrl: sonar.url ?? null };
+};
+
+export const useAuthentication = (
+  authService: AsyncAuthenticationService,
+  config: GitforgeConfig,
+): UseAuthenticationResult => {
+  const [isReady, setIsReady] = useState(() => authService.isReady());
+  const [credentials, setCredentials] = useState<StoredCredentials>(() =>
+    authService.isReady() ? readCredentials(authService) : EMPTY_CREDENTIALS,
   );
 
-  const logout = useCallback(() => {
-    authService.clearToken();
-    setToken(null);
-    setUsername(null);
-    setSonarToken(null);
-    setSonarType(null);
-    setSonarUrl(null);
-    setWakaTimeToken(null);
-    setPlatform(null);
+  useEffect(() => {
+    let cancelled = false;
+    authService.whenReady().then(() => {
+      if (cancelled) return;
+      setCredentials(readCredentials(authService));
+      setIsReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [authService]);
 
   const updateVcsCredentials = useCallback(
@@ -102,32 +128,20 @@ export const useAuthentication = (authService: AuthenticationService): UseAuthen
       authService.setToken(newToken);
       authService.setUsername(newUsername);
       authService.setPlatform(newPlatform);
-      setToken(newToken);
-      setUsername(newUsername);
-      setPlatform(newPlatform);
+      setCredentials((prev) => ({
+        ...prev,
+        token: newToken,
+        username: newUsername,
+        platform: newPlatform,
+      }));
     },
     [authService],
   );
 
   const updateSonarConfig = useCallback(
     (sonar: SonarLoginInfo | null) => {
-      if (sonar) {
-        if (sonar.url) {
-          authService.setSonarUrl(sonar.url);
-        } else {
-          authService.clearSonar();
-        }
-        authService.setSonarToken(sonar.token);
-        authService.setSonarType(sonar.type);
-        setSonarToken(sonar.token);
-        setSonarType(sonar.type);
-        setSonarUrl(sonar.url ?? null);
-      } else {
-        authService.clearSonar();
-        setSonarToken(null);
-        setSonarType(null);
-        setSonarUrl(null);
-      }
+      const applied = applySonar(authService, sonar);
+      setCredentials((prev) => ({ ...prev, ...applied }));
     },
     [authService],
   );
@@ -136,19 +150,51 @@ export const useAuthentication = (authService: AuthenticationService): UseAuthen
     (newToken: string | null) => {
       if (newToken) {
         authService.setWakaTimeToken(newToken);
-        setWakaTimeToken(newToken);
       } else {
         authService.clearWakaTimeToken();
-        setWakaTimeToken(null);
       }
+      setCredentials((prev) => ({ ...prev, wakaTimeToken: newToken }));
     },
     [authService],
   );
 
-  const isAuthenticated = useMemo(() => token !== null && username !== null && platform !== null, [token, username, platform]);
+  const login = useCallback(
+    (
+      newToken: string,
+      newUsername: string,
+      loginCredentials: LoginCredentials,
+      newPlatform: Platform,
+    ) => {
+      updateVcsCredentials(newToken, newUsername, newPlatform);
+      updateSonarConfig(loginCredentials.sonar);
+      updateWakaTimeToken(loginCredentials.wakaTimeToken);
+    },
+    [updateVcsCredentials, updateSonarConfig, updateWakaTimeToken],
+  );
+
+  const logout = useCallback(() => {
+    authService.clearToken();
+    setCredentials(EMPTY_CREDENTIALS);
+  }, [authService]);
+
+  const effectivePlatform = config.platform ?? credentials.platform;
+  const effectiveOrganization = config.organization ?? credentials.username;
+
+  const isConfigured = useMemo(() => {
+    if (!effectivePlatform || !effectiveOrganization) return false;
+    return config.proxied[effectivePlatform] || Boolean(credentials.token);
+  }, [config, credentials.token, effectiveOrganization, effectivePlatform]);
 
   return {
-    token, username, sonarToken, sonarType, sonarUrl, wakaTimeToken, platform,
-    isAuthenticated, login, logout, updateVcsCredentials, updateSonarConfig, updateWakaTimeToken,
+    isReady,
+    ...credentials,
+    effectivePlatform,
+    effectiveOrganization,
+    isConfigured,
+    login,
+    logout,
+    updateVcsCredentials,
+    updateSonarConfig,
+    updateWakaTimeToken,
   };
 };

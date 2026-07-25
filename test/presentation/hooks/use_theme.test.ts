@@ -1,121 +1,92 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
+import { appThemeApiRef } from "@backstage/core-plugin-api";
+import { TestApiProvider } from "@backstage/test-utils";
 import { useTheme } from "../../../src/presentation/hooks/use_theme";
+import { StubAppThemeApi } from "../../doubles/stub_app_theme_api";
 
-const STORAGE_KEY = "gitforge-dashboard:theme";
+const renderUseTheme = (appThemeApi: StubAppThemeApi) =>
+  renderHook(() => useTheme(), {
+    wrapper: ({ children }: { children: ReactNode }) =>
+      createElement(TestApiProvider, { apis: [[appThemeApiRef, appThemeApi]] }, children),
+  });
 
 describe("useTheme", () => {
-  const storageStore = new Map<string, string>();
-
-  beforeEach(() => {
-    storageStore.clear();
-    document.documentElement.classList.remove("dark");
-
-    vi.stubGlobal("localStorage", {
-      getItem: (key: string) => storageStore.get(key) ?? null,
-      setItem: (key: string, value: string) => storageStore.set(key, value),
-      removeItem: (key: string) => storageStore.delete(key),
-      clear: () => storageStore.clear(),
-      get length() {
-        return storageStore.size;
-      },
-      key: (index: number) => [...storageStore.keys()][index] ?? null,
-    });
-  });
-
-  it("should default to dark when system prefers dark", () => {
+  it("should report the active theme when the app selected dark", () => {
     // given
-    vi.stubGlobal("matchMedia", (query: string) => ({
-      matches: query === "(prefers-color-scheme: dark)",
-      media: query,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    }));
+    const appThemeApi = new StubAppThemeApi("dark");
 
     // when
-    const { result } = renderHook(() => useTheme());
+    const { result } = renderUseTheme(appThemeApi);
 
     // then
     expect(result.current.theme).toBe("dark");
   });
 
-  it("should default to light when system prefers light", () => {
+  it("should report the active theme when the app selected light", () => {
     // given
-    vi.stubGlobal("matchMedia", () => ({
-      matches: false,
-      media: "",
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    }));
+    const appThemeApi = new StubAppThemeApi("light");
 
     // when
-    const { result } = renderHook(() => useTheme());
+    const { result } = renderUseTheme(appThemeApi);
 
     // then
     expect(result.current.theme).toBe("light");
   });
 
-  it("should load saved theme from localStorage", () => {
+  it("should fall back to the Material UI palette when no theme is selected", () => {
     // given
-    storageStore.set(STORAGE_KEY, "light");
+    const appThemeApi = new StubAppThemeApi(undefined);
 
     // when
-    const { result } = renderHook(() => useTheme());
+    const { result } = renderUseTheme(appThemeApi);
 
     // then
     expect(result.current.theme).toBe("light");
   });
 
-  it("should toggle from light to dark", () => {
+  it("should switch the app theme from light to dark", () => {
     // given
-    storageStore.set(STORAGE_KEY, "light");
-    const { result } = renderHook(() => useTheme());
+    const appThemeApi = new StubAppThemeApi("light");
+    const { result } = renderUseTheme(appThemeApi);
 
     // when
     act(() => {
       result.current.toggleTheme();
+    });
+
+    // then
+    expect(appThemeApi.getActiveThemeId()).toBe("dark");
+    expect(result.current.theme).toBe("dark");
+  });
+
+  it("should switch the app theme from dark to light", () => {
+    // given
+    const appThemeApi = new StubAppThemeApi("dark");
+    const { result } = renderUseTheme(appThemeApi);
+
+    // when
+    act(() => {
+      result.current.toggleTheme();
+    });
+
+    // then
+    expect(appThemeApi.getActiveThemeId()).toBe("light");
+    expect(result.current.theme).toBe("light");
+  });
+
+  it("should follow theme changes made outside the plugin", () => {
+    // given
+    const appThemeApi = new StubAppThemeApi("light");
+    const { result } = renderUseTheme(appThemeApi);
+
+    // when
+    act(() => {
+      appThemeApi.setActiveThemeId("dark");
     });
 
     // then
     expect(result.current.theme).toBe("dark");
-  });
-
-  it("should toggle from dark to light", () => {
-    // given
-    storageStore.set(STORAGE_KEY, "dark");
-    const { result } = renderHook(() => useTheme());
-
-    // when
-    act(() => {
-      result.current.toggleTheme();
-    });
-
-    // then
-    expect(result.current.theme).toBe("light");
-  });
-
-  it("should persist theme to localStorage", () => {
-    // given
-    storageStore.set(STORAGE_KEY, "light");
-    const { result } = renderHook(() => useTheme());
-
-    // when
-    act(() => {
-      result.current.toggleTheme();
-    });
-
-    // then
-    expect(storageStore.get(STORAGE_KEY)).toBe("dark");
-  });
-
-  it("should add dark class on document root when dark", () => {
-    // given
-    storageStore.set(STORAGE_KEY, "dark");
-
-    // when
-    renderHook(() => useTheme());
-
-    // then
-    expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
 });
