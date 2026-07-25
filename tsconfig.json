@@ -1,7 +1,13 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
+  "extends": "@backstage/cli/config/tsconfig.json",
+  "include": ["src", "test", "config.d.ts"],
+  "exclude": ["node_modules", "dist", "dist-types"],
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist-types",
+    "tsBuildInfoFile": "dist-types/tsconfig.tsbuildinfo",
+    // The automatic runtime, matching what the Backstage plugin templates and
+    // the esbuild step in `backstage-cli package build` expect.
+    "jsx": "react-jsx"
+  }
 }

@@ -1,5 +1,3 @@
-import { describe, it, expect } from "vitest";
-import type { GitforgeConfig } from "../../src/domain/entities/gitforge_config";
 import { EMPTY_GITFORGE_CONFIG } from "../../src/domain/entities/gitforge_config";
 import type { GitforgeClients } from "../../src/main/factories/repository_factory";
 import { GitforgeContributorsApi } from "../../src/main/gitforge_contributors_api";
@@ -11,12 +9,7 @@ import {
   createStubSonarClient,
   createStubWakaTimeClient,
 } from "../doubles/stub_http_clients";
-
-const configWith = (overrides: Partial<GitforgeConfig>): GitforgeConfig => ({
-  ...EMPTY_GITFORGE_CONFIG,
-  ...overrides,
-  proxied: { ...EMPTY_GITFORGE_CONFIG.proxied, ...overrides.proxied },
-});
+import { aGitforgeConfig } from "../builders/gitforge_config_builder";
 
 const pullRequestNode = {
   number: 1,
@@ -145,7 +138,7 @@ describe("GitforgeContributorsApi", () => {
     const api = new GitforgeContributorsApi({
       clients: harness.clients,
       authService: configuredAuth(),
-      config: configWith({ proxied: { wakatime: true } }),
+      config: aGitforgeConfig({ proxied: { wakatime: true } }),
     });
 
     // when

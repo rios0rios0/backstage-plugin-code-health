@@ -1,4 +1,3 @@
-import { describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { useContributors } from "../../../src/presentation/hooks/use_contributors";
 import { StubContributorService } from "../../doubles/stub_contributor_service";
@@ -62,7 +61,7 @@ describe("useContributors", () => {
   it("should pass dateFrom and dateTo to refetch", async () => {
     // given
     const service = new StubContributorService().withContributors([]);
-    const listSpy = vi.spyOn(service, "listContributors");
+    const listSpy = jest.spyOn(service, "listContributors");
     const { result } = renderHook(() => useContributors(service, true));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 

@@ -1,5 +1,3 @@
-import { describe, it, expect } from "vitest";
-import type { GitforgeConfig } from "../../src/domain/entities/gitforge_config";
 import { EMPTY_GITFORGE_CONFIG } from "../../src/domain/entities/gitforge_config";
 import type { GitforgeClients } from "../../src/main/factories/repository_factory";
 import { GitforgeDashboardApi } from "../../src/main/gitforge_dashboard_api";
@@ -11,12 +9,7 @@ import {
   createStubSonarClient,
   createStubWakaTimeClient,
 } from "../doubles/stub_http_clients";
-
-const configWith = (overrides: Partial<GitforgeConfig>): GitforgeConfig => ({
-  ...EMPTY_GITFORGE_CONFIG,
-  ...overrides,
-  proxied: { ...EMPTY_GITFORGE_CONFIG.proxied, ...overrides.proxied },
-});
+import { aGitforgeConfig } from "../builders/gitforge_config_builder";
 
 const singlePage = (nodes: unknown[]) => ({
   user: { repositories: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } },
@@ -130,7 +123,7 @@ describe("GitforgeDashboardApi", () => {
     const api = new GitforgeDashboardApi({
       clients: harness.clients,
       authService,
-      config: configWith({
+      config: aGitforgeConfig({
         platform: "azure-devops",
         organization: "acme",
         proxied: { "azure-devops": true },

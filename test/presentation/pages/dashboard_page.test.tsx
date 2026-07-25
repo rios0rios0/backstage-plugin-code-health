@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { DashboardPage } from "../../../src/presentation/pages/dashboard_page";
 import { StubDashboardService } from "../../doubles/stub_dashboard_service";

@@ -1,4 +1,3 @@
-import { describe, it, expect, vi } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { useRepositories } from "../../../src/presentation/hooks/use_repositories";
 import { StubDashboardService } from "../../doubles/stub_dashboard_service";
@@ -78,7 +77,7 @@ describe("useRepositories", () => {
     const service = new StubDashboardService().withRepositories([]);
     const { result } = renderHook(() => useRepositories(service, true));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    const listSpy = vi.spyOn(service, "listRepositories");
+    const listSpy = jest.spyOn(service, "listRepositories");
 
     // when
     await act(async () => {

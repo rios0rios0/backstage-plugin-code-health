@@ -1,4 +1,3 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AdoRestContributorRepository } from "../../../src/infrastructure/repositories/ado_rest_contributor_repository";
 
 import { createStubAdoRestClient } from "../../doubles/stub_http_clients";
@@ -55,7 +54,7 @@ describe("AdoRestContributorRepository", () => {
   let repository: AdoRestContributorRepository;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     const stub = createStubAdoRestClient();
     mockedAdo = stub.get;
     repository = new AdoRestContributorRepository(stub.client);

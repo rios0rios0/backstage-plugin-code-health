@@ -60,7 +60,7 @@ export const mapGraphQLNodeToRepository = (node: GraphQLRepositoryNode): Reposit
   ciStatus: mapCIStatus(node),
   latestRelease: mapRelease(node),
   latestTag: mapTag(node),
-  hasWorkflows: node.defaultBranchRef?.target.statusCheckRollup != null,
+  hasWorkflows: Boolean(node.defaultBranchRef?.target.statusCheckRollup),
   branches: node.branchRefs.nodes.map((ref) => ref.name),
   sonarMetrics: null,
   complianceStatus: null,

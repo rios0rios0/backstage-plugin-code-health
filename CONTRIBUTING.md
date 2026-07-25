@@ -32,8 +32,9 @@ development practices, refer to the **[Development Guide](https://github.com/rio
 7. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Git-Flow)
 8. Open a pull request against `main`
 
-This package is a library, so there is no dev server. To exercise a change in a real app, build it and
-link it into a Backstage app:
+The toolchain is the Backstage CLI (`backstage-cli package build | lint | test`). This package is a
+library, so there is no app dev server. To exercise a change in a real app, build it and link it into
+a Backstage app:
 
 ```bash
 yarn build

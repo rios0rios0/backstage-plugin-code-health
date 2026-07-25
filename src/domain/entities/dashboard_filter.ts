@@ -93,6 +93,8 @@ export const sortRepositories = (
         return (a.latestTag?.name ?? "").localeCompare(b.latestTag?.name ?? "");
       case "visibility":
         return a.visibility.localeCompare(b.visibility);
+      default:
+        return 0;
     }
   });
   return direction === "desc" ? sorted.reverse() : sorted;

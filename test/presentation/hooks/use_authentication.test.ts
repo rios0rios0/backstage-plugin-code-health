@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { EMPTY_GITFORGE_CONFIG } from "../../../src/domain/entities/gitforge_config";
 import { useAuthentication } from "../../../src/presentation/hooks/use_authentication";

@@ -1,4 +1,3 @@
-import { beforeEach, describe, expect, it } from "vitest";
 import { LocalStorageAuthenticationService } from "../../../src/infrastructure/services/local_storage_authentication_service";
 
 class InMemoryStorage implements Storage {

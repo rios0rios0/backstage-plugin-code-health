@@ -76,7 +76,12 @@ export const BadgeStatusCell = ({ status }: BadgeStatusCellProps) => {
       <StateChip tone={tone} label={label} onClick={toggle} ariaExpanded={open} />
       {open && (
         <>
-          <div data-testid="badge-overlay" className={classes.overlay} onClick={close} />
+          <div
+            data-testid="badge-overlay"
+            className={classes.overlay}
+            onClick={close}
+            aria-hidden="true"
+          />
           <Paper elevation={8} role="menu" aria-label="Badge details" className={classes.popup}>
             <ul className={classes.list}>
               {status.checks.map((check) => (

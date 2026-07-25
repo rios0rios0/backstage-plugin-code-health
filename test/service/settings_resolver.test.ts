@@ -1,14 +1,7 @@
-import { describe, it, expect } from "vitest";
-import type { GitforgeConfig } from "../../src/domain/entities/gitforge_config";
 import { EMPTY_GITFORGE_CONFIG, requiresToken } from "../../src/domain/entities/gitforge_config";
 import { resolveSettings } from "../../src/service/settings_resolver";
 import { StubAuthenticationService } from "../doubles/stub_authentication_service";
-
-const configWith = (overrides: Partial<GitforgeConfig>): GitforgeConfig => ({
-  ...EMPTY_GITFORGE_CONFIG,
-  ...overrides,
-  proxied: { ...EMPTY_GITFORGE_CONFIG.proxied, ...overrides.proxied },
-});
+import { aGitforgeConfig } from "../builders/gitforge_config_builder";
 
 const authWith = (values: Record<string, string>): StubAuthenticationService => {
   const service = new StubAuthenticationService();
@@ -47,7 +40,7 @@ describe("resolveSettings", () => {
   it("should let app-config override the platform and organization", () => {
     // given
     const auth = authWith({ token: "tok", username: "personal", platform: "github" });
-    const config = configWith({ platform: "azure-devops", organization: "acme-corp" });
+    const config = aGitforgeConfig({ platform: "azure-devops", organization: "acme-corp" });
 
     // when
     const settings = resolveSettings(auth, config);
@@ -74,7 +67,7 @@ describe("resolveSettings", () => {
   it("should not require a token when the platform is proxied", () => {
     // given
     const auth = authWith({ platform: "github" });
-    const config = configWith({ organization: "acme", proxied: { github: true } });
+    const config = aGitforgeConfig({ organization: "acme", proxied: { github: true } });
 
     // when
     const settings = resolveSettings(auth, config);
@@ -179,7 +172,7 @@ describe("resolveSettings", () => {
   it("should enable Sonar without a token when it is proxied", () => {
     // given
     const auth = authWith({ token: "tok", username: "acme", platform: "github" });
-    const config = configWith({
+    const config = aGitforgeConfig({
       proxied: { sonar: true },
       sonarType: "qube",
       sonarBaseUrl: "https://sonar.internal",
@@ -236,7 +229,7 @@ describe("resolveSettings", () => {
   it("should enable WakaTime without a token when it is proxied", () => {
     // given
     const auth = authWith({ token: "tok", username: "acme", platform: "github" });
-    const config = configWith({ proxied: { wakatime: true } });
+    const config = aGitforgeConfig({ proxied: { wakatime: true } });
 
     // when
     const settings = resolveSettings(auth, config);
@@ -255,7 +248,7 @@ describe("requiresToken", () => {
 
   it("should not require a token when the target is proxied", () => {
     // given
-    const config = configWith({ proxied: { sonar: true } });
+    const config = aGitforgeConfig({ proxied: { sonar: true } });
 
     // when / then
     expect(requiresToken(config, "sonar")).toBe(false);

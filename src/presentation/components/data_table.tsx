@@ -174,7 +174,7 @@ export const DataTable = <T,>({ table, isLoading, skeletonRows = 8 }: DataTableP
           {isLoading
             ? Array.from({ length: skeletonRows }, (_, rowIndex) => (
                 <TableRow key={rowIndex} data-testid="loadingRow">
-                  {Array.from({ length: columnCount }, (_, cellIndex) => (
+                  {Array.from({ length: columnCount }, (__, cellIndex) => (
                     <TableCell key={cellIndex}>
                       <div className={classes.skeleton} />
                     </TableCell>

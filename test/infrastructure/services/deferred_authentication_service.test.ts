@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import type { AuthenticationService } from "../../../src/domain/services/authentication_service";
 import { DeferredAuthenticationService } from "../../../src/infrastructure/services/deferred_authentication_service";
 import { StubAuthenticationService } from "../../doubles/stub_authentication_service";

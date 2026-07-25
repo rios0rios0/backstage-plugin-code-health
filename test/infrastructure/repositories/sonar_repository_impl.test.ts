@@ -1,4 +1,3 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   SonarRepositoryImpl,
   NoOpSonarRepository,
@@ -26,7 +25,7 @@ describe("SonarRepositoryImpl", () => {
     new SonarRepositoryImpl(stub.client, config);
 
   beforeEach(() => {
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
     stub = createStubSonarClient();
   });
 

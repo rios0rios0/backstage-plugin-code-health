@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach } from "vitest";
 import { HttpSonarClient } from "../../../src/infrastructure/http/sonar_client";
 import {
   createStubFetchApi,

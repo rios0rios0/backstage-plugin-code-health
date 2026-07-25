@@ -1,4 +1,3 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GitHubGraphQLRepositoryRepository } from "../../../src/infrastructure/repositories/github_graphql_repository_repository";
 
 import { createStubGraphQLClient } from "../../doubles/stub_http_clients";
@@ -35,7 +34,7 @@ describe("GitHubGraphQLRepositoryRepository", () => {
   let repository: GitHubGraphQLRepositoryRepository;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     const stub = createStubGraphQLClient();
     mockedGraphql = stub.request;
     repository = new GitHubGraphQLRepositoryRepository(stub.client);

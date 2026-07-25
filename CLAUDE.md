@@ -15,14 +15,14 @@ provider, or through a Backstage `proxy` endpoint when one is configured.
 ```bash
 corepack enable        # Enable Yarn Berry via corepack (first time only)
 yarn install           # Install dependencies
-yarn build             # Emit dist/ (ES module + type declarations)
-yarn typecheck         # Type-check without emitting
+yarn build             # tsc + backstage-cli package build -> dist/
+yarn typecheck         # Type-check and emit dist-types/ (input to the build)
 make lint              # Run ESLint via pipeline scripts
-make test              # Run Vitest via pipeline scripts
+make test              # Run Jest via pipeline scripts
 make sast              # Run full SAST suite (CodeQL, Semgrep, Trivy, Hadolint, Gitleaks)
 ```
 
-**Never run `eslint`, `vitest`, or SAST tools directly.** Always use `make` targets which invoke the
+**Never run `eslint`, `jest`, or SAST tools directly.** Always use `make` targets which invoke the
 [rios0rios0/pipelines](https://github.com/rios0rios0/pipelines) scripts.
 
 This package is a library, so there is no dev server. To exercise it, `yarn build && yarn link` and
@@ -75,8 +75,9 @@ src/main/             → Backstage utility APIs, ApiRefs, DI wiring, router
 ## Testing
 
 A comprehensive test suite covers domain logic, service layer, infrastructure, and presentation
-components. All tests use Vitest + Testing Library, with `TestApiProvider` from `@backstage/test-utils`
-for the few components that resolve a Backstage utility API.
+components. All tests run on Jest through `backstage-cli package test`, with Testing Library and
+`TestApiProvider` from `@backstage/test-utils` for the few components that resolve a Backstage
+utility API. Tests live in `test/`, wired in through the `jest.roots` override in `package.json`.
 
 Coverage thresholds enforced at 90%+ lines/functions/statements and 77%+ branches. CI posts a coverage
 PR comment, test result annotations, and uploads the HTML coverage report as an artifact.
@@ -86,6 +87,9 @@ make test              # Full suite (ALWAYS use this)
 yarn test              # Quick check during development
 yarn test:watch        # Watch mode for TDD
 ```
+
+The toolchain is the Backstage CLI end to end: `backstage-cli package build`, `package lint`
+(ESLint 8 via `.eslintrc.js` and `@backstage/cli/config/eslint-factory`) and `package test` (Jest).
 
 ## Release
 

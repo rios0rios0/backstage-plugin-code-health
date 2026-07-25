@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { EMPTY_GITFORGE_CONFIG } from "../../../src/domain/entities/gitforge_config";
 import {
   readEndpointConfig,

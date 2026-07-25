@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach } from "vitest";
 import { HttpGraphQLClient } from "../../../src/infrastructure/http/graphql_client";
 import {
   createStubFetchApi,

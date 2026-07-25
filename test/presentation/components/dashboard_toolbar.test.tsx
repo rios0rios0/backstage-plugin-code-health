@@ -1,4 +1,3 @@
-import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { DashboardToolbar } from "../../../src/presentation/components/dashboard_toolbar";
 
@@ -6,8 +5,8 @@ const defaultProps = {
   lastFetchedAt: null as Date | null,
   refreshInterval: 300000 as const,
   isLoading: false,
-  onRefresh: vi.fn(),
-  onIntervalChange: vi.fn(),
+  onRefresh: jest.fn(),
+  onIntervalChange: jest.fn(),
 };
 
 describe("DashboardToolbar", () => {
@@ -30,7 +29,7 @@ describe("DashboardToolbar", () => {
 
   it("should call onRefresh when the refresh button is clicked", () => {
     // given
-    const onRefresh = vi.fn();
+    const onRefresh = jest.fn();
     render(<DashboardToolbar {...defaultProps} onRefresh={onRefresh} />);
 
     // when
@@ -54,7 +53,7 @@ describe("DashboardToolbar", () => {
 
   it("should call onIntervalChange with the numeric interval", () => {
     // given
-    const onIntervalChange = vi.fn();
+    const onIntervalChange = jest.fn();
     render(<DashboardToolbar {...defaultProps} onIntervalChange={onIntervalChange} />);
 
     // when

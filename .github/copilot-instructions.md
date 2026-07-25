@@ -10,9 +10,9 @@ Always reference these instructions first and fall back to search or bash comman
 
 - Enable Yarn Berry: `corepack enable` (first time only)
 - Install dependencies: `yarn install`
-- Build the library: `yarn build` (emits `dist/`; there is no dev server, this package is a library)
+- Build the library: `yarn build` (`tsc` then `backstage-cli package build`; emits `dist/`)
 - Type-check only: `yarn typecheck`
-- Run tests: `make test` -- NEVER run `vitest` directly.
+- Run tests: `make test` -- NEVER run `jest` directly.
 - Run linting: `make lint` -- NEVER run `eslint` directly.
 - Run security analysis: `make sast` -- NEVER run `gitleaks`, `semgrep`, `trivy`, `hadolint`, or `codeql` directly.
 
@@ -22,7 +22,7 @@ This project uses the [rios0rios0/pipelines](https://github.com/rios0rios0/pipel
 
 ```bash
 make lint    # ESLint via pipeline scripts
-make test    # Vitest via pipeline scripts
+make test    # Jest via pipeline scripts
 make sast    # CodeQL, Semgrep, Trivy, Hadolint, Gitleaks
 ```
 
@@ -106,10 +106,10 @@ yarn test:watch       # Watch mode for TDD
 
 ## Build and Test Timing Expectations
 
-- **Type check** (`tsc -b`): <3 seconds.
-- **Tests** (`vitest run`): ~50 seconds (413 tests).
-- **Build** (`tsc -p tsconfig.build.json && vite build`): <10 seconds.
-- **Lint**: ~2-3 seconds.
+- **Type check** (`tsc`): ~20 seconds.
+- **Tests** (`backstage-cli package test`): ~1 minute (413 tests).
+- **Build** (`tsc && backstage-cli package build`): ~30 seconds.
+- **Lint** (`backstage-cli package lint`): ~30 seconds.
 - **SAST**: ~1-3 minutes.
 
 ## Common Development Commands

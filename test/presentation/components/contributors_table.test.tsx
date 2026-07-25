@@ -1,4 +1,3 @@
-import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ContributorsTable } from "../../../src/presentation/components/contributors_table";
 import { ContributorBuilder } from "../../builders/contributor_builder";
@@ -7,7 +6,7 @@ describe("ContributorsTable", () => {
   const defaultProps = {
     totalCount: 0,
     isLoading: false,
-    onDateRangeApply: vi.fn(),
+    onDateRangeApply: jest.fn(),
   };
 
   it("should render 'No contributors found.' when contributors is empty", () => {
@@ -21,7 +20,7 @@ describe("ContributorsTable", () => {
   it("should render loading skeleton when isLoading is true", () => {
     // given / when
     const { container } = render(
-      <ContributorsTable {...defaultProps} contributors={[]} isLoading={true} />,
+      <ContributorsTable {...defaultProps} contributors={[]} isLoading />,
     );
 
     // then
@@ -45,7 +44,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -66,7 +65,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -87,7 +86,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -109,7 +108,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -134,7 +133,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -153,7 +152,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -164,7 +163,7 @@ describe("ContributorsTable", () => {
 
   it("should call onDateRangeApply when Apply button is clicked with date inputs", () => {
     // given
-    const onDateRangeApply = vi.fn();
+    const onDateRangeApply = jest.fn();
     const contributors = [ContributorBuilder.create().build()];
     render(
       <ContributorsTable
@@ -202,7 +201,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={5}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 

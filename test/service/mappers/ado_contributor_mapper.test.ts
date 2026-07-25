@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import { mapAdoPullRequestsToContributors } from "../../../src/service/mappers/ado_contributor_mapper";
 import type { AdoPullRequestNode } from "../../../src/service/mappers/ado_contributor_node";
 

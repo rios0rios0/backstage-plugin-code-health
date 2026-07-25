@@ -1,6 +1,5 @@
-import { describe, it, expect } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { createElement, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { appThemeApiRef } from "@backstage/core-plugin-api";
 import { TestApiProvider } from "@backstage/test-utils";
 import { useTheme } from "../../../src/presentation/hooks/use_theme";
@@ -8,8 +7,9 @@ import { StubAppThemeApi } from "../../doubles/stub_app_theme_api";
 
 const renderUseTheme = (appThemeApi: StubAppThemeApi) =>
   renderHook(() => useTheme(), {
-    wrapper: ({ children }: { children: ReactNode }) =>
-      createElement(TestApiProvider, { apis: [[appThemeApiRef, appThemeApi]] }, children),
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <TestApiProvider apis={[[appThemeApiRef, appThemeApi]]}>{children}</TestApiProvider>
+    ),
   });
 
 describe("useTheme", () => {

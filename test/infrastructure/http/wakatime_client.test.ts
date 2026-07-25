@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach } from "vitest";
 import { HttpWakaTimeClient } from "../../../src/infrastructure/http/wakatime_client";
 import {
   createStubFetchApi,

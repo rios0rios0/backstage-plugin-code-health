@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ContributorsPage } from "../../../src/presentation/pages/contributors_page";
 import { StubContributorService } from "../../doubles/stub_contributor_service";

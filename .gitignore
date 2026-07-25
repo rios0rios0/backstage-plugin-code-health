@@ -31,3 +31,6 @@ npm-debug.log*
 # Test output
 coverage
 junit-report.xml
+
+# Type declaration output (consumed by backstage-cli package build)
+dist-types

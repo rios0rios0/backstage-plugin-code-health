@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { appThemeApiRef } from "@backstage/core-plugin-api";
 import { TestApiProvider } from "@backstage/test-utils";

@@ -22,13 +22,10 @@ export const useTheme = () => {
     return () => subscription.unsubscribe();
   }, [appThemeApi]);
 
-  const theme: Theme = activeThemeId
-    ? activeThemeId === "dark"
-      ? "dark"
-      : "light"
-    : muiTheme.palette.type === "dark"
-      ? "dark"
-      : "light";
+  // Without an explicit selection the app follows the system preference, which
+  // is only observable through the resolved Material UI palette.
+  const resolvedThemeId = activeThemeId ?? muiTheme.palette.type;
+  const theme: Theme = resolvedThemeId === "dark" ? "dark" : "light";
 
   const toggleTheme = useCallback(() => {
     appThemeApi.setActiveThemeId(theme === "light" ? "dark" : "light");

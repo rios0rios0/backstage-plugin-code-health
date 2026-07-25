@@ -1,10 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { AuthGate } from "../../../src/presentation/components/auth_gate";
 
 describe("AuthGate", () => {
   const defaultProps = {
-    onLogin: vi.fn(),
+    onLogin: jest.fn(),
     error: null,
   };
 
@@ -59,7 +58,7 @@ describe("AuthGate", () => {
 
   it("should call onLogin with trimmed credentials on submit", () => {
     // given
-    const onLogin = vi.fn();
+    const onLogin = jest.fn();
     render(<AuthGate onLogin={onLogin} error={null} />);
 
     fireEvent.change(screen.getByLabelText(/GitHub Username/), {
@@ -83,7 +82,7 @@ describe("AuthGate", () => {
 
   it("should not call onLogin when token is empty", () => {
     // given
-    const onLogin = vi.fn();
+    const onLogin = jest.fn();
     render(<AuthGate onLogin={onLogin} error={null} />);
 
     fireEvent.change(screen.getByLabelText(/GitHub Username/), {
@@ -99,7 +98,7 @@ describe("AuthGate", () => {
 
   it("should not call onLogin when username is empty", () => {
     // given
-    const onLogin = vi.fn();
+    const onLogin = jest.fn();
     render(<AuthGate onLogin={onLogin} error={null} />);
 
     fireEvent.change(screen.getByLabelText(/Personal Access Token/), {
@@ -150,7 +149,7 @@ describe("AuthGate", () => {
 
   it("should pass wakaTime token in credentials", () => {
     // given
-    const onLogin = vi.fn();
+    const onLogin = jest.fn();
     render(<AuthGate onLogin={onLogin} error={null} />);
 
     fireEvent.change(screen.getByLabelText(/GitHub Username/), {
@@ -177,7 +176,7 @@ describe("AuthGate", () => {
 
   it("should display error message when error prop is set", () => {
     // given / when
-    render(<AuthGate onLogin={vi.fn()} error="Invalid token" />);
+    render(<AuthGate onLogin={jest.fn()} error="Invalid token" />);
 
     // then
     expect(screen.getByText("Invalid token")).toBeInTheDocument();

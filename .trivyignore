@@ -1,0 +1,13 @@
+# uuid 3.4.0 — CVE-2026-41907
+#
+# Reached only through @material-table/core@3.2.5, a transitive dependency of
+# @backstage/core-components (which pins ^3.1.0). That package calls
+# `require("uuid").default.v4()`, and uuid removed its default export in 7.0.0,
+# so none of the patched releases (11.x / 12.x / 13.x) can be substituted without
+# breaking it at runtime.
+#
+# The only component that pulls it in is core-components' `Table`, which this
+# plugin does not render, and `resolutions` in a library package would not reach
+# consumers anyway. Drop this entry once @backstage/core-components moves to a
+# @material-table/core release that uses a named uuid import.
+CVE-2026-41907

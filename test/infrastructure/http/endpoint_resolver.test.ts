@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import {
   BackstageEndpointResolver,
   DEFAULT_BASE_URLS,

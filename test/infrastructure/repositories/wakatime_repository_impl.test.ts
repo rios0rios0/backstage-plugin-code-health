@@ -1,4 +1,3 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   WakaTimeRepositoryImpl,
   NoOpWakaTimeRepository,
@@ -13,7 +12,7 @@ describe("WakaTimeRepositoryImpl", () => {
   const createRepository = () => new WakaTimeRepositoryImpl(stub.client, token);
 
   beforeEach(() => {
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
     stub = createStubWakaTimeClient();
   });
 

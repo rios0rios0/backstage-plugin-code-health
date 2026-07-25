@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { waitFor } from "@testing-library/react";
 import { createAuthenticationService } from "../../../src/main/factories/service_factory";
 
 /** jsdom in this Node version exposes no usable `localStorage`, so provide one. */
@@ -16,13 +16,28 @@ const createMemoryStorage = (): Storage => {
   } as Storage;
 };
 
+const setLocalStorage = (value: Storage | undefined) => {
+  Object.defineProperty(globalThis, "localStorage", {
+    value,
+    configurable: true,
+    writable: true,
+  });
+};
+
 describe("createAuthenticationService", () => {
+  let originalLocalStorage: PropertyDescriptor | undefined;
+
   beforeEach(() => {
-    vi.stubGlobal("localStorage", createMemoryStorage());
+    originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    setLocalStorage(createMemoryStorage());
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    if (originalLocalStorage) {
+      Object.defineProperty(globalThis, "localStorage", originalLocalStorage);
+    } else {
+      delete (globalThis as { localStorage?: Storage }).localStorage;
+    }
   });
 
   it("should return a service that becomes ready once the credential store is unwrapped", async () => {
@@ -53,9 +68,7 @@ describe("createAuthenticationService", () => {
 
     // when
     service.setToken("ghp_secret");
-    await vi.waitFor(() =>
-      expect(localStorage.getItem("gitforge-dashboard:token")).not.toBeNull(),
-    );
+    await waitFor(() => expect(localStorage.getItem("gitforge-dashboard:token")).not.toBeNull());
 
     // then
     expect(localStorage.getItem("gitforge-dashboard:token")).toMatch(/^enc:/);
@@ -63,7 +76,7 @@ describe("createAuthenticationService", () => {
 
   it("should stay unready when browser storage is unavailable", async () => {
     // given
-    vi.stubGlobal("localStorage", undefined);
+    setLocalStorage(undefined);
 
     // when
     const service = createAuthenticationService();

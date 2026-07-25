@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach } from "vitest";
 import { HttpAdoRestClient } from "../../../src/infrastructure/http/ado_rest_client";
 import {
   createStubFetchApi,

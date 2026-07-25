@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
 import type { ComplianceStatus } from "../../../src/domain/entities/compliance_status";
 import { ComplianceBadge } from "../../../src/presentation/components/compliance_badge";
 

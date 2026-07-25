@@ -1,4 +1,3 @@
-import { describe, it, expect, beforeEach } from "vitest";
 import { AdoBadgeRepository } from "../../../src/infrastructure/repositories/ado_badge_repository";
 import { GitHubBadgeRepository } from "../../../src/infrastructure/repositories/github_badge_repository";
 import { createStubGraphQLClient } from "../../doubles/stub_http_clients";

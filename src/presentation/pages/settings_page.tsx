@@ -44,6 +44,12 @@ const MANAGED_NOTE =
 const PROXY_NOTE =
   "Requests are routed through a Backstage proxy endpoint, so no personal token is needed.";
 
+const resolveManagedNote = (proxied: boolean, hasManagedFields: boolean): string | undefined => {
+  if (proxied) return PROXY_NOTE;
+  if (hasManagedFields) return MANAGED_NOTE;
+  return undefined;
+};
+
 export const SettingsPage = ({
   token,
   username,
@@ -129,11 +135,8 @@ export const SettingsPage = ({
 
   const isGitHub = vcsPlatform === "github";
   const vcsProxied = config.proxied[vcsPlatform];
-  const vcsManagedNote = vcsProxied
-    ? PROXY_NOTE
-    : config.platform || config.organization
-      ? MANAGED_NOTE
-      : undefined;
+  const vcsHasManagedFields = Boolean(config.platform || config.organization);
+  const vcsManagedNote = resolveManagedNote(vcsProxied, vcsHasManagedFields);
 
   return (
     <>

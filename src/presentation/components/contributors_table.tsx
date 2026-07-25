@@ -37,9 +37,15 @@ const useStyles = makeStyles((theme) => ({
   removed: { color: theme.palette.error.main },
 }));
 
+const rateTone = (rate: number): "good" | "fair" | "poor" => {
+  if (rate >= 80) return "good";
+  if (rate >= 50) return "fair";
+  return "poor";
+};
+
 const RateCell = ({ rate }: { rate: number }) => {
   const classes = useStyles();
-  const tone = rate >= 80 ? "good" : rate >= 50 ? "fair" : "poor";
+  const tone = rateTone(rate);
   return (
     <Typography variant="body2" component="span" className={classes[tone]} data-tone={tone}>
       {formatRate(rate)}

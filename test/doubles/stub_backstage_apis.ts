@@ -1,4 +1,3 @@
-import { vi } from "vitest";
 import type { ConfigApi, DiscoveryApi, FetchApi } from "@backstage/core-plugin-api";
 import type { IntegrationTarget } from "../../src/domain/entities/integration_target";
 import type {
@@ -7,7 +6,7 @@ import type {
 } from "../../src/infrastructure/http/endpoint_resolver";
 
 export const createStubFetchApi = () => {
-  const fetch = vi.fn();
+  const fetch = jest.fn();
   return { fetchApi: { fetch } as unknown as FetchApi, fetch };
 };
 

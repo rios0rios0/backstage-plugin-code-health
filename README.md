@@ -193,22 +193,23 @@ on the Settings tab takes effect immediately without reloading the page.
 ```bash
 corepack enable        # Enable Yarn Berry via corepack (first time only)
 yarn install           # Install dependencies
-yarn build             # Emit dist/ (ES module + type declarations)
-yarn test              # Run tests
+yarn build             # tsc + backstage-cli package build -> dist/
+yarn test              # Run Jest via backstage-cli
 yarn test:watch        # Watch mode for TDD
-yarn typecheck         # Type-check without emitting
+yarn typecheck         # Type-check and emit dist-types/
 ```
 
 Quality gates (always use `make` targets — never run tools directly):
 
 ```bash
 make lint              # Run ESLint via pipeline scripts
-make test              # Run Vitest with coverage via pipeline scripts
+make test              # Run Jest with coverage via pipeline scripts
 make sast              # Run full SAST suite (CodeQL, Semgrep, Trivy, Hadolint, Gitleaks)
 ```
 
-To try the plugin end to end, `yarn link` this package into a Backstage app and follow the
-installation steps above.
+The package is built with the Backstage CLI (`backstage-cli package build`), so it produces the
+standard `dist/index.esm.js` + `dist/index.d.ts` layout every Backstage plugin ships. To try it end
+to end, `yarn link` this package into a Backstage app and follow the installation steps above.
 
 ## Contributing
 

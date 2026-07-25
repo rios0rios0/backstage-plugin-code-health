@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { RepositoryTable } from "../../../src/presentation/components/repository_table";
 import { RepositoryBuilder } from "../../builders/repository_builder";
@@ -15,7 +14,7 @@ describe("RepositoryTable", () => {
   it("should render loading skeleton when isLoading is true", () => {
     // given / when
     const { container } = render(
-      <RepositoryTable repositories={[]} totalCount={0} isLoading={true} />,
+      <RepositoryTable repositories={[]} totalCount={0} isLoading />,
     );
 
     // then

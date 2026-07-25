@@ -38,6 +38,11 @@ interface SonarIssuesResponse {
   paging: { total: number; pageIndex: number; pageSize: number };
 }
 
+const QUALITY_GATE_STATUSES: Record<string, QualityGateStatus> = {
+  OK: "OK",
+  ERROR: "ERROR",
+};
+
 const METRIC_KEYS = [
   "bugs",
   "code_smells",
@@ -111,9 +116,8 @@ export class SonarRepositoryImpl implements SonarRepository {
         ).catch(() => null),
       ]);
 
-      const gateStatus = gateData?.projectStatus?.status;
-      const qualityGate: QualityGateStatus =
-        gateStatus === "OK" ? "OK" : gateStatus === "ERROR" ? "ERROR" : "NONE";
+      const gateStatus = gateData?.projectStatus?.status ?? "";
+      const qualityGate = QUALITY_GATE_STATUSES[gateStatus] ?? "NONE";
 
       return parseMeasures(measuresData.component.measures, qualityGate);
     } catch {
