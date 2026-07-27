@@ -47,6 +47,17 @@ export const filterContributors = (
   });
 };
 
+const parseTechnicalDebt = (debt: string): number => {
+  let minutes = 0;
+  const dayMatch = debt.match(/(\d+)d/);
+  const hourMatch = debt.match(/(\d+)h/);
+  const minMatch = debt.match(/(\d+)min/);
+  if (dayMatch) minutes += parseInt(dayMatch[1], 10) * 8 * 60;
+  if (hourMatch) minutes += parseInt(hourMatch[1], 10) * 60;
+  if (minMatch) minutes += parseInt(minMatch[1], 10);
+  return minutes;
+};
+
 const getSonarNumericValue = (contributor: Contributor, field: ContributorSortField): number => {
   if (!contributor.sonarMetrics) return 0;
   switch (field) {
@@ -67,17 +78,6 @@ const getSonarNumericValue = (contributor: Contributor, field: ContributorSortFi
     default:
       return 0;
   }
-};
-
-const parseTechnicalDebt = (debt: string): number => {
-  let minutes = 0;
-  const dayMatch = debt.match(/(\d+)d/);
-  const hourMatch = debt.match(/(\d+)h/);
-  const minMatch = debt.match(/(\d+)min/);
-  if (dayMatch) minutes += parseInt(dayMatch[1], 10) * 8 * 60;
-  if (hourMatch) minutes += parseInt(hourMatch[1], 10) * 60;
-  if (minMatch) minutes += parseInt(minMatch[1], 10);
-  return minutes;
 };
 
 export const sortContributors = (
@@ -105,6 +105,8 @@ export const sortContributors = (
       case "duplications":
       case "technicalDebt":
         return getSonarNumericValue(a, field) - getSonarNumericValue(b, field);
+      default:
+        return 0;
     }
   });
   return direction === "desc" ? sorted.reverse() : sorted;

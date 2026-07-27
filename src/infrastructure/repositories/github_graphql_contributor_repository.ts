@@ -2,7 +2,7 @@ import type { Contributor } from "../../domain/entities/contributor";
 import type { ContributorRepository } from "../../domain/repositories/contributor_repository";
 import type { GraphQLPullRequestNode } from "../../service/mappers/graphql_contributor_node";
 import { mapPullRequestsToContributors } from "../../service/mappers/graphql_contributor_mapper";
-import { graphqlRequest } from "../http/graphql_client";
+import type { GraphQLClient } from "../http/graphql_client";
 
 const buildDateFilter = (dateFrom: string | null, dateTo: string | null): string => {
   if (!dateFrom && !dateTo) return "";
@@ -64,6 +64,12 @@ interface SearchQueryResponse {
 }
 
 export class GitHubGraphQLContributorRepository implements ContributorRepository {
+  private readonly client: GraphQLClient;
+
+  constructor(client: GraphQLClient) {
+    this.client = client;
+  }
+
   async listContributors(
     token: string,
     username: string,
@@ -77,10 +83,11 @@ export class GitHubGraphQLContributorRepository implements ContributorRepository
     const searchQuery = `type:pr user:${username} ${dateFilter}`.trim();
 
     for (;;) {
-      const response: SearchQueryResponse = await graphqlRequest<SearchQueryResponse>(token, CONTRIBUTOR_QUERY, {
-        searchQuery,
-        cursor,
-      });
+      const response: SearchQueryResponse = await this.client.request<SearchQueryResponse>(
+        token,
+        CONTRIBUTOR_QUERY,
+        { searchQuery, cursor },
+      );
 
       const { search } = response;
       allPRs.push(...search.nodes);

@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import { computeBadgeColor, parseBadgesFromReadme } from "../../../src/domain/entities/badge_status";
 
 describe("computeBadgeColor", () => {

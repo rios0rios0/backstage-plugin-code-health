@@ -1,13 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GitHubGraphQLContributorRepository } from "../../../src/infrastructure/repositories/github_graphql_contributor_repository";
 
-vi.mock("../../../src/infrastructure/http/graphql_client", () => ({
-  graphqlRequest: vi.fn(),
-}));
+import { createStubGraphQLClient } from "../../doubles/stub_http_clients";
 
-import { graphqlRequest } from "../../../src/infrastructure/http/graphql_client";
-
-const mockedGraphql = vi.mocked(graphqlRequest);
+let mockedGraphql: ReturnType<typeof createStubGraphQLClient>["request"];
 
 const createPRNode = (overrides: Record<string, unknown> = {}) => ({
   number: 1,
@@ -42,8 +37,10 @@ describe("GitHubGraphQLContributorRepository", () => {
   let repository: GitHubGraphQLContributorRepository;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    repository = new GitHubGraphQLContributorRepository();
+    jest.clearAllMocks();
+    const stub = createStubGraphQLClient();
+    mockedGraphql = stub.request;
+    repository = new GitHubGraphQLContributorRepository(stub.client);
   });
 
   it("should return mapped contributors from single page response", async () => {

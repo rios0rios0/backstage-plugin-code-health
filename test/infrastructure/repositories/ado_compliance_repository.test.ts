@@ -1,13 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AdoComplianceRepository } from "../../../src/infrastructure/repositories/ado_compliance_repository";
 
-vi.mock("../../../src/infrastructure/http/ado_rest_client", () => ({
-  adoRequest: vi.fn(),
-}));
+import { createStubAdoRestClient } from "../../doubles/stub_http_clients";
 
-import { adoRequest } from "../../../src/infrastructure/http/ado_rest_client";
-
-const mockedAdoRequest = vi.mocked(adoRequest);
+let mockedAdoRequest: ReturnType<typeof createStubAdoRestClient>["get"];
 
 const BUILD_VALIDATION_TYPE_ID = "0609b952-1397-4640-95ec-e00a01b2c241";
 
@@ -37,8 +32,10 @@ describe("AdoComplianceRepository", () => {
   let repository: AdoComplianceRepository;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    repository = new AdoComplianceRepository();
+    jest.clearAllMocks();
+    const stub = createStubAdoRestClient();
+    mockedAdoRequest = stub.get;
+    repository = new AdoComplianceRepository(stub.client);
   });
 
   it("should return green when all conditions are met", async () => {

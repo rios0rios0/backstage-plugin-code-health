@@ -4,6 +4,7 @@ import type { DashboardService } from "../../src/domain/services/dashboard_servi
 export class StubDashboardService implements DashboardService {
   private result: Repository[] = [];
   private error: Error | null = null;
+  callCount = 0;
 
   withRepositories(repos: Repository[]): this {
     this.result = repos;
@@ -15,7 +16,8 @@ export class StubDashboardService implements DashboardService {
     return this;
   }
 
-  async listRepositories(_token: string, _username: string): Promise<Repository[]> {
+  async listRepositories(): Promise<Repository[]> {
+    this.callCount++;
     if (this.error) throw this.error;
     return this.result;
   }

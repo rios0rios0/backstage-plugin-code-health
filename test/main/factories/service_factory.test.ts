@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { createDashboardService, createContributorService } from "../../../src/main/factories/service_factory";
 import { GitHubDashboardService } from "../../../src/service/github_dashboard_service";
 import { GitHubContributorService } from "../../../src/service/github_contributor_service";

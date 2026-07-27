@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { waitFor } from "@testing-library/react";
 import { EncryptedAuthenticationService } from "../../../src/infrastructure/services/encrypted_authentication_service";
 import { LocalStorageAuthenticationService } from "../../../src/infrastructure/services/local_storage_authentication_service";
 
@@ -48,7 +48,7 @@ describe("EncryptedAuthenticationService", () => {
 
     // then
     expect(service.getToken()).toBe("ghp_test123");
-    await vi.waitFor(() => {
+    await waitFor(() => {
       const raw = delegate.getToken();
       expect(raw).not.toBe("ghp_test123");
       expect(raw?.startsWith("enc:")).toBe(true);
@@ -126,7 +126,7 @@ describe("EncryptedAuthenticationService", () => {
 
     // then
     expect(service.getSonarToken()).toBe("squ_sonar123");
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(delegate.getSonarToken()?.startsWith("enc:")).toBe(true);
     });
   });
@@ -140,7 +140,7 @@ describe("EncryptedAuthenticationService", () => {
 
     // then
     expect(service.getWakaTimeToken()).toBe("wk_test123");
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(delegate.getWakaTimeToken()?.startsWith("enc:")).toBe(true);
     });
   });

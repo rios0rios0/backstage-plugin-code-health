@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   SonarRepositoryImpl,
   NoOpSonarRepository,
   type SonarConfig,
 } from "../../../src/infrastructure/repositories/sonar_repository_impl";
+import { createStubSonarClient } from "../../doubles/stub_http_clients";
 
 describe("SonarRepositoryImpl", () => {
   const cloudConfig: SonarConfig = {
@@ -19,23 +19,24 @@ describe("SonarRepositoryImpl", () => {
     baseUrl: "https://sonar.example.com",
   };
 
+  let stub: ReturnType<typeof createStubSonarClient>;
+
+  const createRepository = (config: SonarConfig = cloudConfig) =>
+    new SonarRepositoryImpl(stub.client, config);
+
   beforeEach(() => {
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
+    stub = createStubSonarClient();
   });
 
   describe("listProjectKeys", () => {
     it("should return project keys on success", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            components: [{ key: "proj-a" }, { key: "proj-b" }],
-            paging: { total: 2 },
-          }),
-          { status: 200 },
-        ),
-      );
+      const repo = createRepository();
+      stub.get.mockResolvedValueOnce({
+        components: [{ key: "proj-a" }, { key: "proj-b" }],
+        paging: { total: 2 },
+      });
 
       // when
       const result = await repo.listProjectKeys();
@@ -46,10 +47,8 @@ describe("SonarRepositoryImpl", () => {
 
     it("should return empty array on failure", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-        new Response("Unauthorized", { status: 401 }),
-      );
+      const repo = createRepository();
+      stub.get.mockRejectedValueOnce(new Error("Sonar API error: 401"));
 
       // when
       const result = await repo.listProjectKeys();
@@ -60,61 +59,64 @@ describe("SonarRepositoryImpl", () => {
 
     it("should include organization param for cloud type", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-        new Response(JSON.stringify({ components: [], paging: { total: 0 } }), { status: 200 }),
-      );
+      const repo = createRepository();
+      stub.get.mockResolvedValueOnce({ components: [], paging: { total: 0 } });
 
       // when
       await repo.listProjectKeys();
 
       // then
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).toContain("organization=my-org");
+      const [, , path] = stub.get.mock.calls[0];
+      expect(path).toContain("organization=my-org");
     });
 
     it("should omit organization param for qube type", async () => {
       // given
-      const repo = new SonarRepositoryImpl(qubeConfig);
-      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-        new Response(JSON.stringify({ components: [], paging: { total: 0 } }), { status: 200 }),
-      );
+      const repo = createRepository(qubeConfig);
+      stub.get.mockResolvedValueOnce({ components: [], paging: { total: 0 } });
 
       // when
       await repo.listProjectKeys();
 
       // then
-      const url = fetchSpy.mock.calls[0][0] as string;
-      expect(url).not.toContain("organization=");
+      const [, , path] = stub.get.mock.calls[0];
+      expect(path).not.toContain("organization=");
+    });
+
+    it("should pass the configured token and base URL to the client", async () => {
+      // given
+      const repo = createRepository(qubeConfig);
+      stub.get.mockResolvedValueOnce({ components: [], paging: { total: 0 } });
+
+      // when
+      await repo.listProjectKeys();
+
+      // then
+      const [token, baseUrl] = stub.get.mock.calls[0];
+      expect(token).toBe("sonar-token-456");
+      expect(baseUrl).toBe("https://sonar.example.com");
     });
   });
 
   describe("getProjectMetrics", () => {
     it("should return parsed metrics with quality gate OK", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      vi.spyOn(globalThis, "fetch")
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              component: {
-                measures: [
-                  { metric: "bugs", value: "5" },
-                  { metric: "code_smells", value: "10" },
-                  { metric: "security_hotspots", value: "2" },
-                  { metric: "vulnerabilities", value: "1" },
-                  { metric: "coverage", value: "82.5" },
-                  { metric: "duplicated_lines_density", value: "3.2" },
-                  { metric: "sqale_index", value: "530" },
-                ],
-              },
-            }),
-            { status: 200 },
-          ),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ projectStatus: { status: "OK" } }), { status: 200 }),
-        );
+      const repo = createRepository();
+      stub.get
+        .mockResolvedValueOnce({
+          component: {
+            measures: [
+              { metric: "bugs", value: "5" },
+              { metric: "code_smells", value: "10" },
+              { metric: "security_hotspots", value: "2" },
+              { metric: "vulnerabilities", value: "1" },
+              { metric: "coverage", value: "82.5" },
+              { metric: "duplicated_lines_density", value: "3.2" },
+              { metric: "sqale_index", value: "530" },
+            ],
+          },
+        })
+        .mockResolvedValueOnce({ projectStatus: { status: "OK" } });
 
       // when
       const result = await repo.getProjectMetrics("my-project");
@@ -133,24 +135,17 @@ describe("SonarRepositoryImpl", () => {
 
     it("should return parsed metrics with quality gate ERROR", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      vi.spyOn(globalThis, "fetch")
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              component: {
-                measures: [
-                  { metric: "bugs", value: "0" },
-                  { metric: "sqale_index", value: "0" },
-                ],
-              },
-            }),
-            { status: 200 },
-          ),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ projectStatus: { status: "ERROR" } }), { status: 200 }),
-        );
+      const repo = createRepository();
+      stub.get
+        .mockResolvedValueOnce({
+          component: {
+            measures: [
+              { metric: "bugs", value: "0" },
+              { metric: "sqale_index", value: "0" },
+            ],
+          },
+        })
+        .mockResolvedValueOnce({ projectStatus: { status: "ERROR" } });
 
       // when
       const result = await repo.getProjectMetrics("my-project");
@@ -163,10 +158,8 @@ describe("SonarRepositoryImpl", () => {
 
     it("should return null on failure", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-        new Response("Not Found", { status: 404 }),
-      );
+      const repo = createRepository();
+      stub.get.mockRejectedValue(new Error("Sonar API error: 404"));
 
       // when
       const result = await repo.getProjectMetrics("bad-project");
@@ -177,17 +170,10 @@ describe("SonarRepositoryImpl", () => {
 
     it("should handle quality gate fetch failure gracefully", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      vi.spyOn(globalThis, "fetch")
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              component: { measures: [{ metric: "bugs", value: "1" }] },
-            }),
-            { status: 200 },
-          ),
-        )
-        .mockResolvedValueOnce(new Response("Server Error", { status: 500 }));
+      const repo = createRepository();
+      stub.get
+        .mockResolvedValueOnce({ component: { measures: [{ metric: "bugs", value: "1" }] } })
+        .mockRejectedValueOnce(new Error("Sonar API error: 500"));
 
       // when
       const result = await repo.getProjectMetrics("my-project");
@@ -199,21 +185,10 @@ describe("SonarRepositoryImpl", () => {
 
     it("should format technical debt with days hours and minutes", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      vi.spyOn(globalThis, "fetch")
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              component: {
-                measures: [{ metric: "sqale_index", value: "1530" }],
-              },
-            }),
-            { status: 200 },
-          ),
-        )
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({ projectStatus: { status: "OK" } }), { status: 200 }),
-        );
+      const repo = createRepository();
+      stub.get
+        .mockResolvedValueOnce({ component: { measures: [{ metric: "sqale_index", value: "1530" }] } })
+        .mockResolvedValueOnce({ projectStatus: { status: "OK" } });
 
       // when
       const result = await repo.getProjectMetrics("my-project");
@@ -227,22 +202,17 @@ describe("SonarRepositoryImpl", () => {
   describe("getIssuesByAuthor", () => {
     it("should aggregate issues by author and type", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            issues: [
-              { author: "alice", type: "BUG" },
-              { author: "alice", type: "BUG" },
-              { author: "bob", type: "CODE_SMELL" },
-              { author: "alice", type: "VULNERABILITY" },
-              { author: "bob", type: "SECURITY_HOTSPOT" },
-            ],
-            paging: { total: 5, pageIndex: 1, pageSize: 500 },
-          }),
-          { status: 200 },
-        ),
-      );
+      const repo = createRepository();
+      stub.get.mockResolvedValueOnce({
+        issues: [
+          { author: "alice", type: "BUG" },
+          { author: "alice", type: "BUG" },
+          { author: "bob", type: "CODE_SMELL" },
+          { author: "alice", type: "VULNERABILITY" },
+          { author: "bob", type: "SECURITY_HOTSPOT" },
+        ],
+        paging: { total: 5, pageIndex: 1, pageSize: 500 },
+      });
 
       // when
       const result = await repo.getIssuesByAuthor("my-project");
@@ -264,47 +234,32 @@ describe("SonarRepositoryImpl", () => {
 
     it("should paginate when results exceed page size", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      const fetchSpy = vi.spyOn(globalThis, "fetch")
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              issues: [{ author: "alice", type: "BUG" }],
-              paging: { total: 501, pageIndex: 1, pageSize: 500 },
-            }),
-            { status: 200 },
-          ),
-        )
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              issues: [{ author: "bob", type: "CODE_SMELL" }],
-              paging: { total: 501, pageIndex: 2, pageSize: 500 },
-            }),
-            { status: 200 },
-          ),
-        );
+      const repo = createRepository();
+      stub.get
+        .mockResolvedValueOnce({
+          issues: [{ author: "alice", type: "BUG" }],
+          paging: { total: 501, pageIndex: 1, pageSize: 500 },
+        })
+        .mockResolvedValueOnce({
+          issues: [{ author: "bob", type: "CODE_SMELL" }],
+          paging: { total: 501, pageIndex: 2, pageSize: 500 },
+        });
 
       // when
       const result = await repo.getIssuesByAuthor("my-project");
 
       // then
-      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(stub.get).toHaveBeenCalledTimes(2);
       expect(result.size).toBe(2);
     });
 
     it("should handle unknown author as 'unknown'", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            issues: [{ author: "", type: "BUG" }],
-            paging: { total: 1, pageIndex: 1, pageSize: 500 },
-          }),
-          { status: 200 },
-        ),
-      );
+      const repo = createRepository();
+      stub.get.mockResolvedValueOnce({
+        issues: [{ author: "", type: "BUG" }],
+        paging: { total: 1, pageIndex: 1, pageSize: 500 },
+      });
 
       // when
       const result = await repo.getIssuesByAuthor("my-project");
@@ -316,18 +271,13 @@ describe("SonarRepositoryImpl", () => {
 
     it("should return partial results on mid-pagination failure", async () => {
       // given
-      const repo = new SonarRepositoryImpl(cloudConfig);
-      vi.spyOn(globalThis, "fetch")
-        .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({
-              issues: [{ author: "alice", type: "BUG" }],
-              paging: { total: 1000, pageIndex: 1, pageSize: 500 },
-            }),
-            { status: 200 },
-          ),
-        )
-        .mockResolvedValueOnce(new Response("Server Error", { status: 500 }));
+      const repo = createRepository();
+      stub.get
+        .mockResolvedValueOnce({
+          issues: [{ author: "alice", type: "BUG" }],
+          paging: { total: 1000, pageIndex: 1, pageSize: 500 },
+        })
+        .mockRejectedValueOnce(new Error("Sonar API error: 500"));
 
       // when
       const result = await repo.getIssuesByAuthor("my-project");

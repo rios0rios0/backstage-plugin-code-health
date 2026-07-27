@@ -1,7 +1,17 @@
 import { useState } from "react";
+import Box from "@material-ui/core/Box";
+import Button from "@material-ui/core/Button";
+import TextField from "@material-ui/core/TextField";
+import Typography from "@material-ui/core/Typography";
+import { ContentHeader } from "@backstage/core-components";
+import type { GitforgeConfig } from "../../domain/entities/gitforge_config";
+import { EMPTY_GITFORGE_CONFIG } from "../../domain/entities/gitforge_config";
 import type { Platform } from "../../domain/entities/platform";
-import type { SonarLoginInfo, SonarType } from "../hooks/use_authentication";
+import type { SonarType } from "../../domain/entities/sonar_type";
 import { IntegrationCard } from "../components/integration_card";
+import type { ToggleOption } from "../components/option_toggle";
+import { OptionToggle } from "../components/option_toggle";
+import type { SonarLoginInfo } from "../hooks/use_authentication";
 
 interface SettingsPageProps {
   token: string;
@@ -11,32 +21,34 @@ interface SettingsPageProps {
   sonarType: SonarType | null;
   sonarUrl: string | null;
   wakaTimeToken: string | null;
+  config?: GitforgeConfig;
   onUpdateVcs: (token: string, username: string, platform: Platform) => void;
   onUpdateSonar: (sonar: SonarLoginInfo | null) => void;
   onUpdateWakaTime: (token: string | null) => void;
+  onForgetCredentials?: () => void;
 }
 
-const PLATFORM_OPTIONS: { value: Platform; label: string }[] = [
+const PLATFORM_OPTIONS: readonly ToggleOption<Platform>[] = [
   { value: "github", label: "GitHub" },
   { value: "azure-devops", label: "Azure DevOps" },
 ];
 
-const SONAR_OPTIONS: { value: SonarType | "none"; label: string }[] = [
+const SONAR_OPTIONS: readonly ToggleOption<SonarType | "none">[] = [
   { value: "none", label: "None" },
   { value: "cloud", label: "SonarCloud" },
   { value: "qube", label: "SonarQube" },
 ];
 
-const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100";
+const MANAGED_NOTE =
+  "Some values come from `gitforgeDashboard` in app-config.yaml and cannot be changed here.";
+const PROXY_NOTE =
+  "Requests are routed through a Backstage proxy endpoint, so no personal token is needed.";
 
-const labelClass = "mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300";
-
-const toggleContainerClass =
-  "flex rounded-md border border-gray-200 bg-gray-50 p-1 dark:border-gray-600 dark:bg-gray-700";
-
-const toggleActiveClass = "bg-white text-gray-900 shadow-sm dark:bg-gray-600 dark:text-gray-100";
-const toggleInactiveClass = "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200";
+const resolveManagedNote = (proxied: boolean, hasManagedFields: boolean): string | undefined => {
+  if (proxied) return PROXY_NOTE;
+  if (hasManagedFields) return MANAGED_NOTE;
+  return undefined;
+};
 
 export const SettingsPage = ({
   token,
@@ -46,9 +58,11 @@ export const SettingsPage = ({
   sonarType,
   sonarUrl,
   wakaTimeToken,
+  config = EMPTY_GITFORGE_CONFIG,
   onUpdateVcs,
   onUpdateSonar,
   onUpdateWakaTime,
+  onForgetCredentials,
 }: SettingsPageProps) => {
   const [vcsToken, setVcsToken] = useState(token);
   const [vcsUsername, setVcsUsername] = useState(username);
@@ -120,151 +134,148 @@ export const SettingsPage = ({
   };
 
   const isGitHub = vcsPlatform === "github";
+  const vcsProxied = config.proxied[vcsPlatform];
+  const vcsHasManagedFields = Boolean(config.platform || config.organization);
+  const vcsManagedNote = resolveManagedNote(vcsProxied, vcsHasManagedFields);
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Settings</h2>
-      <p className="text-sm text-gray-500 dark:text-gray-400">
-        Manage your integration tokens. Tokens are encrypted and stored locally in your browser.
-      </p>
+    <>
+      <ContentHeader title="Settings">
+        {onForgetCredentials && (
+          <Button size="small" variant="outlined" onClick={onForgetCredentials}>
+            Forget all credentials
+          </Button>
+        )}
+      </ContentHeader>
 
-      <IntegrationCard
-        title={isGitHub ? "GitHub" : "Azure DevOps"}
-        description="Version control platform for repository data, CI status, and releases."
-        status="connected"
-        isRequired
-        onSave={handleVcsSave}
-        onCancel={handleVcsCancel}
-      >
-        {(editing) => (
-          <>
-            <div className={toggleContainerClass}>
-              {PLATFORM_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  disabled={!editing}
-                  onClick={() => setVcsPlatform(opt.value)}
-                  className={`flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                    vcsPlatform === opt.value ? toggleActiveClass : toggleInactiveClass
-                  } ${!editing ? "cursor-default opacity-70" : ""}`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <div>
-              <label htmlFor="vcsUsername" className={labelClass}>
-                {isGitHub ? "GitHub Username" : "Organization Name"}
-              </label>
-              <input
+      <Box mb={2}>
+        <Typography variant="body2" color="textSecondary">
+          Manage your integration tokens. Tokens are encrypted with Web Crypto AES-GCM and stored
+          only in your browser.
+        </Typography>
+      </Box>
+
+      <Box display="flex" flexDirection="column" gridGap={16}>
+        <IntegrationCard
+          title={isGitHub ? "GitHub" : "Azure DevOps"}
+          description="Version control platform for repository data, CI status, and releases."
+          status="connected"
+          isRequired
+          managedNote={vcsManagedNote}
+          onSave={handleVcsSave}
+          onCancel={handleVcsCancel}
+        >
+          {(editing) => (
+            <>
+              <OptionToggle
+                ariaLabel="Platform"
+                value={vcsPlatform}
+                options={PLATFORM_OPTIONS}
+                disabled={!editing || config.platform !== null}
+                onChange={setVcsPlatform}
+              />
+              <TextField
                 id="vcsUsername"
-                type="text"
+                label={isGitHub ? "GitHub Username" : "Organization Name"}
                 value={vcsUsername}
                 onChange={(e) => setVcsUsername(e.target.value)}
-                disabled={!editing}
-                className={`${inputClass} ${!editing ? "opacity-70" : ""}`}
+                disabled={!editing || config.organization !== null}
+                variant="outlined"
+                size="small"
+                fullWidth
               />
-            </div>
-            <div>
-              <label htmlFor="vcsToken" className={labelClass}>Personal Access Token</label>
-              <input
+              <TextField
                 id="vcsToken"
+                label="Personal Access Token"
                 type="password"
                 value={vcsToken}
                 onChange={(e) => setVcsToken(e.target.value)}
-                disabled={!editing}
-                className={`${inputClass} ${!editing ? "opacity-70" : ""}`}
+                disabled={!editing || vcsProxied}
+                variant="outlined"
+                size="small"
+                fullWidth
               />
-            </div>
-          </>
-        )}
-      </IntegrationCard>
+            </>
+          )}
+        </IntegrationCard>
 
-      <IntegrationCard
-        title="Code Quality (Sonar)"
-        description="SonarCloud or SonarQube integration for code quality and security metrics."
-        status={sonarToken ? "connected" : "disconnected"}
-        onSave={handleSonarSave}
-        onCancel={handleSonarCancel}
-        onDisconnect={handleSonarDisconnect}
-      >
-        {(editing) => (
-          <>
-            <div className={toggleContainerClass}>
-              {SONAR_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  disabled={!editing}
-                  onClick={() => setLocalSonarType(opt.value)}
-                  className={`flex-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
-                    localSonarType === opt.value ? toggleActiveClass : toggleInactiveClass
-                  } ${!editing ? "cursor-default opacity-70" : ""}`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            {localSonarType !== "none" && (
-              <>
-                {localSonarType === "qube" && (
-                  <div>
-                    <label htmlFor="sonarUrl" className={labelClass}>SonarQube Instance URL</label>
-                    <input
+        <IntegrationCard
+          title="Code Quality (Sonar)"
+          description="SonarCloud or SonarQube integration for code quality and security metrics."
+          status={sonarToken || config.proxied.sonar ? "connected" : "disconnected"}
+          managedNote={config.proxied.sonar ? PROXY_NOTE : undefined}
+          onSave={handleSonarSave}
+          onCancel={handleSonarCancel}
+          onDisconnect={handleSonarDisconnect}
+        >
+          {(editing) => (
+            <>
+              <OptionToggle
+                ariaLabel="Code quality integration"
+                value={localSonarType}
+                options={SONAR_OPTIONS}
+                disabled={!editing || config.sonarType !== null}
+                onChange={setLocalSonarType}
+              />
+              {localSonarType !== "none" && (
+                <>
+                  {localSonarType === "qube" && (
+                    <TextField
                       id="sonarUrl"
+                      label="SonarQube Instance URL"
                       type="url"
                       value={localSonarUrl}
                       onChange={(e) => setLocalSonarUrl(e.target.value)}
-                      disabled={!editing}
+                      disabled={!editing || config.sonarBaseUrl !== null}
                       placeholder="https://sonarqube.example.com"
-                      className={`${inputClass} ${!editing ? "opacity-70" : ""}`}
+                      variant="outlined"
+                      size="small"
+                      fullWidth
                     />
-                  </div>
-                )}
-                <div>
-                  <label htmlFor="sonarToken" className={labelClass}>
-                    {localSonarType === "cloud" ? "SonarCloud Token" : "SonarQube Token"}
-                  </label>
-                  <input
+                  )}
+                  <TextField
                     id="sonarToken"
+                    label={localSonarType === "cloud" ? "SonarCloud Token" : "SonarQube Token"}
                     type="password"
                     value={localSonarToken}
                     onChange={(e) => setLocalSonarToken(e.target.value)}
-                    disabled={!editing}
+                    disabled={!editing || config.proxied.sonar}
                     placeholder="your Sonar token"
-                    className={`${inputClass} ${!editing ? "opacity-70" : ""}`}
+                    variant="outlined"
+                    size="small"
+                    fullWidth
                   />
-                </div>
-              </>
-            )}
-          </>
-        )}
-      </IntegrationCard>
+                </>
+              )}
+            </>
+          )}
+        </IntegrationCard>
 
-      <IntegrationCard
-        title="WakaTime"
-        description="Time tracking integration for per-contributor coding time metrics."
-        status={wakaTimeToken ? "connected" : "disconnected"}
-        onSave={handleWakaTimeSave}
-        onCancel={handleWakaTimeCancel}
-        onDisconnect={handleWakaTimeDisconnect}
-      >
-        {(editing) => (
-          <div>
-            <label htmlFor="wakaTimeToken" className={labelClass}>API Key</label>
-            <input
+        <IntegrationCard
+          title="WakaTime"
+          description="Time tracking integration for per-contributor coding time metrics."
+          status={wakaTimeToken || config.proxied.wakatime ? "connected" : "disconnected"}
+          managedNote={config.proxied.wakatime ? PROXY_NOTE : undefined}
+          onSave={handleWakaTimeSave}
+          onCancel={handleWakaTimeCancel}
+          onDisconnect={handleWakaTimeDisconnect}
+        >
+          {(editing) => (
+            <TextField
               id="wakaTimeToken"
+              label="API Key"
               type="password"
               value={localWakaTimeToken}
               onChange={(e) => setLocalWakaTimeToken(e.target.value)}
-              disabled={!editing}
+              disabled={!editing || config.proxied.wakatime}
               placeholder="your WakaTime API key"
-              className={`${inputClass} ${!editing ? "opacity-70" : ""}`}
+              variant="outlined"
+              size="small"
+              fullWidth
             />
-          </div>
-        )}
-      </IntegrationCard>
-    </div>
+          )}
+        </IntegrationCard>
+      </Box>
+    </>
   );
 };

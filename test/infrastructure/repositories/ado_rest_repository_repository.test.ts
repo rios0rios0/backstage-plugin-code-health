@@ -1,13 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AdoRestRepositoryRepository } from "../../../src/infrastructure/repositories/ado_rest_repository_repository";
 
-vi.mock("../../../src/infrastructure/http/ado_rest_client", () => ({
-  adoRequest: vi.fn(),
-}));
+import { createStubAdoRestClient } from "../../doubles/stub_http_clients";
 
-import { adoRequest } from "../../../src/infrastructure/http/ado_rest_client";
-
-const mockedAdo = vi.mocked(adoRequest);
+let mockedAdo: ReturnType<typeof createStubAdoRestClient>["get"];
 
 const createProject = (name: string) => ({
   id: `proj-${name}`,
@@ -46,8 +41,10 @@ describe("AdoRestRepositoryRepository", () => {
   let repository: AdoRestRepositoryRepository;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    repository = new AdoRestRepositoryRepository();
+    jest.clearAllMocks();
+    const stub = createStubAdoRestClient();
+    mockedAdo = stub.get;
+    repository = new AdoRestRepositoryRepository(stub.client);
   });
 
   it("should fetch repos from all projects and enrich with builds, tags, and branches", async () => {

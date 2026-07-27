@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import { computeComplianceColor } from "../../../src/domain/entities/compliance_status";
 
 describe("computeComplianceColor", () => {

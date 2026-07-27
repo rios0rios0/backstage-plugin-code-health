@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { formatDuration } from "../../../src/domain/entities/wakatime_metrics";
 
 describe("formatDuration", () => {

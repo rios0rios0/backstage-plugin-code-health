@@ -1,41 +1,33 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   WakaTimeRepositoryImpl,
   NoOpWakaTimeRepository,
 } from "../../../src/infrastructure/repositories/wakatime_repository_impl";
+import { createStubWakaTimeClient } from "../../doubles/stub_http_clients";
 
 describe("WakaTimeRepositoryImpl", () => {
   const token = "waka-token-123";
 
+  let stub: ReturnType<typeof createStubWakaTimeClient>;
+
+  const createRepository = () => new WakaTimeRepositoryImpl(stub.client, token);
+
   beforeEach(() => {
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
+    stub = createStubWakaTimeClient();
   });
 
   it("should fetch members and their 30-day summaries", async () => {
     // given
-    const repo = new WakaTimeRepositoryImpl(token);
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [
-              { user: { username: "alice", display_name: "Alice A", email: "alice@example.com" } },
-            ],
-          }),
-          { status: 200 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [
-              { grand_total: { total_seconds: 3600 } },
-              { grand_total: { total_seconds: 7200 } },
-            ],
-          }),
-          { status: 200 },
-        ),
-      );
+    const repo = createRepository();
+    stub.get
+      .mockResolvedValueOnce({
+        data: [
+          { user: { username: "alice", display_name: "Alice A", email: "alice@example.com" } },
+        ],
+      })
+      .mockResolvedValueOnce({
+        data: [{ grand_total: { total_seconds: 3600 } }, { grand_total: { total_seconds: 7200 } }],
+      });
 
     // when
     const result = await repo.getMemberSummaries("my-org");
@@ -51,26 +43,26 @@ describe("WakaTimeRepositoryImpl", () => {
     });
   });
 
+  it("should pass the configured token to the client", async () => {
+    // given
+    const repo = createRepository();
+    stub.get.mockResolvedValueOnce({ data: [] });
+
+    // when
+    await repo.getMemberSummaries("my-org");
+
+    // then
+    expect(stub.get).toHaveBeenCalledWith(token, "/orgs/my-org/members");
+  });
+
   it("should store summaries by both display name and email", async () => {
     // given
-    const repo = new WakaTimeRepositoryImpl(token);
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [
-              { user: { username: "bob", display_name: "Bob B", email: "bob@test.com" } },
-            ],
-          }),
-          { status: 200 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ data: [{ grand_total: { total_seconds: 100 } }] }),
-          { status: 200 },
-        ),
-      );
+    const repo = createRepository();
+    stub.get
+      .mockResolvedValueOnce({
+        data: [{ user: { username: "bob", display_name: "Bob B", email: "bob@test.com" } }],
+      })
+      .mockResolvedValueOnce({ data: [{ grand_total: { total_seconds: 100 } }] });
 
     // when
     const result = await repo.getMemberSummaries("org");
@@ -83,10 +75,8 @@ describe("WakaTimeRepositoryImpl", () => {
 
   it("should return empty map when member fetch fails", async () => {
     // given
-    const repo = new WakaTimeRepositoryImpl(token);
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response("Unauthorized", { status: 401 }),
-    );
+    const repo = createRepository();
+    stub.get.mockRejectedValueOnce(new Error("WakaTime API error: 401"));
 
     // when
     const result = await repo.getMemberSummaries("my-org");
@@ -97,26 +87,16 @@ describe("WakaTimeRepositoryImpl", () => {
 
   it("should skip individual member summary failures", async () => {
     // given
-    const repo = new WakaTimeRepositoryImpl(token);
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [
-              { user: { username: "alice", display_name: "Alice", email: "a@x.com" } },
-              { user: { username: "bob", display_name: "Bob", email: "b@x.com" } },
-            ],
-          }),
-          { status: 200 },
-        ),
-      )
-      .mockResolvedValueOnce(new Response("Error", { status: 500 }))
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ data: [{ grand_total: { total_seconds: 600 } }] }),
-          { status: 200 },
-        ),
-      );
+    const repo = createRepository();
+    stub.get
+      .mockResolvedValueOnce({
+        data: [
+          { user: { username: "alice", display_name: "Alice", email: "a@x.com" } },
+          { user: { username: "bob", display_name: "Bob", email: "b@x.com" } },
+        ],
+      })
+      .mockRejectedValueOnce(new Error("WakaTime API error: 500"))
+      .mockResolvedValueOnce({ data: [{ grand_total: { total_seconds: 600 } }] });
 
     // when
     const result = await repo.getMemberSummaries("my-org");
@@ -128,58 +108,39 @@ describe("WakaTimeRepositoryImpl", () => {
 
   it("should process members in batches of 5", async () => {
     // given
-    const repo = new WakaTimeRepositoryImpl(token);
+    const repo = createRepository();
     const members = Array.from({ length: 7 }, (_, i) => ({
       user: { username: `user${i}`, display_name: `User ${i}`, email: `u${i}@x.com` },
     }));
 
-    const fetchSpy = vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ data: members }), { status: 200 }),
-      );
-
+    stub.get.mockResolvedValueOnce({ data: members });
     for (let i = 0; i < 7; i++) {
-      fetchSpy.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ data: [{ grand_total: { total_seconds: 100 } }] }),
-          { status: 200 },
-        ),
-      );
+      stub.get.mockResolvedValueOnce({ data: [{ grand_total: { total_seconds: 100 } }] });
     }
 
     // when
     const result = await repo.getMemberSummaries("my-org");
 
     // then
-    // 1 member list fetch + 7 summary fetches = 8 total
-    expect(fetchSpy).toHaveBeenCalledTimes(8);
+    // 1 member list request + 7 summary requests = 8 total
+    expect(stub.get).toHaveBeenCalledTimes(8);
     expect(result.size).toBe(14); // 7 display names + 7 emails
   });
 
   it("should calculate daily average from total seconds / days", async () => {
     // given
-    const repo = new WakaTimeRepositoryImpl(token);
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [{ user: { username: "u1", display_name: "U1", email: "u1@x.com" } }],
-          }),
-          { status: 200 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [
-              { grand_total: { total_seconds: 1000 } },
-              { grand_total: { total_seconds: 2000 } },
-              { grand_total: { total_seconds: 3000 } },
-            ],
-          }),
-          { status: 200 },
-        ),
-      );
+    const repo = createRepository();
+    stub.get
+      .mockResolvedValueOnce({
+        data: [{ user: { username: "u1", display_name: "U1", email: "u1@x.com" } }],
+      })
+      .mockResolvedValueOnce({
+        data: [
+          { grand_total: { total_seconds: 1000 } },
+          { grand_total: { total_seconds: 2000 } },
+          { grand_total: { total_seconds: 3000 } },
+        ],
+      });
 
     // when
     const result = await repo.getMemberSummaries("org");
@@ -192,19 +153,10 @@ describe("WakaTimeRepositoryImpl", () => {
 
   it("should handle empty summary data (0 days)", async () => {
     // given
-    const repo = new WakaTimeRepositoryImpl(token);
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [{ user: { username: "u1", display_name: "U1", email: "" } }],
-          }),
-          { status: 200 },
-        ),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ data: [] }), { status: 200 }),
-      );
+    const repo = createRepository();
+    stub.get
+      .mockResolvedValueOnce({ data: [{ user: { username: "u1", display_name: "U1", email: "" } }] })
+      .mockResolvedValueOnce({ data: [] });
 
     // when
     const result = await repo.getMemberSummaries("org");

@@ -3,33 +3,7 @@ import type { SonarMetrics } from "../domain/entities/sonar_metrics";
 import type { ContributorRepository } from "../domain/repositories/contributor_repository";
 import type { AuthorIssues, SonarRepository } from "../domain/repositories/sonar_repository";
 import type { WakaTimeRepository } from "../domain/repositories/wakatime_repository";
-import type { ContributorService } from "../domain/services/contributor_service";
-
-const aggregateProjectMetrics = (
-  metricsArray: (SonarMetrics | null)[],
-): SonarMetrics | null => {
-  const valid = metricsArray.filter((m): m is SonarMetrics => m !== null);
-  if (valid.length === 0) return null;
-
-  return {
-    bugs: valid.reduce((sum, m) => sum + m.bugs, 0),
-    codeSmells: valid.reduce((sum, m) => sum + m.codeSmells, 0),
-    securityHotspots: valid.reduce((sum, m) => sum + m.securityHotspots, 0),
-    vulnerabilities: valid.reduce((sum, m) => sum + m.vulnerabilities, 0),
-    coverage: valid.reduce((sum, m) => sum + m.coverage, 0) / valid.length,
-    duplications: valid.reduce((sum, m) => sum + m.duplications, 0) / valid.length,
-    technicalDebt: formatTotalDebt(valid),
-    qualityGateStatus: "NONE",
-  };
-};
-
-const formatTotalDebt = (metrics: SonarMetrics[]): string => {
-  let totalMinutes = 0;
-  for (const m of metrics) {
-    totalMinutes += parseDebtToMinutes(m.technicalDebt);
-  }
-  return formatMinutesToDebt(totalMinutes);
-};
+import type { PlatformContributorService } from "../domain/services/contributor_service";
 
 const parseDebtToMinutes = (debt: string): number => {
   let minutes = 0;
@@ -51,6 +25,32 @@ const formatMinutesToDebt = (totalMinutes: number): string => {
   if (hours > 0) parts.push(`${hours}h`);
   parts.push(`${mins}min`);
   return parts.join(" ");
+};
+
+const formatTotalDebt = (metrics: SonarMetrics[]): string => {
+  let totalMinutes = 0;
+  for (const m of metrics) {
+    totalMinutes += parseDebtToMinutes(m.technicalDebt);
+  }
+  return formatMinutesToDebt(totalMinutes);
+};
+
+const aggregateProjectMetrics = (
+  metricsArray: (SonarMetrics | null)[],
+): SonarMetrics | null => {
+  const valid = metricsArray.filter((m): m is SonarMetrics => m !== null);
+  if (valid.length === 0) return null;
+
+  return {
+    bugs: valid.reduce((sum, m) => sum + m.bugs, 0),
+    codeSmells: valid.reduce((sum, m) => sum + m.codeSmells, 0),
+    securityHotspots: valid.reduce((sum, m) => sum + m.securityHotspots, 0),
+    vulnerabilities: valid.reduce((sum, m) => sum + m.vulnerabilities, 0),
+    coverage: valid.reduce((sum, m) => sum + m.coverage, 0) / valid.length,
+    duplications: valid.reduce((sum, m) => sum + m.duplications, 0) / valid.length,
+    technicalDebt: formatTotalDebt(valid),
+    qualityGateStatus: "NONE",
+  };
 };
 
 const mergeAuthorIssues = (
@@ -84,7 +84,7 @@ const matchContributorToAuthor = (
   }) ?? null;
 };
 
-export class GitHubContributorService implements ContributorService {
+export class GitHubContributorService implements PlatformContributorService {
   private readonly contributorRepository: ContributorRepository;
   private readonly sonarRepository: SonarRepository;
   private readonly wakaTimeRepository: WakaTimeRepository;

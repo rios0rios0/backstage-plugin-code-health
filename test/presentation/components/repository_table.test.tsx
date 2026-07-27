@@ -1,5 +1,4 @@
-import { describe, it, expect } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { RepositoryTable } from "../../../src/presentation/components/repository_table";
 import { RepositoryBuilder } from "../../builders/repository_builder";
 
@@ -15,11 +14,11 @@ describe("RepositoryTable", () => {
   it("should render loading skeleton when isLoading is true", () => {
     // given / when
     const { container } = render(
-      <RepositoryTable repositories={[]} totalCount={0} isLoading={true} />,
+      <RepositoryTable repositories={[]} totalCount={0} isLoading />,
     );
 
     // then
-    const skeletonRows = container.querySelectorAll("tr.animate-pulse");
+    const skeletonRows = container.querySelectorAll("[data-testid=\"loadingRow\"]");
     expect(skeletonRows.length).toBeGreaterThan(0);
   });
 
@@ -178,6 +177,177 @@ describe("RepositoryTable", () => {
 
     // then
     expect(screen.getByText("Passed")).toBeInTheDocument();
+  });
+
+  it("should highlight a default branch that is not 'main'", () => {
+    // given
+    const repos = [
+      { ...RepositoryBuilder.create().withName("legacy").build(), defaultBranch: "master" },
+    ];
+
+    // when
+    render(<RepositoryTable repositories={repos} totalCount={1} isLoading={false} />);
+
+    // then
+    const branch = screen.getByText("master");
+    expect(branch.closest("[title]")?.getAttribute("title")).toBe("Default branch is not 'main'");
+  });
+
+  it("should count the branches other than the default one", () => {
+    // given
+    const repos = [
+      {
+        ...RepositoryBuilder.create().withName("many-branches").build(),
+        branches: ["main", "feat/a", "fix/b"],
+      },
+    ];
+
+    // when
+    render(<RepositoryTable repositories={repos} totalCount={1} isLoading={false} />);
+
+    // then
+    expect(screen.getByText("2")).toBeInTheDocument();
+  });
+
+  it("should list the non-default branches when the count is clicked", () => {
+    // given
+    const repos = [
+      {
+        ...RepositoryBuilder.create().withName("many-branches").build(),
+        branches: ["main", "feat/a", "fix/b"],
+      },
+    ];
+    render(<RepositoryTable repositories={repos} totalCount={1} isLoading={false} />);
+
+    // when
+    fireEvent.click(screen.getByText("2"));
+
+    // then
+    const menu = within(screen.getByRole("menu", { name: "Branches" }));
+    expect(menu.getByText("feat/a")).toBeInTheDocument();
+    expect(menu.getByText("fix/b")).toBeInTheDocument();
+    expect(menu.queryByText("main")).not.toBeInTheDocument();
+  });
+
+  it("should close the branches popup when the overlay is clicked", () => {
+    // given
+    const repos = [
+      {
+        ...RepositoryBuilder.create().withName("many-branches").build(),
+        branches: ["main", "feat/a"],
+      },
+    ];
+    render(<RepositoryTable repositories={repos} totalCount={1} isLoading={false} />);
+    fireEvent.click(screen.getByText("1"));
+
+    // when
+    fireEvent.click(screen.getByTestId("branches-overlay"));
+
+    // then
+    expect(screen.queryByText("feat/a")).not.toBeInTheDocument();
+  });
+
+  it("should tell the user when a repository has no extra branches", () => {
+    // given
+    const repos = [
+      { ...RepositoryBuilder.create().withName("solo").build(), branches: ["main"] },
+    ];
+    render(<RepositoryTable repositories={repos} totalCount={1} isLoading={false} />);
+
+    // when
+    fireEvent.click(screen.getByText("0"));
+
+    // then
+    expect(screen.getByText("No extra branches")).toBeInTheDocument();
+  });
+
+  it("should render the compliance badge when compliance data is available", () => {
+    // given
+    const repos = [
+      {
+        ...RepositoryBuilder.create().withName("compliant").build(),
+        complianceStatus: {
+          pipelineExists: true,
+          buildPolicyOnPRs: true,
+          buildPolicyExpiration: true,
+          branchProtection: true,
+          color: "green" as const,
+        },
+      },
+    ];
+
+    // when
+    render(<RepositoryTable repositories={repos} totalCount={1} isLoading={false} />);
+
+    // then
+    expect(screen.getByText("Compliant")).toBeInTheDocument();
+  });
+
+  it("should render the badge status cell when badge data is available", () => {
+    // given
+    const repos = [
+      {
+        ...RepositoryBuilder.create().withName("badged").build(),
+        badgeStatus: {
+          checks: [{ label: "License", present: true }],
+          color: "green" as const,
+        },
+      },
+    ];
+
+    // when
+    render(<RepositoryTable repositories={repos} totalCount={1} isLoading={false} />);
+
+    // then
+    expect(screen.getByText("Complete")).toBeInTheDocument();
+  });
+
+  it("should filter rows through a column filter", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create().withName("alpha").build(),
+      RepositoryBuilder.create().withName("beta").build(),
+    ];
+    render(<RepositoryTable repositories={repos} totalCount={2} isLoading={false} />);
+
+    // when
+    fireEvent.change(screen.getByLabelText("Filter fullName"), { target: { value: "alpha" } });
+
+    // then
+    expect(screen.getByText("user/alpha")).toBeInTheDocument();
+    expect(screen.queryByText("user/beta")).not.toBeInTheDocument();
+  });
+
+  it("should filter rows through a select column filter", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create().withName("public-repo").build(),
+      RepositoryBuilder.create().withName("secret").asPrivate().build(),
+    ];
+    render(<RepositoryTable repositories={repos} totalCount={2} isLoading={false} />);
+
+    // when
+    fireEvent.change(screen.getByLabelText("Filter visibility"), { target: { value: "PRIVATE" } });
+
+    // then
+    expect(screen.getByText("user/secret")).toBeInTheDocument();
+    expect(screen.queryByText("user/public-repo")).not.toBeInTheDocument();
+  });
+
+  it("should sort rows when a column header is clicked", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create().withName("alpha").build(),
+      RepositoryBuilder.create().withName("beta").build(),
+    ];
+    render(<RepositoryTable repositories={repos} totalCount={2} isLoading={false} />);
+
+    // when
+    fireEvent.click(screen.getByText("Repository"));
+
+    // then
+    const links = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(links).toEqual(["user/beta", "user/alpha"]);
   });
 
   it("should render Sonar quality gate Failed status", () => {

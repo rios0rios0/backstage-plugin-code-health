@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import { mapGraphQLNodeToRepository } from "../../../src/service/mappers/graphql_repository_mapper";
 import type { GraphQLRepositoryNode } from "../../../src/service/mappers/graphql_repository_node";
 

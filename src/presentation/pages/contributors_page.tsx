@@ -1,24 +1,27 @@
 import { useCallback } from "react";
+import Box from "@material-ui/core/Box";
+import { ContentHeader, WarningPanel } from "@backstage/core-components";
 import type { ContributorService } from "../../domain/services/contributor_service";
 import { ContributorsTable } from "../components/contributors_table";
+import { DashboardToolbar } from "../components/dashboard_toolbar";
+import { useAutoRefresh } from "../hooks/use_auto_refresh";
 import { useContributors } from "../hooks/use_contributors";
 
 interface ContributorsPageProps {
   contributorService: ContributorService;
-  token: string;
-  username: string;
+  /** Skips fetching while the plugin has no usable credentials. */
+  enabled?: boolean;
 }
 
 export const ContributorsPage = ({
   contributorService,
-  token,
-  username,
+  enabled = true,
 }: ContributorsPageProps) => {
-  const { contributors, isLoading, error, refetch } = useContributors(
+  const { contributors, isLoading, error, lastFetchedAt, refetch } = useContributors(
     contributorService,
-    token,
-    username,
+    enabled,
   );
+  const { interval, setInterval } = useAutoRefresh(refetch);
 
   const handleDateRangeApply = useCallback(
     (dateFrom: string | null, dateTo: string | null) => {
@@ -28,9 +31,26 @@ export const ContributorsPage = ({
   );
 
   return (
-    <div>
+    <>
+      <ContentHeader title="Contributors">
+        <DashboardToolbar
+          lastFetchedAt={lastFetchedAt}
+          refreshInterval={interval}
+          isLoading={isLoading}
+          onRefresh={refetch}
+          onIntervalChange={setInterval}
+        />
+      </ContentHeader>
+
       {error && (
-        <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-400">{error}</div>
+        <Box mb={2}>
+          <WarningPanel
+            severity="error"
+            title="Failed to load contributors"
+            message={error}
+            defaultExpanded
+          />
+        </Box>
       )}
 
       <ContributorsTable
@@ -39,6 +59,6 @@ export const ContributorsPage = ({
         isLoading={isLoading}
         onDateRangeApply={handleDateRangeApply}
       />
-    </div>
+    </>
   );
 };

@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import { mapPullRequestsToContributors } from "../../../src/service/mappers/graphql_contributor_mapper";
 import type { GraphQLPullRequestNode } from "../../../src/service/mappers/graphql_contributor_node";
 

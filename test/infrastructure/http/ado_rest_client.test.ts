@@ -1,24 +1,31 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { adoRequest } from "../../../src/infrastructure/http/ado_rest_client";
+import { HttpAdoRestClient } from "../../../src/infrastructure/http/ado_rest_client";
+import {
+  createStubFetchApi,
+  errorResponse,
+  jsonResponse,
+  StubEndpointResolver,
+} from "../../doubles/stub_backstage_apis";
 
-describe("adoRequest", () => {
+const DIRECT_ENDPOINT = { baseUrl: "https://dev.azure.com", viaProxy: false };
+const PROXY_ENDPOINT = { baseUrl: "http://localhost:7007/api/proxy/gitforge-ado", viaProxy: true };
+
+describe("HttpAdoRestClient", () => {
+  let stubFetch: ReturnType<typeof createStubFetchApi>;
+
+  const createClient = (endpoint = DIRECT_ENDPOINT) =>
+    new HttpAdoRestClient(stubFetch.fetchApi, new StubEndpointResolver(endpoint));
+
   beforeEach(() => {
-    vi.restoreAllMocks();
+    stubFetch = createStubFetchApi();
   });
 
   it("should return parsed JSON when API responds successfully", async () => {
     // given
     const responseData = { value: [{ id: "1", name: "repo1" }], count: 1 };
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(responseData),
-      }),
-    );
+    stubFetch.fetch.mockResolvedValue(jsonResponse(responseData));
 
     // when
-    const result = await adoRequest("token", "https://dev.azure.com/org/_apis/projects");
+    const result = await createClient().get("token", "/org/_apis/projects");
 
     // then
     expect(result).toEqual(responseData);
@@ -26,50 +33,60 @@ describe("adoRequest", () => {
 
   it("should throw when HTTP response is not ok", async () => {
     // given
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 403,
-        statusText: "Forbidden",
-      }),
-    );
+    stubFetch.fetch.mockResolvedValue(errorResponse(403, "Forbidden"));
 
     // when / then
-    await expect(
-      adoRequest("token", "https://dev.azure.com/org/_apis/projects"),
-    ).rejects.toThrow("Azure DevOps API error: 403 Forbidden");
+    await expect(createClient().get("token", "/org/_apis/projects")).rejects.toThrow(
+      "Azure DevOps API error: 403 Forbidden",
+    );
   });
 
   it("should send Basic auth header with base64-encoded token", async () => {
     // given
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({}),
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    stubFetch.fetch.mockResolvedValue(jsonResponse({}));
 
     // when
-    await adoRequest("my-pat-token", "https://dev.azure.com/org/_apis/projects");
+    await createClient().get("my-pat-token", "/org/_apis/projects");
 
     // then
-    const [, options] = fetchMock.mock.calls[0];
+    const [, options] = stubFetch.fetch.mock.calls[0];
     expect(options.headers.Authorization).toBe(`Basic ${btoa(":my-pat-token")}`);
   });
 
   it("should send Content-Type application/json header", async () => {
     // given
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({}),
-    });
-    vi.stubGlobal("fetch", fetchMock);
+    stubFetch.fetch.mockResolvedValue(jsonResponse({}));
 
     // when
-    await adoRequest("token", "https://dev.azure.com/org/_apis/projects");
+    await createClient().get("token", "/org/_apis/projects");
 
     // then
-    const [, options] = fetchMock.mock.calls[0];
+    const [, options] = stubFetch.fetch.mock.calls[0];
     expect(options.headers["Content-Type"]).toBe("application/json");
+  });
+
+  it("should append the path to the resolved base URL", async () => {
+    // given
+    stubFetch.fetch.mockResolvedValue(jsonResponse({}));
+
+    // when
+    await createClient().get("token", "/org/_apis/projects?api-version=7.1");
+
+    // then
+    const [url] = stubFetch.fetch.mock.calls[0];
+    expect(url).toBe("https://dev.azure.com/org/_apis/projects?api-version=7.1");
+  });
+
+  it("should omit the Authorization header when routed through the proxy", async () => {
+    // given
+    stubFetch.fetch.mockResolvedValue(jsonResponse({}));
+
+    // when
+    await createClient(PROXY_ENDPOINT).get("my-pat-token", "/org/_apis/projects");
+
+    // then
+    const [url, options] = stubFetch.fetch.mock.calls[0];
+    expect(url).toBe("http://localhost:7007/api/proxy/gitforge-ado/org/_apis/projects");
+    expect(options.headers.Authorization).toBeUndefined();
   });
 });

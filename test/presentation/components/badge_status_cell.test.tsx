@@ -1,5 +1,4 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
 import type { BadgeStatus } from "../../../src/domain/entities/badge_status";
 import { BadgeStatusCell } from "../../../src/presentation/components/badge_status_cell";
 

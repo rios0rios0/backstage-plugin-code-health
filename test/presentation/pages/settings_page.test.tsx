@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
 import { SettingsPage } from "../../../src/presentation/pages/settings_page";
+import { aGitforgeConfig } from "../../builders/gitforge_config_builder";
 
 const defaultProps = {
   token: "ghp_test123",
@@ -10,9 +10,9 @@ const defaultProps = {
   sonarType: "cloud" as const,
   sonarUrl: null,
   wakaTimeToken: "wk_test123",
-  onUpdateVcs: vi.fn(),
-  onUpdateSonar: vi.fn(),
-  onUpdateWakaTime: vi.fn(),
+  onUpdateVcs: jest.fn(),
+  onUpdateSonar: jest.fn(),
+  onUpdateWakaTime: jest.fn(),
 };
 
 describe("SettingsPage", () => {
@@ -29,7 +29,7 @@ describe("SettingsPage", () => {
 
   it("should render Sonar card as disconnected when no Sonar token exists", () => {
     // given
-    const props = { ...defaultProps, sonarToken: null, sonarType: null, onUpdateSonar: vi.fn() };
+    const props = { ...defaultProps, sonarToken: null, sonarType: null, onUpdateSonar: jest.fn() };
 
     // when
     render(<SettingsPage {...props} />);
@@ -41,7 +41,7 @@ describe("SettingsPage", () => {
 
   it("should call onUpdateSonar with null when Sonar disconnect button is clicked", () => {
     // given
-    const onUpdateSonar = vi.fn();
+    const onUpdateSonar = jest.fn();
     render(<SettingsPage {...defaultProps} onUpdateSonar={onUpdateSonar} />);
 
     // when
@@ -54,7 +54,7 @@ describe("SettingsPage", () => {
 
   it("should call onUpdateWakaTime with null when WakaTime disconnect button is clicked", () => {
     // given
-    const onUpdateWakaTime = vi.fn();
+    const onUpdateWakaTime = jest.fn();
     render(<SettingsPage {...defaultProps} onUpdateWakaTime={onUpdateWakaTime} />);
 
     // when
@@ -77,7 +77,7 @@ describe("SettingsPage", () => {
 
   it("should call onUpdateVcs with trimmed values when VCS save is clicked", () => {
     // given
-    const onUpdateVcs = vi.fn();
+    const onUpdateVcs = jest.fn();
     render(<SettingsPage {...defaultProps} onUpdateVcs={onUpdateVcs} />);
 
     // enter edit mode for VCS card
@@ -99,7 +99,7 @@ describe("SettingsPage", () => {
 
   it("should call onUpdateSonar with sonar info when Sonar save is clicked", () => {
     // given
-    const onUpdateSonar = vi.fn();
+    const onUpdateSonar = jest.fn();
     render(<SettingsPage {...defaultProps} onUpdateSonar={onUpdateSonar} />);
 
     // enter edit mode for Sonar card (second Edit button)
@@ -116,7 +116,7 @@ describe("SettingsPage", () => {
 
   it("should call onUpdateWakaTime with token when WakaTime save is clicked", () => {
     // given
-    const onUpdateWakaTime = vi.fn();
+    const onUpdateWakaTime = jest.fn();
     render(<SettingsPage {...defaultProps} onUpdateWakaTime={onUpdateWakaTime} />);
 
     // enter edit mode for WakaTime card (third Edit button)
@@ -175,7 +175,7 @@ describe("SettingsPage", () => {
 
   it("should call onUpdateSonar with null when sonar type is set to none and saved", () => {
     // given
-    const onUpdateSonar = vi.fn();
+    const onUpdateSonar = jest.fn();
     render(<SettingsPage {...defaultProps} onUpdateSonar={onUpdateSonar} />);
 
     // enter edit mode
@@ -193,7 +193,7 @@ describe("SettingsPage", () => {
 
   it("should call onUpdateWakaTime with null when empty and saved", () => {
     // given
-    const onUpdateWakaTime = vi.fn();
+    const onUpdateWakaTime = jest.fn();
     render(<SettingsPage {...defaultProps} onUpdateWakaTime={onUpdateWakaTime} />);
 
     // enter edit mode
@@ -209,5 +209,56 @@ describe("SettingsPage", () => {
 
     // then
     expect(onUpdateWakaTime).toHaveBeenCalledWith(null);
+  });
+
+  it("should lock the fields an administrator pinned in app-config", () => {
+    // given
+    const config = aGitforgeConfig({ platform: "github", organization: "acme" });
+
+    // when
+    render(<SettingsPage {...defaultProps} config={config} />);
+    fireEvent.click(screen.getAllByText("Edit")[0]);
+
+    // then
+    expect(screen.getByText(/cannot be changed here/)).toBeInTheDocument();
+    expect(screen.getByLabelText("GitHub Username")).toBeDisabled();
+    expect(screen.getByLabelText("Personal Access Token")).not.toBeDisabled();
+  });
+
+  it("should explain that a proxied platform needs no personal token", () => {
+    // given
+    const config = aGitforgeConfig({ proxied: { github: true } });
+
+    // when
+    render(<SettingsPage {...defaultProps} config={config} />);
+    fireEvent.click(screen.getAllByText("Edit")[0]);
+
+    // then
+    expect(screen.getByText(/no personal token is needed/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Personal Access Token")).toBeDisabled();
+  });
+
+  it("should report Sonar as connected when it is reached through a proxy", () => {
+    // given
+    const config = aGitforgeConfig({ proxied: { sonar: true } });
+    const props = { ...defaultProps, sonarToken: null, sonarType: null };
+
+    // when
+    render(<SettingsPage {...props} config={config} />);
+
+    // then
+    expect(screen.getAllByText("Connected")).toHaveLength(3);
+  });
+
+  it("should call onForgetCredentials when the user clears everything", () => {
+    // given
+    const onForgetCredentials = jest.fn();
+    render(<SettingsPage {...defaultProps} onForgetCredentials={onForgetCredentials} />);
+
+    // when
+    fireEvent.click(screen.getByText("Forget all credentials"));
+
+    // then
+    expect(onForgetCredentials).toHaveBeenCalled();
   });
 });

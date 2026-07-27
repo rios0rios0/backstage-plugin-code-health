@@ -1,4 +1,3 @@
-import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ContributorsTable } from "../../../src/presentation/components/contributors_table";
 import { ContributorBuilder } from "../../builders/contributor_builder";
@@ -7,7 +6,7 @@ describe("ContributorsTable", () => {
   const defaultProps = {
     totalCount: 0,
     isLoading: false,
-    onDateRangeApply: vi.fn(),
+    onDateRangeApply: jest.fn(),
   };
 
   it("should render 'No contributors found.' when contributors is empty", () => {
@@ -21,11 +20,11 @@ describe("ContributorsTable", () => {
   it("should render loading skeleton when isLoading is true", () => {
     // given / when
     const { container } = render(
-      <ContributorsTable {...defaultProps} contributors={[]} isLoading={true} />,
+      <ContributorsTable {...defaultProps} contributors={[]} isLoading />,
     );
 
     // then
-    const skeletonRows = container.querySelectorAll("tr.animate-pulse");
+    const skeletonRows = container.querySelectorAll("[data-testid=\"loadingRow\"]");
     expect(skeletonRows.length).toBeGreaterThan(0);
   });
 
@@ -45,7 +44,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -66,13 +65,13 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
     // then
     const rateEl = screen.getByText("85.0%");
-    expect(rateEl.className).toContain("text-green");
+    expect(rateEl.getAttribute("data-tone")).toBe("good");
   });
 
   it("should render approval rate with yellow color for rate >= 50 and < 80", () => {
@@ -87,14 +86,14 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
     // then
     const rateElements = screen.getAllByText("65.0%");
     const approvalRateEl = rateElements[0];
-    expect(approvalRateEl.className).toContain("text-yellow");
+    expect(approvalRateEl.getAttribute("data-tone")).toBe("fair");
   });
 
   it("should render approval rate with red color for rate < 50", () => {
@@ -109,14 +108,14 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
     // then
     const rateElements = screen.getAllByText("30.0%");
     const approvalRateEl = rateElements[0];
-    expect(approvalRateEl.className).toContain("text-red");
+    expect(approvalRateEl.getAttribute("data-tone")).toBe("poor");
   });
 
   it("should show WakaTime columns when any contributor has wakaTimeMetrics", () => {
@@ -134,7 +133,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -153,7 +152,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -164,7 +163,7 @@ describe("ContributorsTable", () => {
 
   it("should call onDateRangeApply when Apply button is clicked with date inputs", () => {
     // given
-    const onDateRangeApply = vi.fn();
+    const onDateRangeApply = jest.fn();
     const contributors = [ContributorBuilder.create().build()];
     render(
       <ContributorsTable
@@ -202,7 +201,7 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={5}
         isLoading={false}
-        onDateRangeApply={vi.fn()}
+        onDateRangeApply={jest.fn()}
       />,
     );
 

@@ -1,9 +1,13 @@
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import Avatar from "@material-ui/core/Avatar";
+import Box from "@material-ui/core/Box";
+import Button from "@material-ui/core/Button";
+import Link from "@material-ui/core/Link";
+import TextField from "@material-ui/core/TextField";
+import Typography from "@material-ui/core/Typography";
+import { makeStyles } from "@material-ui/core/styles";
+import type { ColumnDef, ColumnFiltersState, SortingState } from "@tanstack/react-table";
 import {
-  type ColumnDef,
-  type ColumnFiltersState,
-  type SortingState,
-  flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   getPaginationRowModel,
@@ -12,6 +16,8 @@ import {
 } from "@tanstack/react-table";
 import type { Contributor } from "../../domain/entities/contributor";
 import { formatDuration } from "../../domain/entities/wakatime_metrics";
+import { DataTable, PaginationControls } from "./data_table";
+import { EmptyCell } from "./empty_cell";
 
 interface ContributorsTableProps {
   contributors: Contributor[];
@@ -22,78 +28,106 @@ interface ContributorsTableProps {
 
 const formatRate = (rate: number): string => `${rate.toFixed(1)}%`;
 
-const rateClass = (rate: number): string =>
-  rate >= 80
-    ? "text-green-700 dark:text-green-400"
-    : rate >= 50
-      ? "text-yellow-700 dark:text-yellow-400"
-      : "text-red-700 dark:text-red-400";
+const useStyles = makeStyles((theme) => ({
+  avatar: { width: 24, height: 24 },
+  good: { color: theme.palette.success.main },
+  fair: { color: theme.palette.warning.main },
+  poor: { color: theme.palette.error.main },
+  added: { color: theme.palette.success.main },
+  removed: { color: theme.palette.error.main },
+}));
+
+const rateTone = (rate: number): "good" | "fair" | "poor" => {
+  if (rate >= 80) return "good";
+  if (rate >= 50) return "fair";
+  return "poor";
+};
+
+const RateCell = ({ rate }: { rate: number }) => {
+  const classes = useStyles();
+  const tone = rateTone(rate);
+  return (
+    <Typography variant="body2" component="span" className={classes[tone]} data-tone={tone}>
+      {formatRate(rate)}
+    </Typography>
+  );
+};
+
+const MetricCell = ({ value }: { value: string | number | null }) =>
+  value === null ? <EmptyCell /> : <Typography variant="body2">{value}</Typography>;
+
+const ContributorCell = ({ contributor }: { contributor: Contributor }) => {
+  const classes = useStyles();
+  return (
+    <Box display="flex" alignItems="center" gridGap={8}>
+      <Avatar
+        src={contributor.avatarUrl}
+        alt={contributor.username}
+        className={classes.avatar}
+      />
+      <Link href={contributor.profileUrl} target="_blank" rel="noopener noreferrer">
+        {contributor.username}
+      </Link>
+    </Box>
+  );
+};
+
+const LinesOfCodeCell = ({ contributor }: { contributor: Contributor }) => {
+  const classes = useStyles();
+  return (
+    <Box>
+      <Typography variant="body2">{contributor.linesOfCode.toLocaleString()}</Typography>
+      <Typography variant="caption" color="textSecondary">
+        <span className={classes.added}>+{contributor.linesAdded.toLocaleString()}</span>
+        {" / "}
+        <span className={classes.removed}>-{contributor.linesDeleted.toLocaleString()}</span>
+      </Typography>
+    </Box>
+  );
+};
 
 const columns: ColumnDef<Contributor>[] = [
   {
     accessorKey: "username",
     header: "Contributor",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <img src={row.original.avatarUrl} alt={row.original.username} className="h-6 w-6 rounded-full" />
-        <a
-          href={row.original.profileUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-        >
-          {row.original.username}
-        </a>
-      </div>
-    ),
+    cell: ({ row }) => <ContributorCell contributor={row.original} />,
     filterFn: "includesString",
   },
   {
     accessorKey: "approvedPRs",
     header: "Approved PRs",
     cell: ({ row }) => (
-      <span className="text-sm text-gray-700 dark:text-gray-300">
-        {row.original.approvedPRs}
-        <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">/ {row.original.totalPRs}</span>
-      </span>
+      <Typography variant="body2" component="span">
+        {row.original.approvedPRs}{" "}
+        <Typography variant="caption" component="span" color="textSecondary">
+          / {row.original.totalPRs}
+        </Typography>
+      </Typography>
     ),
     enableColumnFilter: false,
   },
   {
     accessorKey: "linesOfCode",
     header: "Lines of Code",
-    cell: ({ row }) => (
-      <div className="text-sm text-gray-700 dark:text-gray-300">
-        {row.original.linesOfCode.toLocaleString()}
-        <div className="text-xs text-gray-400 dark:text-gray-500">
-          <span className="text-green-600 dark:text-green-400">+{row.original.linesAdded.toLocaleString()}</span>
-          {" / "}
-          <span className="text-red-600 dark:text-red-400">-{row.original.linesDeleted.toLocaleString()}</span>
-        </div>
-      </div>
-    ),
+    cell: ({ row }) => <LinesOfCodeCell contributor={row.original} />,
     enableColumnFilter: false,
   },
   {
     accessorKey: "prApprovalRate",
     header: "Approval Rate",
-    cell: ({ getValue }) => (
-      <span className={rateClass(getValue<number>())}>{formatRate(getValue<number>())}</span>
-    ),
+    cell: ({ getValue }) => <RateCell rate={getValue<number>()} />,
     enableColumnFilter: false,
   },
   {
     accessorKey: "pipelineSuccessRate",
     header: "Pipeline",
     cell: ({ row }) => (
-      <span>
-        <span className={rateClass(row.original.pipelineSuccessRate)}>
-          {formatRate(row.original.pipelineSuccessRate)}
-        </span>
-        <span className="ml-1 text-xs text-gray-400 dark:text-gray-500">
+      <Box display="flex" alignItems="baseline" gridGap={4}>
+        <RateCell rate={row.original.pipelineSuccessRate} />
+        <Typography variant="caption" color="textSecondary">
           ({row.original.successfulPipelineRuns}/{row.original.totalPipelineRuns})
-        </span>
-      </span>
+        </Typography>
+      </Box>
     ),
     enableColumnFilter: false,
   },
@@ -101,36 +135,28 @@ const columns: ColumnDef<Contributor>[] = [
     id: "bugs",
     accessorFn: (row) => row.sonarMetrics?.bugs ?? null,
     header: "Bugs",
-    cell: ({ getValue }) => (
-      <span className="text-sm text-gray-700 dark:text-gray-300">{getValue<number | null>() ?? "-"}</span>
-    ),
+    cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
     id: "codeSmells",
     accessorFn: (row) => row.sonarMetrics?.codeSmells ?? null,
     header: "Smells",
-    cell: ({ getValue }) => (
-      <span className="text-sm text-gray-700 dark:text-gray-300">{getValue<number | null>() ?? "-"}</span>
-    ),
+    cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
     id: "securityHotspots",
     accessorFn: (row) => row.sonarMetrics?.securityHotspots ?? null,
     header: "Hotspots",
-    cell: ({ getValue }) => (
-      <span className="text-sm text-gray-700 dark:text-gray-300">{getValue<number | null>() ?? "-"}</span>
-    ),
+    cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
     id: "vulnerabilities",
     accessorFn: (row) => row.sonarMetrics?.vulnerabilities ?? null,
     header: "Vulns",
-    cell: ({ getValue }) => (
-      <span className="text-sm text-gray-700 dark:text-gray-300">{getValue<number | null>() ?? "-"}</span>
-    ),
+    cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
@@ -139,7 +165,7 @@ const columns: ColumnDef<Contributor>[] = [
     header: "Coverage",
     cell: ({ getValue }) => {
       const v = getValue<number | null>();
-      return <span className="text-sm text-gray-700 dark:text-gray-300">{v !== null ? formatRate(v) : "-"}</span>;
+      return <MetricCell value={v !== null ? formatRate(v) : null} />;
     },
     enableColumnFilter: false,
   },
@@ -149,7 +175,7 @@ const columns: ColumnDef<Contributor>[] = [
     header: "Dups",
     cell: ({ getValue }) => {
       const v = getValue<number | null>();
-      return <span className="text-sm text-gray-700 dark:text-gray-300">{v !== null ? formatRate(v) : "-"}</span>;
+      return <MetricCell value={v !== null ? formatRate(v) : null} />;
     },
     enableColumnFilter: false,
   },
@@ -157,9 +183,7 @@ const columns: ColumnDef<Contributor>[] = [
     id: "technicalDebt",
     accessorFn: (row) => row.sonarMetrics?.technicalDebt ?? null,
     header: "Debt",
-    cell: ({ getValue }) => (
-      <span className="text-sm text-gray-700 dark:text-gray-300">{getValue<string | null>() ?? "-"}</span>
-    ),
+    cell: ({ getValue }) => <MetricCell value={getValue<string | null>()} />,
     enableColumnFilter: false,
   },
 ];
@@ -171,8 +195,7 @@ const wakaTimeColumns: ColumnDef<Contributor>[] = [
     header: "Total Time (30d)",
     cell: ({ row }) => {
       const metrics = row.original.wakaTimeMetrics;
-      if (!metrics) return <span className="text-xs text-gray-400 dark:text-gray-500">-</span>;
-      return <span className="text-sm text-gray-700 dark:text-gray-300">{formatDuration(metrics.totalSeconds)}</span>;
+      return <MetricCell value={metrics ? formatDuration(metrics.totalSeconds) : null} />;
     },
     enableColumnFilter: false,
   },
@@ -182,36 +205,11 @@ const wakaTimeColumns: ColumnDef<Contributor>[] = [
     header: "Daily Avg",
     cell: ({ row }) => {
       const metrics = row.original.wakaTimeMetrics;
-      if (!metrics) return <span className="text-xs text-gray-400 dark:text-gray-500">-</span>;
-      return <span className="text-sm text-gray-700 dark:text-gray-300">{formatDuration(metrics.dailyAverageSeconds)}</span>;
+      return <MetricCell value={metrics ? formatDuration(metrics.dailyAverageSeconds) : null} />;
     },
     enableColumnFilter: false,
   },
 ];
-
-const ColumnFilter = ({ column }: { column: { getFilterValue: () => unknown; setFilterValue: (v: unknown) => void } }) => (
-  <input
-    type="text"
-    value={(column.getFilterValue() as string) ?? ""}
-    onChange={(e) => column.setFilterValue(e.target.value || undefined)}
-    placeholder="Filter..."
-    className="w-full rounded border border-gray-200 px-1.5 py-1 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-  />
-);
-
-const LoadingSkeleton = () => (
-  <tbody>
-    {Array.from({ length: 5 }, (_, i) => (
-      <tr key={i} className="animate-pulse">
-        {Array.from({ length: 12 }, (_, j) => (
-          <td key={j} className="px-3 py-3">
-            <div className="h-4 w-16 rounded bg-gray-200 dark:bg-gray-700" />
-          </td>
-        ))}
-      </tr>
-    ))}
-  </tbody>
-);
 
 export const ContributorsTable = ({
   contributors,
@@ -245,132 +243,63 @@ export const ContributorsTable = ({
 
   if (!isLoading && contributors.length === 0) {
     return (
-      <div className="py-12 text-center text-gray-500 dark:text-gray-400">
-        No contributors found.
-      </div>
+      <Box py={6} textAlign="center">
+        <Typography color="textSecondary">No contributors found.</Typography>
+      </Box>
     );
   }
 
   return (
     <>
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+      <Box
+        display="flex"
+        alignItems="center"
+        justifyContent="space-between"
+        flexWrap="wrap"
+        mb={1}
+        gridGap={8}
+      >
+        <Box display="flex" alignItems="center" gridGap={12}>
+          <Typography variant="body2" color="textSecondary">
             {table.getFilteredRowModel().rows.length} of {totalCount} contributors
-          </p>
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              aria-label="Date from"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-            />
-            <span className="text-xs text-gray-400">to</span>
-            <input
-              type="date"
-              aria-label="Date to"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="rounded border border-gray-300 px-2 py-1 text-xs dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
-            />
-            <button
-              type="button"
-              onClick={() => onDateRangeApply(dateFrom || null, dateTo || null)}
-              className="rounded bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700"
-            >
-              Apply
-            </button>
-          </div>
-        </div>
-        {table.getPageCount() > 1 && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={!table.getCanPreviousPage()}
-              onClick={() => table.previousPage()}
-              className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-gray-600"
-            >
-              Previous
-            </button>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {table.getState().pagination.pageIndex + 1} / {table.getPageCount()}
-            </span>
-            <button
-              type="button"
-              disabled={!table.getCanNextPage()}
-              onClick={() => table.nextPage()}
-              className="rounded-md border border-gray-300 px-2 py-1 text-xs disabled:opacity-40 dark:border-gray-600"
-            >
-              Next
-            </button>
-          </div>
-        )}
-      </div>
+          </Typography>
+          <TextField
+            type="date"
+            size="small"
+            inputProps={{ "aria-label": "Date from" }}
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+          <Typography variant="caption" color="textSecondary">
+            to
+          </Typography>
+          <TextField
+            type="date"
+            size="small"
+            inputProps={{ "aria-label": "Date to" }}
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+          <Button
+            size="small"
+            color="primary"
+            variant="contained"
+            onClick={() => onDateRangeApply(dateFrom || null, dateTo || null)}
+          >
+            Apply
+          </Button>
+        </Box>
+        <PaginationControls
+          pageIndex={table.getState().pagination.pageIndex}
+          pageCount={table.getPageCount()}
+          canPreviousPage={table.getCanPreviousPage()}
+          canNextPage={table.getCanNextPage()}
+          onPrevious={() => table.previousPage()}
+          onNext={() => table.nextPage()}
+        />
+      </Box>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-800">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <Fragment key={headerGroup.id}>
-                <tr>
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      scope="col"
-                      aria-sort={
-                        header.column.getIsSorted()
-                          ? header.column.getIsSorted() === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : "none"
-                      }
-                      className="whitespace-nowrap px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400"
-                    >
-                      <button
-                        type="button"
-                        className="inline-flex w-full items-center text-left cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-                        onClick={header.column.getToggleSortingHandler()}
-                      >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
-                        {header.column.getIsSorted() && (
-                          <span className="ml-1" aria-hidden="true">
-                            {header.column.getIsSorted() === "asc" ? "\u25B2" : "\u25BC"}
-                          </span>
-                        )}
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-                <tr className="border-t border-gray-100 dark:border-gray-700">
-                  {headerGroup.headers.map((header) => (
-                    <th key={header.id} className="px-3 py-1.5">
-                      {header.column.getCanFilter() ? (
-                        <ColumnFilter column={header.column as never} />
-                      ) : null}
-                    </th>
-                  ))}
-                </tr>
-              </Fragment>
-            ))}
-          </thead>
-          {isLoading ? (
-            <LoadingSkeleton />
-          ) : (
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="whitespace-nowrap px-3 py-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          )}
-        </table>
-      </div>
+      <DataTable table={table} isLoading={isLoading} skeletonRows={5} />
     </>
   );
 };

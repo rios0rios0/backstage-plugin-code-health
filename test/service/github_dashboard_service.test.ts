@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import type { BadgeStatus } from "../../src/domain/entities/badge_status";
 import type { ComplianceStatus } from "../../src/domain/entities/compliance_status";
 import { GitHubDashboardService } from "../../src/service/github_dashboard_service";

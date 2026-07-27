@@ -1,18 +1,18 @@
-import { describe, it, expect } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook, act, waitFor } from "@testing-library/react";
+import { EMPTY_GITFORGE_CONFIG } from "../../../src/domain/entities/gitforge_config";
 import { useAuthentication } from "../../../src/presentation/hooks/use_authentication";
-import { StubAuthenticationService } from "../../doubles/stub_authentication_service";
+import { StubAsyncAuthenticationService } from "../../doubles/stub_async_authentication_service";
 
 describe("useAuthentication", () => {
   it("should initialize state from auth service", () => {
     // given
-    const service = new StubAuthenticationService();
+    const service = new StubAsyncAuthenticationService();
     service.setToken("t1");
     service.setUsername("u1");
     service.setPlatform("github");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // then
     expect(result.current.token).toBe("t1");
@@ -20,36 +20,36 @@ describe("useAuthentication", () => {
     expect(result.current.platform).toBe("github");
   });
 
-  it("should set isAuthenticated to true when token, username, and platform are all present", () => {
+  it("should set isConfigured to true when token, username, and platform are all present", () => {
     // given
-    const service = new StubAuthenticationService();
+    const service = new StubAsyncAuthenticationService();
     service.setToken("token");
     service.setUsername("user");
     service.setPlatform("github");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // then
-    expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.isConfigured).toBe(true);
   });
 
-  it("should set isAuthenticated to false when any credential is missing", () => {
+  it("should set isConfigured to false when any credential is missing", () => {
     // given
-    const service = new StubAuthenticationService();
+    const service = new StubAsyncAuthenticationService();
     service.setToken("token");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // then
-    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.isConfigured).toBe(false);
   });
 
   it("should persist all credentials via auth service on login", () => {
     // given
-    const service = new StubAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service));
+    const service = new StubAsyncAuthenticationService();
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -67,8 +67,8 @@ describe("useAuthentication", () => {
 
   it("should persist sonar credentials when provided on login", () => {
     // given
-    const service = new StubAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service));
+    const service = new StubAsyncAuthenticationService();
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -92,10 +92,10 @@ describe("useAuthentication", () => {
 
   it("should clear sonar credentials when sonar is null on login", () => {
     // given
-    const service = new StubAuthenticationService();
+    const service = new StubAsyncAuthenticationService();
     service.setSonarToken("old");
     service.setSonarType("cloud");
-    const { result } = renderHook(() => useAuthentication(service));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -109,8 +109,8 @@ describe("useAuthentication", () => {
 
   it("should persist wakaTime token when provided on login", () => {
     // given
-    const service = new StubAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service));
+    const service = new StubAsyncAuthenticationService();
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -124,9 +124,9 @@ describe("useAuthentication", () => {
 
   it("should clear wakaTime token when null on login", () => {
     // given
-    const service = new StubAuthenticationService();
+    const service = new StubAsyncAuthenticationService();
     service.setWakaTimeToken("old");
-    const { result } = renderHook(() => useAuthentication(service));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -139,11 +139,11 @@ describe("useAuthentication", () => {
 
   it("should clear all credentials on logout", () => {
     // given
-    const service = new StubAuthenticationService();
+    const service = new StubAsyncAuthenticationService();
     service.setToken("tok");
     service.setUsername("usr");
     service.setPlatform("github");
-    const { result } = renderHook(() => useAuthentication(service));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -156,13 +156,13 @@ describe("useAuthentication", () => {
     expect(result.current.platform).toBeNull();
     expect(result.current.sonarToken).toBeNull();
     expect(result.current.wakaTimeToken).toBeNull();
-    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.isConfigured).toBe(false);
   });
 
   it("should update token, username, and platform via updateVcsCredentials", () => {
     // given
-    const service = new StubAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service));
+    const service = new StubAsyncAuthenticationService();
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -177,8 +177,8 @@ describe("useAuthentication", () => {
 
   it("should update sonar credentials via updateSonarConfig when provided", () => {
     // given
-    const service = new StubAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service));
+    const service = new StubAsyncAuthenticationService();
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -197,10 +197,10 @@ describe("useAuthentication", () => {
 
   it("should clear sonar credentials via updateSonarConfig when null", () => {
     // given
-    const service = new StubAuthenticationService();
+    const service = new StubAsyncAuthenticationService();
     service.setSonarToken("old-tok");
     service.setSonarType("cloud");
-    const { result } = renderHook(() => useAuthentication(service));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -215,8 +215,8 @@ describe("useAuthentication", () => {
 
   it("should set new wakaTime token via updateWakaTimeToken", () => {
     // given
-    const service = new StubAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service));
+    const service = new StubAsyncAuthenticationService();
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -229,9 +229,9 @@ describe("useAuthentication", () => {
 
   it("should clear wakaTime token via updateWakaTimeToken when null", () => {
     // given
-    const service = new StubAuthenticationService();
+    const service = new StubAsyncAuthenticationService();
     service.setWakaTimeToken("old");
-    const { result } = renderHook(() => useAuthentication(service));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // when
     act(() => {
@@ -244,11 +244,11 @@ describe("useAuthentication", () => {
 
   it("should validate stored sonarType (only cloud or qube)", () => {
     // given
-    const service = new StubAuthenticationService();
+    const service = new StubAsyncAuthenticationService();
     service.setSonarType("invalid-type");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // then
     expect(result.current.sonarType).toBeNull();
@@ -256,13 +256,74 @@ describe("useAuthentication", () => {
 
   it("should validate stored platform (only github or azure-devops)", () => {
     // given
-    const service = new StubAuthenticationService();
+    const service = new StubAsyncAuthenticationService();
     service.setPlatform("bitbucket");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
 
     // then
     expect(result.current.platform).toBeNull();
+  });
+
+  it("should prefer the platform and organization pinned in app-config", () => {
+    // given
+    const service = new StubAsyncAuthenticationService();
+    service.setToken("tok");
+    service.setUsername("personal");
+    service.setPlatform("github");
+    const config = {
+      ...EMPTY_GITFORGE_CONFIG,
+      platform: "azure-devops" as const,
+      organization: "acme-corp",
+    };
+
+    // when
+    const { result } = renderHook(() => useAuthentication(service, config));
+
+    // then
+    expect(result.current.effectivePlatform).toBe("azure-devops");
+    expect(result.current.effectiveOrganization).toBe("acme-corp");
+    expect(result.current.platform).toBe("github");
+  });
+
+  it("should be configured without a token when the platform is proxied", () => {
+    // given
+    const service = new StubAsyncAuthenticationService();
+    const config = {
+      ...EMPTY_GITFORGE_CONFIG,
+      platform: "github" as const,
+      organization: "acme",
+      proxied: { ...EMPTY_GITFORGE_CONFIG.proxied, github: true },
+    };
+
+    // when
+    const { result } = renderHook(() => useAuthentication(service, config));
+
+    // then
+    expect(result.current.isConfigured).toBe(true);
+  });
+
+  it("should hydrate once the encrypted store finishes unwrapping its key", async () => {
+    // given
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const service = new StubAsyncAuthenticationService(gate);
+    service.setToken("tok");
+    service.setUsername("acme");
+    service.setPlatform("github");
+
+    // when
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    expect(result.current.isReady).toBe(false);
+    expect(result.current.token).toBeNull();
+    release();
+
+    // then
+    await waitFor(() => expect(result.current.isReady).toBe(true));
+    expect(result.current.token).toBe("tok");
+    expect(result.current.isConfigured).toBe(true);
   });
 });

@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import { GitHubContributorService } from "../../src/service/github_contributor_service";
 import { ContributorBuilder } from "../builders/contributor_builder";
 import { StubContributorRepository } from "../doubles/stub_contributor_repository";

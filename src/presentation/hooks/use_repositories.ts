@@ -12,8 +12,7 @@ export interface UseRepositoriesResult {
 
 export const useRepositories = (
   dashboardService: DashboardService,
-  token: string | null,
-  username: string | null,
+  enabled: boolean,
 ): UseRepositoriesResult => {
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -21,13 +20,13 @@ export const useRepositories = (
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
   const fetchRepositories = useCallback(async () => {
-    if (!token || !username) return;
+    if (!enabled) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const repos = await dashboardService.listRepositories(token, username);
+      const repos = await dashboardService.listRepositories();
       setRepositories(repos);
       setLastFetchedAt(new Date());
     } catch (err) {
@@ -36,7 +35,7 @@ export const useRepositories = (
     } finally {
       setIsLoading(false);
     }
-  }, [dashboardService, token, username]);
+  }, [dashboardService, enabled]);
 
   useEffect(() => {
     fetchRepositories();

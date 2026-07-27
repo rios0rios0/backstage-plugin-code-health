@@ -1,12 +1,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
 import { IntegrationCard } from "../../../src/presentation/components/integration_card";
 
 describe("IntegrationCard", () => {
   it("should render title and Connected status when status is connected", () => {
     // given / when
     render(
-      <IntegrationCard title="GitHub" description="VCS" status="connected" onSave={vi.fn()}>
+      <IntegrationCard title="GitHub" description="VCS" status="connected" onSave={jest.fn()}>
         {() => <span>fields</span>}
       </IntegrationCard>,
     );
@@ -19,7 +18,7 @@ describe("IntegrationCard", () => {
   it("should render title and Disconnected status when status is disconnected", () => {
     // given / when
     render(
-      <IntegrationCard title="WakaTime" description="Time tracking" status="disconnected" onSave={vi.fn()}>
+      <IntegrationCard title="WakaTime" description="Time tracking" status="disconnected" onSave={jest.fn()}>
         {() => <span>fields</span>}
       </IntegrationCard>,
     );
@@ -32,7 +31,7 @@ describe("IntegrationCard", () => {
   it("should render disconnect button when not required and connected", () => {
     // given / when
     render(
-      <IntegrationCard title="Sonar" description="Code quality" status="connected" onSave={vi.fn()} onDisconnect={vi.fn()}>
+      <IntegrationCard title="Sonar" description="Code quality" status="connected" onSave={jest.fn()} onDisconnect={jest.fn()}>
         {() => <span>fields</span>}
       </IntegrationCard>,
     );
@@ -44,7 +43,7 @@ describe("IntegrationCard", () => {
   it("should not render disconnect button when isRequired is true", () => {
     // given / when
     render(
-      <IntegrationCard title="GitHub" description="VCS" status="connected" isRequired onSave={vi.fn()} onDisconnect={vi.fn()}>
+      <IntegrationCard title="GitHub" description="VCS" status="connected" isRequired onSave={jest.fn()} onDisconnect={jest.fn()}>
         {() => <span>fields</span>}
       </IntegrationCard>,
     );
@@ -55,9 +54,9 @@ describe("IntegrationCard", () => {
 
   it("should call onDisconnect when disconnect button is clicked", () => {
     // given
-    const onDisconnect = vi.fn();
+    const onDisconnect = jest.fn();
     render(
-      <IntegrationCard title="Sonar" description="Code quality" status="connected" onSave={vi.fn()} onDisconnect={onDisconnect}>
+      <IntegrationCard title="Sonar" description="Code quality" status="connected" onSave={jest.fn()} onDisconnect={onDisconnect}>
         {() => <span>fields</span>}
       </IntegrationCard>,
     );
@@ -66,13 +65,13 @@ describe("IntegrationCard", () => {
     fireEvent.click(screen.getByText("Disconnect"));
 
     // then
-    expect(onDisconnect).toHaveBeenCalledOnce();
+    expect(onDisconnect).toHaveBeenCalledTimes(1);
   });
 
   it("should show save and cancel buttons when edit is clicked", () => {
     // given
     render(
-      <IntegrationCard title="GitHub" description="VCS" status="connected" onSave={vi.fn()}>
+      <IntegrationCard title="GitHub" description="VCS" status="connected" onSave={jest.fn()}>
         {() => <span>fields</span>}
       </IntegrationCard>,
     );
@@ -87,7 +86,7 @@ describe("IntegrationCard", () => {
 
   it("should call onSave when save button is clicked", () => {
     // given
-    const onSave = vi.fn();
+    const onSave = jest.fn();
     render(
       <IntegrationCard title="GitHub" description="VCS" status="connected" onSave={onSave}>
         {() => <span>fields</span>}
@@ -99,6 +98,6 @@ describe("IntegrationCard", () => {
     fireEvent.click(screen.getByText("Save"));
 
     // then
-    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave).toHaveBeenCalledTimes(1);
   });
 });

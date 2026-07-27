@@ -1,10 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { AuthGate } from "../../../src/presentation/components/auth_gate";
 
 describe("AuthGate", () => {
   const defaultProps = {
-    onLogin: vi.fn(),
+    onLogin: jest.fn(),
     error: null,
   };
 
@@ -13,8 +12,11 @@ describe("AuthGate", () => {
     render(<AuthGate {...defaultProps} />);
 
     // then
-    const githubBtn = screen.getByText("GitHub");
-    expect(githubBtn.className).toContain("bg-white");
+    expect(screen.getByRole("button", { name: "GitHub" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Azure DevOps" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("should switch to Azure DevOps platform on click", () => {
@@ -25,8 +27,14 @@ describe("AuthGate", () => {
     fireEvent.click(screen.getByText("Azure DevOps"));
 
     // then
-    const adoBtn = screen.getByText("Azure DevOps");
-    expect(adoBtn.className).toContain("bg-white");
+    expect(screen.getByRole("button", { name: "Azure DevOps" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "GitHub" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("should show username label as 'GitHub Username' for github platform", () => {
@@ -34,7 +42,7 @@ describe("AuthGate", () => {
     render(<AuthGate {...defaultProps} />);
 
     // then
-    expect(screen.getByLabelText("GitHub Username")).toBeInTheDocument();
+    expect(screen.getByLabelText(/GitHub Username/)).toBeInTheDocument();
   });
 
   it("should show username label as 'Organization Name' for azure-devops platform", () => {
@@ -45,18 +53,18 @@ describe("AuthGate", () => {
     fireEvent.click(screen.getByText("Azure DevOps"));
 
     // then
-    expect(screen.getByLabelText("Organization Name")).toBeInTheDocument();
+    expect(screen.getByLabelText(/Organization Name/)).toBeInTheDocument();
   });
 
   it("should call onLogin with trimmed credentials on submit", () => {
     // given
-    const onLogin = vi.fn();
+    const onLogin = jest.fn();
     render(<AuthGate onLogin={onLogin} error={null} />);
 
-    fireEvent.change(screen.getByLabelText("GitHub Username"), {
+    fireEvent.change(screen.getByLabelText(/GitHub Username/), {
       target: { value: "  myuser  " },
     });
-    fireEvent.change(screen.getByLabelText("Personal Access Token"), {
+    fireEvent.change(screen.getByLabelText(/Personal Access Token/), {
       target: { value: "  ghp_token123  " },
     });
 
@@ -74,10 +82,10 @@ describe("AuthGate", () => {
 
   it("should not call onLogin when token is empty", () => {
     // given
-    const onLogin = vi.fn();
+    const onLogin = jest.fn();
     render(<AuthGate onLogin={onLogin} error={null} />);
 
-    fireEvent.change(screen.getByLabelText("GitHub Username"), {
+    fireEvent.change(screen.getByLabelText(/GitHub Username/), {
       target: { value: "myuser" },
     });
 
@@ -90,10 +98,10 @@ describe("AuthGate", () => {
 
   it("should not call onLogin when username is empty", () => {
     // given
-    const onLogin = vi.fn();
+    const onLogin = jest.fn();
     render(<AuthGate onLogin={onLogin} error={null} />);
 
-    fireEvent.change(screen.getByLabelText("Personal Access Token"), {
+    fireEvent.change(screen.getByLabelText(/Personal Access Token/), {
       target: { value: "ghp_token123" },
     });
 
@@ -123,7 +131,7 @@ describe("AuthGate", () => {
     fireEvent.click(screen.getByText("SonarQube"));
 
     // then
-    expect(screen.getByLabelText("SonarQube Instance URL")).toBeInTheDocument();
+    expect(screen.getByLabelText(/SonarQube Instance URL/)).toBeInTheDocument();
     expect(screen.getByLabelText("SonarQube Token")).toBeInTheDocument();
   });
 
@@ -141,13 +149,13 @@ describe("AuthGate", () => {
 
   it("should pass wakaTime token in credentials", () => {
     // given
-    const onLogin = vi.fn();
+    const onLogin = jest.fn();
     render(<AuthGate onLogin={onLogin} error={null} />);
 
-    fireEvent.change(screen.getByLabelText("GitHub Username"), {
+    fireEvent.change(screen.getByLabelText(/GitHub Username/), {
       target: { value: "user" },
     });
-    fireEvent.change(screen.getByLabelText("Personal Access Token"), {
+    fireEvent.change(screen.getByLabelText(/Personal Access Token/), {
       target: { value: "token" },
     });
     fireEvent.change(screen.getByLabelText(/WakaTime API Key/), {
@@ -168,7 +176,7 @@ describe("AuthGate", () => {
 
   it("should display error message when error prop is set", () => {
     // given / when
-    render(<AuthGate onLogin={vi.fn()} error="Invalid token" />);
+    render(<AuthGate onLogin={jest.fn()} error="Invalid token" />);
 
     // then
     expect(screen.getByText("Invalid token")).toBeInTheDocument();
