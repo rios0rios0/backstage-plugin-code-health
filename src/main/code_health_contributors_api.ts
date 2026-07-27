@@ -7,16 +7,16 @@ import {
   createWakaTimeRepository,
 } from "./factories/repository_factory";
 import { createContributorService } from "./factories/service_factory";
-import type { GitforgeApiDependencies } from "./gitforge_dashboard_api";
+import type { CodeHealthApiDependencies } from "./code_health_repositories_api";
 
 /**
  * Utility API backing the contributors view. Sonar and WakaTime enrichment is
  * enabled only when the corresponding integration is configured.
  */
-export class GitforgeContributorsApi implements ContributorService {
-  private readonly dependencies: GitforgeApiDependencies;
+export class CodeHealthContributorsApi implements ContributorService {
+  private readonly dependencies: CodeHealthApiDependencies;
 
-  constructor(dependencies: GitforgeApiDependencies) {
+  constructor(dependencies: CodeHealthApiDependencies) {
     this.dependencies = dependencies;
   }
 

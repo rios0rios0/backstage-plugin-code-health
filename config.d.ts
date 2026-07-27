@@ -1,5 +1,5 @@
 /**
- * Configuration schema for the GitForge Dashboard Backstage plugin.
+ * Configuration schema for the Code Health Backstage plugin.
  *
  * Every value declared here is safe to expose to the browser. Credentials are
  * deliberately absent: tokens either live in the Backstage `proxy` endpoint
@@ -8,7 +8,7 @@
  * own browser.
  */
 export interface Config {
-  gitforgeDashboard?: {
+  codeHealth?: {
     /**
      * Version control platform the dashboard reads from.
      *
@@ -41,7 +41,7 @@ export interface Config {
 
       /**
        * Path of a Backstage `proxy` endpoint that fronts the GitHub GraphQL API,
-       * for example `/gitforge-github`. When set, requests are routed through the
+       * for example `/code-health-github`. When set, requests are routed through the
        * Backstage backend and the browser never handles a GitHub token.
        *
        * @visibility frontend
@@ -81,7 +81,7 @@ export interface Config {
       baseUrl?: string;
 
       /**
-       * SonarCloud organization key. Defaults to `gitforgeDashboard.organization`.
+       * SonarCloud organization key. Defaults to `codeHealth.organization`.
        *
        * @visibility frontend
        */

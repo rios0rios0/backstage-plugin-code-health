@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A [Backstage](https://backstage.io) frontend plugin published as `@rios0rios0/backstage-plugin-gitforge-dashboard`.
+A [Backstage](https://backstage.io) frontend plugin published as `@rios0rios0/backstage-plugin-code-health`.
 It displays CI workflow status, releases, tags, compliance checks and contributor metrics for
 repositories from GitHub (GraphQL API) and Azure DevOps (REST API), enriched with SonarCloud/SonarQube
 and WakaTime data. There is no backend of its own: requests either go straight from the browser to each
@@ -46,16 +46,16 @@ src/main/             → Backstage utility APIs, ApiRefs, DI wiring, router
 
 | File | Purpose |
 |------|---------|
-| `config.d.ts` | Backstage config schema for the `gitforgeDashboard` key (no secrets, frontend-visible only) |
-| `src/plugin.ts` | Plugin definition and the `GitforgeDashboardPage` routable extension |
+| `config.d.ts` | Backstage config schema for the `codeHealth` key (no secrets, frontend-visible only) |
+| `src/plugin.ts` | Plugin definition and the `CodeHealthPage` routable extension |
 | `src/main/api_refs.ts` | The four `ApiRef` tokens the plugin exposes |
 | `src/main/apis.ts` | `createApiFactory` wiring; builds the HTTP clients from `fetchApi` + `discoveryApi` |
 | `src/main/router.tsx` | `Page`/`Header`/`TabbedLayout` composition and the setup gate |
-| `src/main/gitforge_dashboard_api.ts` | `DashboardService` implementation; rebuilds its object graph per call |
-| `src/main/gitforge_contributors_api.ts` | `ContributorService` implementation |
+| `src/main/code-health_dashboard_api.ts` | `DashboardService` implementation; rebuilds its object graph per call |
+| `src/main/code-health_contributors_api.ts` | `ContributorService` implementation |
 | `src/service/settings_resolver.ts` | Merges app-config over user settings; decides whether a token is needed |
 | `src/infrastructure/http/endpoint_resolver.ts` | Chooses between a direct base URL and a Backstage proxy path |
-| `src/infrastructure/services/backstage_config_service.ts` | Reads `gitforgeDashboard` into the `GitforgeConfig` entity |
+| `src/infrastructure/services/backstage_config_service.ts` | Reads `codeHealth` into the `CodeHealthConfig` entity |
 | `src/infrastructure/services/deferred_authentication_service.ts` | Makes the async encrypted store usable as a synchronous utility API |
 | `src/infrastructure/services/encrypted_authentication_service.ts` | Web Crypto AES-GCM encrypted token storage |
 | `src/domain/entities/dashboard_filter.ts` | Filter/sort logic (pure functions, no side effects) |

@@ -7,7 +7,7 @@ import {
 } from "../../doubles/stub_backstage_apis";
 
 const DIRECT_ENDPOINT = { baseUrl: "https://dev.azure.com", viaProxy: false };
-const PROXY_ENDPOINT = { baseUrl: "http://localhost:7007/api/proxy/gitforge-ado", viaProxy: true };
+const PROXY_ENDPOINT = { baseUrl: "http://localhost:7007/api/proxy/code-health-ado", viaProxy: true };
 
 describe("HttpAdoRestClient", () => {
   let stubFetch: ReturnType<typeof createStubFetchApi>;
@@ -86,7 +86,7 @@ describe("HttpAdoRestClient", () => {
 
     // then
     const [url, options] = stubFetch.fetch.mock.calls[0];
-    expect(url).toBe("http://localhost:7007/api/proxy/gitforge-ado/org/_apis/projects");
+    expect(url).toBe("http://localhost:7007/api/proxy/code-health-ado/org/_apis/projects");
     expect(options.headers.Authorization).toBeUndefined();
   });
 });

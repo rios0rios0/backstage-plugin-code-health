@@ -68,10 +68,10 @@ describe("createAuthenticationService", () => {
 
     // when
     service.setToken("ghp_secret");
-    await waitFor(() => expect(localStorage.getItem("gitforge-dashboard:token")).not.toBeNull());
+    await waitFor(() => expect(localStorage.getItem("code-health:token")).not.toBeNull());
 
     // then
-    expect(localStorage.getItem("gitforge-dashboard:token")).toMatch(/^enc:/);
+    expect(localStorage.getItem("code-health:token")).toMatch(/^enc:/);
   });
 
   it("should stay unready when browser storage is unavailable", async () => {

@@ -10,23 +10,23 @@ import { BackstageEndpointResolver } from "../infrastructure/http/endpoint_resol
 import { HttpGraphQLClient } from "../infrastructure/http/graphql_client";
 import { HttpSonarClient } from "../infrastructure/http/sonar_client";
 import { HttpWakaTimeClient } from "../infrastructure/http/wakatime_client";
-import { readEndpointConfig, readGitforgeConfig } from "../infrastructure/services/backstage_config_service";
+import { readEndpointConfig, readCodeHealthConfig } from "../infrastructure/services/backstage_config_service";
 import {
-  gitforgeAuthApiRef,
-  gitforgeConfigApiRef,
-  gitforgeContributorsApiRef,
-  gitforgeDashboardApiRef,
+  codeHealthAuthApiRef,
+  codeHealthConfigApiRef,
+  codeHealthContributorsApiRef,
+  codeHealthRepositoriesApiRef,
 } from "./api_refs";
-import type { GitforgeClients } from "./factories/repository_factory";
+import type { CodeHealthClients } from "./factories/repository_factory";
 import { createAuthenticationService } from "./factories/service_factory";
-import { GitforgeContributorsApi } from "./gitforge_contributors_api";
-import { GitforgeDashboardApi } from "./gitforge_dashboard_api";
+import { CodeHealthContributorsApi } from "./code_health_contributors_api";
+import { CodeHealthRepositoriesApi } from "./code_health_repositories_api";
 
-export const createGitforgeClients = (
+export const createCodeHealthClients = (
   fetchApi: FetchApi,
   discoveryApi: DiscoveryApi,
   configApi: ConfigApi,
-): GitforgeClients => {
+): CodeHealthClients => {
   const resolver = new BackstageEndpointResolver(discoveryApi, readEndpointConfig(configApi));
 
   return {
@@ -37,45 +37,45 @@ export const createGitforgeClients = (
   };
 };
 
-export const gitforgeApis: AnyApiFactory[] = [
+export const codeHealthApis: AnyApiFactory[] = [
   createApiFactory({
-    api: gitforgeAuthApiRef,
+    api: codeHealthAuthApiRef,
     deps: {},
     factory: () => createAuthenticationService(),
   }),
   createApiFactory({
-    api: gitforgeConfigApiRef,
+    api: codeHealthConfigApiRef,
     deps: { configApi: configApiRef },
-    factory: ({ configApi }) => readGitforgeConfig(configApi),
+    factory: ({ configApi }) => readCodeHealthConfig(configApi),
   }),
   createApiFactory({
-    api: gitforgeDashboardApiRef,
+    api: codeHealthRepositoriesApiRef,
     deps: {
       configApi: configApiRef,
       discoveryApi: discoveryApiRef,
       fetchApi: fetchApiRef,
-      authService: gitforgeAuthApiRef,
-      config: gitforgeConfigApiRef,
+      authService: codeHealthAuthApiRef,
+      config: codeHealthConfigApiRef,
     },
     factory: ({ configApi, discoveryApi, fetchApi, authService, config }) =>
-      new GitforgeDashboardApi({
-        clients: createGitforgeClients(fetchApi, discoveryApi, configApi),
+      new CodeHealthRepositoriesApi({
+        clients: createCodeHealthClients(fetchApi, discoveryApi, configApi),
         authService,
         config,
       }),
   }),
   createApiFactory({
-    api: gitforgeContributorsApiRef,
+    api: codeHealthContributorsApiRef,
     deps: {
       configApi: configApiRef,
       discoveryApi: discoveryApiRef,
       fetchApi: fetchApiRef,
-      authService: gitforgeAuthApiRef,
-      config: gitforgeConfigApiRef,
+      authService: codeHealthAuthApiRef,
+      config: codeHealthConfigApiRef,
     },
     factory: ({ configApi, discoveryApi, fetchApi, authService, config }) =>
-      new GitforgeContributorsApi({
-        clients: createGitforgeClients(fetchApi, discoveryApi, configApi),
+      new CodeHealthContributorsApi({
+        clients: createCodeHealthClients(fetchApi, discoveryApi, configApi),
         authService,
         config,
       }),

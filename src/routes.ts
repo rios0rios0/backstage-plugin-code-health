@@ -1,17 +1,17 @@
 import { createRouteRef, createSubRouteRef } from "@backstage/core-plugin-api";
 
 export const rootRouteRef = createRouteRef({
-  id: "gitforge-dashboard",
+  id: "code-health",
 });
 
 export const contributorsRouteRef = createSubRouteRef({
-  id: "gitforge-dashboard:contributors",
+  id: "code-health:contributors",
   parent: rootRouteRef,
   path: "/contributors",
 });
 
 export const settingsRouteRef = createSubRouteRef({
-  id: "gitforge-dashboard:settings",
+  id: "code-health:settings",
   parent: rootRouteRef,
   path: "/settings",
 });

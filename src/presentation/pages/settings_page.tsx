@@ -4,8 +4,8 @@ import Button from "@material-ui/core/Button";
 import TextField from "@material-ui/core/TextField";
 import Typography from "@material-ui/core/Typography";
 import { ContentHeader } from "@backstage/core-components";
-import type { GitforgeConfig } from "../../domain/entities/gitforge_config";
-import { EMPTY_GITFORGE_CONFIG } from "../../domain/entities/gitforge_config";
+import type { CodeHealthConfig } from "../../domain/entities/code_health_config";
+import { EMPTY_CODE_HEALTH_CONFIG } from "../../domain/entities/code_health_config";
 import type { Platform } from "../../domain/entities/platform";
 import type { SonarType } from "../../domain/entities/sonar_type";
 import { IntegrationCard } from "../components/integration_card";
@@ -21,7 +21,7 @@ interface SettingsPageProps {
   sonarType: SonarType | null;
   sonarUrl: string | null;
   wakaTimeToken: string | null;
-  config?: GitforgeConfig;
+  config?: CodeHealthConfig;
   onUpdateVcs: (token: string, username: string, platform: Platform) => void;
   onUpdateSonar: (sonar: SonarLoginInfo | null) => void;
   onUpdateWakaTime: (token: string | null) => void;
@@ -40,7 +40,7 @@ const SONAR_OPTIONS: readonly ToggleOption<SonarType | "none">[] = [
 ];
 
 const MANAGED_NOTE =
-  "Some values come from `gitforgeDashboard` in app-config.yaml and cannot be changed here.";
+  "Some values come from `codeHealth` in app-config.yaml and cannot be changed here.";
 const PROXY_NOTE =
   "Requests are routed through a Backstage proxy endpoint, so no personal token is needed.";
 
@@ -58,7 +58,7 @@ export const SettingsPage = ({
   sonarType,
   sonarUrl,
   wakaTimeToken,
-  config = EMPTY_GITFORGE_CONFIG,
+  config = EMPTY_CODE_HEALTH_CONFIG,
   onUpdateVcs,
   onUpdateSonar,
   onUpdateWakaTime,

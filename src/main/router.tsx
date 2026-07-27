@@ -14,10 +14,10 @@ import { ContributorsPage } from "../presentation/pages/contributors_page";
 import { DashboardPage } from "../presentation/pages/dashboard_page";
 import { SettingsPage } from "../presentation/pages/settings_page";
 import {
-  gitforgeAuthApiRef,
-  gitforgeConfigApiRef,
-  gitforgeContributorsApiRef,
-  gitforgeDashboardApiRef,
+  codeHealthAuthApiRef,
+  codeHealthConfigApiRef,
+  codeHealthContributorsApiRef,
+  codeHealthRepositoriesApiRef,
 } from "./api_refs";
 
 const PLATFORM_LABELS = {
@@ -30,16 +30,16 @@ const PLATFORM_LABELS = {
  * the presentation layer and hosts the three tabs of the dashboard.
  */
 export const Router = () => {
-  const authApi = useApi(gitforgeAuthApiRef);
-  const config = useApi(gitforgeConfigApiRef);
-  const dashboardService = useApi(gitforgeDashboardApiRef);
-  const contributorService = useApi(gitforgeContributorsApiRef);
+  const authApi = useApi(codeHealthAuthApiRef);
+  const config = useApi(codeHealthConfigApiRef);
+  const dashboardService = useApi(codeHealthRepositoriesApiRef);
+  const contributorService = useApi(codeHealthContributorsApiRef);
   const auth = useAuthentication(authApi, config);
 
   if (!auth.isReady) {
     return (
       <Page themeId="tool">
-        <Header title="GitForge Dashboard" />
+        <Header title="Code Health" />
         <Content>
           <Progress />
         </Content>
@@ -50,7 +50,7 @@ export const Router = () => {
   if (!auth.isConfigured) {
     return (
       <Page themeId="tool">
-        <Header title="GitForge Dashboard" subtitle="Not configured yet">
+        <Header title="Code Health" subtitle="Not configured yet">
           <ThemeToggleButton />
         </Header>
         <Content>
@@ -64,7 +64,7 @@ export const Router = () => {
 
   return (
     <Page themeId="tool">
-      <Header title="GitForge Dashboard" subtitle={auth.effectiveOrganization ?? undefined}>
+      <Header title="Code Health" subtitle={auth.effectiveOrganization ?? undefined}>
         <HeaderLabel label="Platform" value={PLATFORM_LABELS[platform]} />
         <ThemeToggleButton />
       </Header>

@@ -1,10 +1,10 @@
 import { createPlugin, createRoutableExtension } from "@backstage/core-plugin-api";
-import { gitforgeApis } from "./main/apis";
+import { codeHealthApis } from "./main/apis";
 import { contributorsRouteRef, rootRouteRef, settingsRouteRef } from "./routes";
 
-export const gitforgeDashboardPlugin = createPlugin({
-  id: "gitforge-dashboard",
-  apis: gitforgeApis,
+export const codeHealthPlugin = createPlugin({
+  id: "code-health",
+  apis: codeHealthApis,
   routes: {
     root: rootRouteRef,
     contributors: contributorsRouteRef,
@@ -16,12 +16,12 @@ export const gitforgeDashboardPlugin = createPlugin({
  * Full page extension. Mount it in your app at a route of your choosing:
  *
  * ```tsx
- * <Route path="/gitforge" element={<GitforgeDashboardPage />} />
+ * <Route path="/code-health" element={<CodeHealthPage />} />
  * ```
  */
-export const GitforgeDashboardPage = gitforgeDashboardPlugin.provide(
+export const CodeHealthPage = codeHealthPlugin.provide(
   createRoutableExtension({
-    name: "GitforgeDashboardPage",
+    name: "CodeHealthPage",
     component: () => import("./main/router").then((m) => m.Router),
     mountPoint: rootRouteRef,
   }),

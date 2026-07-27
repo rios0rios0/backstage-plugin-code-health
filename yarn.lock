@@ -3356,9 +3356,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@rios0rios0/backstage-plugin-gitforge-dashboard@workspace:.":
+"@rios0rios0/backstage-plugin-code-health@workspace:.":
   version: 0.0.0-use.local
-  resolution: "@rios0rios0/backstage-plugin-gitforge-dashboard@workspace:."
+  resolution: "@rios0rios0/backstage-plugin-code-health@workspace:."
   dependencies:
     "@backstage/cli": "npm:^0.36.4"
     "@backstage/cli-defaults": "npm:^0.1.4"

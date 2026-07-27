@@ -1,16 +1,16 @@
-export { GitforgeDashboardPage, gitforgeDashboardPlugin } from "./plugin";
+export { CodeHealthPage, codeHealthPlugin } from "./plugin";
 export { contributorsRouteRef, rootRouteRef, settingsRouteRef } from "./routes";
 export {
-  gitforgeAuthApiRef,
-  gitforgeConfigApiRef,
-  gitforgeContributorsApiRef,
-  gitforgeDashboardApiRef,
+  codeHealthAuthApiRef,
+  codeHealthConfigApiRef,
+  codeHealthContributorsApiRef,
+  codeHealthRepositoriesApiRef,
 } from "./main/api_refs";
 
 export type { BadgeCheck, BadgeColor, BadgeStatus } from "./domain/entities/badge_status";
 export type { ComplianceColor, ComplianceStatus } from "./domain/entities/compliance_status";
 export type { Contributor } from "./domain/entities/contributor";
-export type { GitforgeConfig } from "./domain/entities/gitforge_config";
+export type { CodeHealthConfig } from "./domain/entities/code_health_config";
 export type { IntegrationTarget } from "./domain/entities/integration_target";
 export type { Platform } from "./domain/entities/platform";
 export type { Release } from "./domain/entities/release";

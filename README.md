@@ -1,13 +1,13 @@
-<h1 align="center">gitforge-dashboard</h1>
+<h1 align="center">code-health</h1>
 <p align="center">
-    <a href="https://github.com/rios0rios0/gitforge-dashboard/releases/latest">
-        <img src="https://img.shields.io/github/release/rios0rios0/gitforge-dashboard.svg?style=for-the-badge&logo=github" alt="Latest Release"/></a>
-    <a href="https://github.com/rios0rios0/gitforge-dashboard/blob/main/LICENSE">
-        <img src="https://img.shields.io/github/license/rios0rios0/gitforge-dashboard.svg?style=for-the-badge&logo=github" alt="License"/></a>
-    <a href="https://github.com/rios0rios0/gitforge-dashboard/actions/workflows/default.yaml">
-        <img src="https://img.shields.io/github/actions/workflow/status/rios0rios0/gitforge-dashboard/default.yaml?branch=main&style=for-the-badge&logo=github" alt="Build Status"/></a>
-    <a href="https://www.npmjs.com/package/@rios0rios0/backstage-plugin-gitforge-dashboard">
-        <img src="https://img.shields.io/npm/v/@rios0rios0/backstage-plugin-gitforge-dashboard?style=for-the-badge&logo=npm" alt="npm"/></a>
+    <a href="https://github.com/rios0rios0/code-health/releases/latest">
+        <img src="https://img.shields.io/github/release/rios0rios0/code-health.svg?style=for-the-badge&logo=github" alt="Latest Release"/></a>
+    <a href="https://github.com/rios0rios0/code-health/blob/main/LICENSE">
+        <img src="https://img.shields.io/github/license/rios0rios0/code-health.svg?style=for-the-badge&logo=github" alt="License"/></a>
+    <a href="https://github.com/rios0rios0/code-health/actions/workflows/default.yaml">
+        <img src="https://img.shields.io/github/actions/workflow/status/rios0rios0/code-health/default.yaml?branch=main&style=for-the-badge&logo=github" alt="Build Status"/></a>
+    <a href="https://www.npmjs.com/package/@rios0rios0/backstage-plugin-code-health">
+        <img src="https://img.shields.io/npm/v/@rios0rios0/backstage-plugin-code-health?style=for-the-badge&logo=npm" alt="npm"/></a>
 </p>
 
 A [Backstage](https://backstage.io) frontend plugin that shows CI status, releases, tags, compliance
@@ -32,18 +32,18 @@ enriched with SonarCloud/SonarQube and WakaTime data.
 ## Installation
 
 ```bash
-yarn --cwd packages/app add @rios0rios0/backstage-plugin-gitforge-dashboard
+yarn --cwd packages/app add @rios0rios0/backstage-plugin-code-health
 ```
 
 Add the page to your app's routes in `packages/app/src/App.tsx`:
 
 ```tsx
-import { GitforgeDashboardPage } from '@rios0rios0/backstage-plugin-gitforge-dashboard';
+import { CodeHealthPage } from '@rios0rios0/backstage-plugin-code-health';
 
 const routes = (
   <FlatRoutes>
     {/* ...your other routes... */}
-    <Route path="/gitforge" element={<GitforgeDashboardPage />} />
+    <Route path="/code-health" element={<CodeHealthPage />} />
   </FlatRoutes>
 );
 ```
@@ -51,9 +51,9 @@ const routes = (
 And a sidebar item in `packages/app/src/components/Root/Root.tsx`:
 
 ```tsx
-import GitHubIcon from '@material-ui/icons/GitHub';
+import AssessmentIcon from '@material-ui/icons/Assessment';
 
-<SidebarItem icon={GitHubIcon} to="gitforge" text="GitForge" />;
+<SidebarItem icon={AssessmentIcon} to="code-health" text="Code Health" />;
 ```
 
 ## Configuration
@@ -63,28 +63,28 @@ supplies their own organization and tokens.
 
 ```yaml
 # app-config.yaml
-gitforgeDashboard:
+codeHealth:
   platform: 'github' # or 'azure-devops'
   organization: 'rios0rios0' # GitHub username or Azure DevOps organization
   refreshIntervalMs: 300000 # 60000 | 300000 | 900000 | 0 (off)
 
   github:
     baseUrl: 'https://api.github.com/graphql' # override for GitHub Enterprise
-    proxyPath: '/gitforge-github' # a `proxy.endpoints` key, see below
+    proxyPath: '/code-health-github' # a `proxy.endpoints` key, see below
 
   azureDevOps:
     baseUrl: 'https://dev.azure.com'
-    proxyPath: '/gitforge-ado'
+    proxyPath: '/code-health-ado'
 
   sonar:
     type: 'cloud' # or 'qube'
     baseUrl: 'https://sonarcloud.io'
     organization: 'rios0rios0'
-    proxyPath: '/gitforge-sonar'
+    proxyPath: '/code-health-sonar'
 
   wakaTime:
     baseUrl: 'https://wakatime.com/api/v1'
-    proxyPath: '/gitforge-wakatime'
+    proxyPath: '/code-health-wakatime'
 ```
 
 Values pinned here always win over what a user sets on the Settings tab, and the corresponding fields
@@ -104,25 +104,25 @@ Backstage backend, which attaches the credential. No token is then requested fro
 # app-config.yaml
 proxy:
   endpoints:
-    '/gitforge-github':
+    '/code-health-github':
       target: 'https://api.github.com/graphql'
       allowedMethods: ['POST']
       headers:
         Authorization: 'bearer ${GITHUB_TOKEN}'
 
-    '/gitforge-ado':
+    '/code-health-ado':
       target: 'https://dev.azure.com'
       allowedMethods: ['GET']
       headers:
         Authorization: 'Basic ${AZURE_DEVOPS_BASIC_AUTH}' # base64 of ":<PAT>"
 
-    '/gitforge-sonar':
+    '/code-health-sonar':
       target: 'https://sonarcloud.io'
       allowedMethods: ['GET']
       headers:
         Authorization: 'Bearer ${SONAR_TOKEN}'
 
-    '/gitforge-wakatime':
+    '/code-health-wakatime':
       target: 'https://wakatime.com/api/v1'
       allowedMethods: ['GET']
       headers:
@@ -146,11 +146,11 @@ the proxy is recommended for those.
 
 | Export | Description |
 |--------|-------------|
-| `gitforgeDashboardPlugin` | The plugin instance, for `bindRoutes` and API overrides |
-| `GitforgeDashboardPage` | Routable extension rendering the whole dashboard |
+| `codeHealthPlugin` | The plugin instance, for `bindRoutes` and API overrides |
+| `CodeHealthPage` | Routable extension rendering the whole dashboard |
 | `rootRouteRef`, `contributorsRouteRef`, `settingsRouteRef` | Route refs for external routing |
-| `gitforgeDashboardApiRef`, `gitforgeContributorsApiRef` | Data APIs, overridable with your own implementation |
-| `gitforgeAuthApiRef`, `gitforgeConfigApiRef` | Credential store and resolved app-config |
+| `codeHealthApiRef`, `codeHealthContributorsApiRef` | Data APIs, overridable with your own implementation |
+| `codeHealthAuthApiRef`, `codeHealthConfigApiRef` | Credential store and resolved app-config |
 
 Every domain entity (`Repository`, `Contributor`, `ComplianceStatus`, …) is exported as a type.
 
@@ -164,7 +164,7 @@ src/
 ├── plugin.ts         # createPlugin + createRoutableExtension
 ├── routes.ts         # rootRouteRef and its sub-routes
 ├── domain/           # Entities and contracts (ports); no framework imports
-│   ├── entities/     #   Repository, Contributor, ComplianceStatus, GitforgeConfig, …
+│   ├── entities/     #   Repository, Contributor, ComplianceStatus, CodeHealthConfig, …
 │   ├── repositories/ #   RepositoryRepository, ComplianceRepository, SonarRepository, …
 │   └── services/     #   DashboardService, ContributorService, AuthenticationService
 ├── service/          # Business logic, platform mappers, settings resolution

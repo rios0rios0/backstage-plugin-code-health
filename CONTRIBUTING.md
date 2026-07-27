@@ -39,10 +39,10 @@ a Backstage app:
 ```bash
 yarn build
 yarn link
-yarn --cwd /path/to/backstage-app/packages/app link @rios0rios0/backstage-plugin-gitforge-dashboard
+yarn --cwd /path/to/backstage-app/packages/app link @rios0rios0/backstage-plugin-code-health
 ```
 
-Then mount `GitforgeDashboardPage` as described in the [README](README.md#installation).
+Then mount `CodeHealthPage` as described in the [README](README.md#installation).
 
 ## Adding a New Platform
 

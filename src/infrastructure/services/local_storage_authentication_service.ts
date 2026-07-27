@@ -1,12 +1,12 @@
 import type { AuthenticationService } from "../../domain/services/authentication_service";
 
-const TOKEN_KEY = "gitforge-dashboard:token";
-const USERNAME_KEY = "gitforge-dashboard:username";
-const SONAR_TOKEN_KEY = "gitforge-dashboard:sonar-token";
-const SONAR_TYPE_KEY = "gitforge-dashboard:sonar-type";
-const SONAR_URL_KEY = "gitforge-dashboard:sonar-url";
-const WAKATIME_TOKEN_KEY = "gitforge-dashboard:wakatime-token";
-const PLATFORM_KEY = "gitforge-dashboard:platform";
+const TOKEN_KEY = "code-health:token";
+const USERNAME_KEY = "code-health:username";
+const SONAR_TOKEN_KEY = "code-health:sonar-token";
+const SONAR_TYPE_KEY = "code-health:sonar-type";
+const SONAR_URL_KEY = "code-health:sonar-url";
+const WAKATIME_TOKEN_KEY = "code-health:wakatime-token";
+const PLATFORM_KEY = "code-health:platform";
 
 export class LocalStorageAuthenticationService implements AuthenticationService {
   private readonly storage: Storage;

@@ -1,4 +1,4 @@
-const DB_NAME = "gitforge-dashboard-keystore";
+const DB_NAME = "code-health-keystore";
 const STORE_NAME = "keys";
 const KEY_ID = "master";
 

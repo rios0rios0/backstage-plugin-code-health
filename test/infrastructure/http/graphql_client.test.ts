@@ -8,7 +8,7 @@ import {
 
 const DIRECT_ENDPOINT = { baseUrl: "https://api.github.com/graphql", viaProxy: false };
 const PROXY_ENDPOINT = {
-  baseUrl: "http://localhost:7007/api/proxy/gitforge-github",
+  baseUrl: "http://localhost:7007/api/proxy/code-health-github",
   viaProxy: true,
 };
 
@@ -77,7 +77,7 @@ describe("HttpGraphQLClient", () => {
 
     // then
     const [url, options] = stubFetch.fetch.mock.calls[0];
-    expect(url).toBe("http://localhost:7007/api/proxy/gitforge-github");
+    expect(url).toBe("http://localhost:7007/api/proxy/code-health-github");
     expect(options.headers.Authorization).toBeUndefined();
   });
 

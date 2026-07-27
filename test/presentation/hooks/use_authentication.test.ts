@@ -1,5 +1,5 @@
 import { renderHook, act, waitFor } from "@testing-library/react";
-import { EMPTY_GITFORGE_CONFIG } from "../../../src/domain/entities/gitforge_config";
+import { EMPTY_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
 import { useAuthentication } from "../../../src/presentation/hooks/use_authentication";
 import { StubAsyncAuthenticationService } from "../../doubles/stub_async_authentication_service";
 
@@ -12,7 +12,7 @@ describe("useAuthentication", () => {
     service.setPlatform("github");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // then
     expect(result.current.token).toBe("t1");
@@ -28,7 +28,7 @@ describe("useAuthentication", () => {
     service.setPlatform("github");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // then
     expect(result.current.isConfigured).toBe(true);
@@ -40,7 +40,7 @@ describe("useAuthentication", () => {
     service.setToken("token");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // then
     expect(result.current.isConfigured).toBe(false);
@@ -49,7 +49,7 @@ describe("useAuthentication", () => {
   it("should persist all credentials via auth service on login", () => {
     // given
     const service = new StubAsyncAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -68,7 +68,7 @@ describe("useAuthentication", () => {
   it("should persist sonar credentials when provided on login", () => {
     // given
     const service = new StubAsyncAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -95,7 +95,7 @@ describe("useAuthentication", () => {
     const service = new StubAsyncAuthenticationService();
     service.setSonarToken("old");
     service.setSonarType("cloud");
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -110,7 +110,7 @@ describe("useAuthentication", () => {
   it("should persist wakaTime token when provided on login", () => {
     // given
     const service = new StubAsyncAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -126,7 +126,7 @@ describe("useAuthentication", () => {
     // given
     const service = new StubAsyncAuthenticationService();
     service.setWakaTimeToken("old");
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -143,7 +143,7 @@ describe("useAuthentication", () => {
     service.setToken("tok");
     service.setUsername("usr");
     service.setPlatform("github");
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -162,7 +162,7 @@ describe("useAuthentication", () => {
   it("should update token, username, and platform via updateVcsCredentials", () => {
     // given
     const service = new StubAsyncAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -178,7 +178,7 @@ describe("useAuthentication", () => {
   it("should update sonar credentials via updateSonarConfig when provided", () => {
     // given
     const service = new StubAsyncAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -200,7 +200,7 @@ describe("useAuthentication", () => {
     const service = new StubAsyncAuthenticationService();
     service.setSonarToken("old-tok");
     service.setSonarType("cloud");
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -216,7 +216,7 @@ describe("useAuthentication", () => {
   it("should set new wakaTime token via updateWakaTimeToken", () => {
     // given
     const service = new StubAsyncAuthenticationService();
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -231,7 +231,7 @@ describe("useAuthentication", () => {
     // given
     const service = new StubAsyncAuthenticationService();
     service.setWakaTimeToken("old");
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // when
     act(() => {
@@ -248,7 +248,7 @@ describe("useAuthentication", () => {
     service.setSonarType("invalid-type");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // then
     expect(result.current.sonarType).toBeNull();
@@ -260,7 +260,7 @@ describe("useAuthentication", () => {
     service.setPlatform("bitbucket");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
 
     // then
     expect(result.current.platform).toBeNull();
@@ -273,7 +273,7 @@ describe("useAuthentication", () => {
     service.setUsername("personal");
     service.setPlatform("github");
     const config = {
-      ...EMPTY_GITFORGE_CONFIG,
+      ...EMPTY_CODE_HEALTH_CONFIG,
       platform: "azure-devops" as const,
       organization: "acme-corp",
     };
@@ -291,10 +291,10 @@ describe("useAuthentication", () => {
     // given
     const service = new StubAsyncAuthenticationService();
     const config = {
-      ...EMPTY_GITFORGE_CONFIG,
+      ...EMPTY_CODE_HEALTH_CONFIG,
       platform: "github" as const,
       organization: "acme",
-      proxied: { ...EMPTY_GITFORGE_CONFIG.proxied, github: true },
+      proxied: { ...EMPTY_CODE_HEALTH_CONFIG.proxied, github: true },
     };
 
     // when
@@ -316,7 +316,7 @@ describe("useAuthentication", () => {
     service.setPlatform("github");
 
     // when
-    const { result } = renderHook(() => useAuthentication(service, EMPTY_GITFORGE_CONFIG));
+    const { result } = renderHook(() => useAuthentication(service, EMPTY_CODE_HEALTH_CONFIG));
     expect(result.current.isReady).toBe(false);
     expect(result.current.token).toBeNull();
     release();
