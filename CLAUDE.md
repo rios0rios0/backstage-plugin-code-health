@@ -51,8 +51,8 @@ src/main/             → Backstage utility APIs, ApiRefs, DI wiring, router
 | `src/main/api_refs.ts` | The four `ApiRef` tokens the plugin exposes |
 | `src/main/apis.ts` | `createApiFactory` wiring; builds the HTTP clients from `fetchApi` + `discoveryApi` |
 | `src/main/router.tsx` | `Page`/`Header`/`TabbedLayout` composition and the setup gate |
-| `src/main/code-health_dashboard_api.ts` | `DashboardService` implementation; rebuilds its object graph per call |
-| `src/main/code-health_contributors_api.ts` | `ContributorService` implementation |
+| `src/main/code_health_repositories_api.ts` | `DashboardService` implementation; rebuilds its object graph per call |
+| `src/main/code_health_contributors_api.ts` | `ContributorService` implementation |
 | `src/service/settings_resolver.ts` | Merges app-config over user settings; decides whether a token is needed |
 | `src/infrastructure/http/endpoint_resolver.ts` | Chooses between a direct base URL and a Backstage proxy path |
 | `src/infrastructure/services/backstage_config_service.ts` | Reads `codeHealth` into the `CodeHealthConfig` entity |

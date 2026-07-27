@@ -149,7 +149,7 @@ the proxy is recommended for those.
 | `codeHealthPlugin` | The plugin instance, for `bindRoutes` and API overrides |
 | `CodeHealthPage` | Routable extension rendering the whole dashboard |
 | `rootRouteRef`, `contributorsRouteRef`, `settingsRouteRef` | Route refs for external routing |
-| `codeHealthApiRef`, `codeHealthContributorsApiRef` | Data APIs, overridable with your own implementation |
+| `codeHealthRepositoriesApiRef`, `codeHealthContributorsApiRef` | Data APIs, overridable with your own implementation |
 | `codeHealthAuthApiRef`, `codeHealthConfigApiRef` | Credential store and resolved app-config |
 
 Every domain entity (`Repository`, `Contributor`, `ComplianceStatus`, …) is exported as a type.
