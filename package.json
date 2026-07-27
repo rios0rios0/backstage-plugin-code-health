@@ -1,6 +1,6 @@
 {
   "name": "@rios0rios0/backstage-plugin-gitforge-dashboard",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Backstage frontend plugin that shows CI status, releases, tags, compliance checks and contributor metrics for GitHub and Azure DevOps repositories",
   "license": "MIT",
   "packageManager": "yarn@4.12.0",
