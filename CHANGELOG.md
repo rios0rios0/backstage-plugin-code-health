@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- added Backstage plugin scaffolding: `gitforgeDashboardPlugin`, the routable `GitforgeDashboardPage` extension, `rootRouteRef` with `contributors` and `settings` sub-routes, and a `config.d.ts` schema for the `gitforgeDashboard` key
-- added four Backstage utility APIs (`gitforgeAuthApiRef`, `gitforgeConfigApiRef`, `gitforgeDashboardApiRef`, `gitforgeContributorsApiRef`) so an integrator can swap any of them for their own implementation
+- added Backstage plugin scaffolding: `codeHealthPlugin`, the routable `CodeHealthPage` extension, `rootRouteRef` with `contributors` and `settings` sub-routes, and a `config.d.ts` schema for the `codeHealth` key
+- added four Backstage utility APIs (`codeHealthAuthApiRef`, `codeHealthConfigApiRef`, `codeHealthRepositoriesApiRef`, `codeHealthContributorsApiRef`) so an integrator can swap any of them for their own implementation
 - added Backstage proxy support: configuring `proxyPath` for GitHub, Azure DevOps, Sonar or WakaTime routes those calls through the Backstage backend, which attaches the credential, so no token reaches the browser
 - added administrator-managed settings — `platform`, `organization`, `refreshIntervalMs` and the Sonar flavour pinned in `app-config.yaml` override user settings and render read-only, with an explanatory note on each affected card
 - added a theme toggle backed by Backstage's `appThemeApi`, keeping the plugin in sync with the app's theme picker
@@ -20,7 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **BREAKING CHANGE:** converted the project from a standalone GitHub Pages single-page app into the publishable Backstage frontend plugin `@rios0rios0/backstage-plugin-gitforge-dashboard`; `yarn build` now emits a library in `dist/` instead of a deployable site, and the GitHub Pages deployment job was removed
+- **BREAKING CHANGE:** renamed the project from `gitforge-dashboard` to `code-health` — the repository, the npm package (`@rios0rios0/backstage-plugin-code-health`), the plugin id, the `codeHealth` app-config key, the browser storage keys and every exported symbol. "Forge" named the systems the plugin reads from rather than what it tells you about them
+- **BREAKING CHANGE:** converted the project from a standalone GitHub Pages single-page app into the publishable Backstage frontend plugin `@rios0rios0/backstage-plugin-code-health`; `yarn build` now emits a library in `dist/` instead of a deployable site, and the GitHub Pages deployment job was removed
 - **BREAKING CHANGE:** replaced Tailwind CSS with Material UI `v4` and `@backstage/core-components` so the dashboard inherits the host app's theme; `Page`, `Header` and `TabbedLayout` now provide the navigation that the custom `Navigation` component used to
 - **BREAKING CHANGE:** downgraded React from `19` to `18` and added `react-router-dom` `v6`, matching the peer ranges of `@backstage/core-plugin-api` and `@backstage/core-components`
 - **BREAKING CHANGE:** narrowed `DashboardService` and `ContributorService` to take no credentials — tokens and the target organization are now resolved internally from app-config and user settings; the platform-specific implementations moved behind `PlatformDashboardService` and `PlatformContributorService`

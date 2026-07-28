@@ -1,6 +1,6 @@
 import type { ConfigApi } from "@backstage/core-plugin-api";
-import type { GitforgeConfig } from "../../domain/entities/gitforge_config";
-import { EMPTY_GITFORGE_CONFIG } from "../../domain/entities/gitforge_config";
+import type { CodeHealthConfig } from "../../domain/entities/code_health_config";
+import { EMPTY_CODE_HEALTH_CONFIG } from "../../domain/entities/code_health_config";
 import type { IntegrationTarget } from "../../domain/entities/integration_target";
 import { INTEGRATION_TARGETS } from "../../domain/entities/integration_target";
 import type { Platform } from "../../domain/entities/platform";
@@ -8,7 +8,7 @@ import type { SonarType } from "../../domain/entities/sonar_type";
 import { isSonarType, SONARCLOUD_BASE_URL } from "../../domain/entities/sonar_type";
 import type { EndpointConfig } from "../http/endpoint_resolver";
 
-const ROOT_KEY = "gitforgeDashboard";
+const ROOT_KEY = "codeHealth";
 
 /** Config sub-key holding the settings of each integration target. */
 const TARGET_KEYS: Readonly<Record<IntegrationTarget, string>> = {
@@ -45,8 +45,8 @@ const readSonarBaseUrl = (configApi: ConfigApi, sonarType: SonarType | null): st
   return sonarType === "cloud" ? SONARCLOUD_BASE_URL : null;
 };
 
-export const readGitforgeConfig = (configApi: ConfigApi): GitforgeConfig => {
-  if (!configApi.has(ROOT_KEY)) return EMPTY_GITFORGE_CONFIG;
+export const readCodeHealthConfig = (configApi: ConfigApi): CodeHealthConfig => {
+  if (!configApi.has(ROOT_KEY)) return EMPTY_CODE_HEALTH_CONFIG;
 
   const platform = configApi.getOptionalString(`${ROOT_KEY}.platform`)?.trim();
   const sonarTypeRaw = readString(configApi, `${TARGET_KEYS.sonar}.type`);

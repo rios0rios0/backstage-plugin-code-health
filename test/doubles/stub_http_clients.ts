@@ -2,7 +2,7 @@ import type { AdoRestClient } from "../../src/infrastructure/http/ado_rest_clien
 import type { GraphQLClient } from "../../src/infrastructure/http/graphql_client";
 import type { SonarClient } from "../../src/infrastructure/http/sonar_client";
 import type { WakaTimeClient } from "../../src/infrastructure/http/wakatime_client";
-import type { GitforgeClients } from "../../src/main/factories/repository_factory";
+import type { CodeHealthClients } from "../../src/main/factories/repository_factory";
 
 export const createStubGraphQLClient = () => {
   const request = jest.fn();
@@ -25,7 +25,7 @@ export const createStubWakaTimeClient = () => {
 };
 
 /** All four clients at once, for anything that builds a full object graph. */
-export const createStubClients = (): GitforgeClients => ({
+export const createStubClients = (): CodeHealthClients => ({
   graphQLClient: createStubGraphQLClient().client,
   adoRestClient: createStubAdoRestClient().client,
   sonarClient: createStubSonarClient().client,

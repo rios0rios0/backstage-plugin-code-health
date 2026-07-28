@@ -1,4 +1,4 @@
-import type { GitforgeConfig } from "../domain/entities/gitforge_config";
+import type { CodeHealthConfig } from "../domain/entities/code_health_config";
 import type { Platform } from "../domain/entities/platform";
 import { isPlatform } from "../domain/entities/platform";
 import type { SonarType } from "../domain/entities/sonar_type";
@@ -6,7 +6,7 @@ import { isSonarType, SONARCLOUD_BASE_URL } from "../domain/entities/sonar_type"
 import type { AuthenticationService } from "../domain/services/authentication_service";
 
 export const NOT_CONFIGURED_MESSAGE =
-  "GitForge Dashboard is not configured. Add credentials on the Settings tab, or configure `gitforgeDashboard` and a proxy endpoint in app-config.yaml.";
+  "Code Health is not configured. Add credentials on the Settings tab, or configure `codeHealth` and a proxy endpoint in app-config.yaml.";
 
 export interface SonarSettings {
   readonly type: SonarType;
@@ -37,7 +37,7 @@ export interface EffectiveSettings {
 
 const resolveSonar = (
   authService: AuthenticationService,
-  config: GitforgeConfig,
+  config: CodeHealthConfig,
   organization: string | null,
 ): SonarSettings | null => {
   const storedType = authService.getSonarType();
@@ -65,7 +65,7 @@ const resolveSonar = (
 
 const resolveWakaTimeToken = (
   authService: AuthenticationService,
-  config: GitforgeConfig,
+  config: CodeHealthConfig,
 ): string | null => {
   if (config.proxied.wakatime) return "";
   return authService.getWakaTimeToken();
@@ -73,7 +73,7 @@ const resolveWakaTimeToken = (
 
 export const resolveSettings = (
   authService: AuthenticationService,
-  config: GitforgeConfig,
+  config: CodeHealthConfig,
 ): EffectiveSettings => {
   const storedPlatform = authService.getPlatform();
   const platform = config.platform ?? (isPlatform(storedPlatform) ? storedPlatform : null);

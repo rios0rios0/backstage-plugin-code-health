@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { GitforgeConfig } from "../../domain/entities/gitforge_config";
+import type { CodeHealthConfig } from "../../domain/entities/code_health_config";
 import type { Platform } from "../../domain/entities/platform";
 import { isPlatform } from "../../domain/entities/platform";
 import type { SonarType } from "../../domain/entities/sonar_type";
@@ -104,7 +104,7 @@ const applySonar = (
 
 export const useAuthentication = (
   authService: AsyncAuthenticationService,
-  config: GitforgeConfig,
+  config: CodeHealthConfig,
 ): UseAuthenticationResult => {
   const [isReady, setIsReady] = useState(() => authService.isReady());
   const [credentials, setCredentials] = useState<StoredCredentials>(() =>

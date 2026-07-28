@@ -1,29 +1,29 @@
-import { EMPTY_GITFORGE_CONFIG } from "../../../src/domain/entities/gitforge_config";
+import { EMPTY_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
 import {
   readEndpointConfig,
-  readGitforgeConfig,
+  readCodeHealthConfig,
 } from "../../../src/infrastructure/services/backstage_config_service";
 import { asConfigApi, StubConfigApi } from "../../doubles/stub_backstage_apis";
 
 const configApi = (values: Record<string, string | number>) =>
   asConfigApi(new StubConfigApi(values));
 
-describe("readGitforgeConfig", () => {
+describe("readCodeHealthConfig", () => {
   it("should return the empty config when the plugin is not configured", () => {
     // given / when
-    const result = readGitforgeConfig(configApi({}));
+    const result = readCodeHealthConfig(configApi({}));
 
     // then
-    expect(result).toEqual(EMPTY_GITFORGE_CONFIG);
+    expect(result).toEqual(EMPTY_CODE_HEALTH_CONFIG);
   });
 
   it("should read platform, organization and refresh interval", () => {
     // given / when
-    const result = readGitforgeConfig(
+    const result = readCodeHealthConfig(
       configApi({
-        "gitforgeDashboard.platform": "azure-devops",
-        "gitforgeDashboard.organization": "  acme  ",
-        "gitforgeDashboard.refreshIntervalMs": 60000,
+        "codeHealth.platform": "azure-devops",
+        "codeHealth.organization": "  acme  ",
+        "codeHealth.refreshIntervalMs": 60000,
       }),
     );
 
@@ -35,7 +35,7 @@ describe("readGitforgeConfig", () => {
 
   it("should ignore an unsupported platform", () => {
     // given / when
-    const result = readGitforgeConfig(configApi({ "gitforgeDashboard.platform": "bitbucket" }));
+    const result = readCodeHealthConfig(configApi({ "codeHealth.platform": "bitbucket" }));
 
     // then
     expect(result.platform).toBeNull();
@@ -43,7 +43,7 @@ describe("readGitforgeConfig", () => {
 
   it("should default the SonarCloud base URL when the type is cloud", () => {
     // given / when
-    const result = readGitforgeConfig(configApi({ "gitforgeDashboard.sonar.type": "cloud" }));
+    const result = readCodeHealthConfig(configApi({ "codeHealth.sonar.type": "cloud" }));
 
     // then
     expect(result.sonarType).toBe("cloud");
@@ -52,7 +52,7 @@ describe("readGitforgeConfig", () => {
 
   it("should keep the Sonar base URL unset for a SonarQube instance without a URL", () => {
     // given / when
-    const result = readGitforgeConfig(configApi({ "gitforgeDashboard.sonar.type": "qube" }));
+    const result = readCodeHealthConfig(configApi({ "codeHealth.sonar.type": "qube" }));
 
     // then
     expect(result.sonarType).toBe("qube");
@@ -61,11 +61,11 @@ describe("readGitforgeConfig", () => {
 
   it("should read the configured Sonar base URL and organization", () => {
     // given / when
-    const result = readGitforgeConfig(
+    const result = readCodeHealthConfig(
       configApi({
-        "gitforgeDashboard.sonar.type": "qube",
-        "gitforgeDashboard.sonar.baseUrl": "https://sonar.internal",
-        "gitforgeDashboard.sonar.organization": "sonar-org",
+        "codeHealth.sonar.type": "qube",
+        "codeHealth.sonar.baseUrl": "https://sonar.internal",
+        "codeHealth.sonar.organization": "sonar-org",
       }),
     );
 
@@ -76,7 +76,7 @@ describe("readGitforgeConfig", () => {
 
   it("should ignore an unsupported Sonar type", () => {
     // given / when
-    const result = readGitforgeConfig(configApi({ "gitforgeDashboard.sonar.type": "enterprise" }));
+    const result = readCodeHealthConfig(configApi({ "codeHealth.sonar.type": "enterprise" }));
 
     // then
     expect(result.sonarType).toBeNull();
@@ -84,10 +84,10 @@ describe("readGitforgeConfig", () => {
 
   it("should mark targets with a proxy path as proxied", () => {
     // given / when
-    const result = readGitforgeConfig(
+    const result = readCodeHealthConfig(
       configApi({
-        "gitforgeDashboard.github.proxyPath": "/gitforge-github",
-        "gitforgeDashboard.wakaTime.proxyPath": "/gitforge-wakatime",
+        "codeHealth.github.proxyPath": "/code-health-github",
+        "codeHealth.wakaTime.proxyPath": "/code-health-wakatime",
       }),
     );
 
@@ -114,10 +114,10 @@ describe("readEndpointConfig", () => {
     // given / when
     const result = readEndpointConfig(
       configApi({
-        "gitforgeDashboard.github.baseUrl": "https://ghe.internal/api/graphql",
-        "gitforgeDashboard.azureDevOps.proxyPath": "/gitforge-ado",
-        "gitforgeDashboard.sonar.baseUrl": "https://sonar.internal",
-        "gitforgeDashboard.wakaTime.proxyPath": "/gitforge-wakatime",
+        "codeHealth.github.baseUrl": "https://ghe.internal/api/graphql",
+        "codeHealth.azureDevOps.proxyPath": "/code-health-ado",
+        "codeHealth.sonar.baseUrl": "https://sonar.internal",
+        "codeHealth.wakaTime.proxyPath": "/code-health-wakatime",
       }),
     );
 
@@ -127,8 +127,8 @@ describe("readEndpointConfig", () => {
       sonar: "https://sonar.internal",
     });
     expect(result.proxyPaths).toEqual({
-      "azure-devops": "/gitforge-ado",
-      wakatime: "/gitforge-wakatime",
+      "azure-devops": "/code-health-ado",
+      wakatime: "/code-health-wakatime",
     });
   });
 });

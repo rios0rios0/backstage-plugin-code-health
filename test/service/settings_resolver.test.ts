@@ -1,7 +1,7 @@
-import { EMPTY_GITFORGE_CONFIG, requiresToken } from "../../src/domain/entities/gitforge_config";
+import { EMPTY_CODE_HEALTH_CONFIG, requiresToken } from "../../src/domain/entities/code_health_config";
 import { resolveSettings } from "../../src/service/settings_resolver";
 import { StubAuthenticationService } from "../doubles/stub_authentication_service";
-import { aGitforgeConfig } from "../builders/gitforge_config_builder";
+import { aCodeHealthConfig } from "../builders/code_health_config_builder";
 
 const authWith = (values: Record<string, string>): StubAuthenticationService => {
   const service = new StubAuthenticationService();
@@ -26,7 +26,7 @@ describe("resolveSettings", () => {
     const auth = authWith({ token: "tok", username: "acme", platform: "github" });
 
     // when
-    const settings = resolveSettings(auth, EMPTY_GITFORGE_CONFIG);
+    const settings = resolveSettings(auth, EMPTY_CODE_HEALTH_CONFIG);
 
     // then
     expect(settings.platform).toBe("github");
@@ -40,7 +40,7 @@ describe("resolveSettings", () => {
   it("should let app-config override the platform and organization", () => {
     // given
     const auth = authWith({ token: "tok", username: "personal", platform: "github" });
-    const config = aGitforgeConfig({ platform: "azure-devops", organization: "acme-corp" });
+    const config = aCodeHealthConfig({ platform: "azure-devops", organization: "acme-corp" });
 
     // when
     const settings = resolveSettings(auth, config);
@@ -57,7 +57,7 @@ describe("resolveSettings", () => {
     const auth = authWith({ token: "tok", username: "acme", platform: "bitbucket" });
 
     // when
-    const settings = resolveSettings(auth, EMPTY_GITFORGE_CONFIG);
+    const settings = resolveSettings(auth, EMPTY_CODE_HEALTH_CONFIG);
 
     // then
     expect(settings.platform).toBeNull();
@@ -67,7 +67,7 @@ describe("resolveSettings", () => {
   it("should not require a token when the platform is proxied", () => {
     // given
     const auth = authWith({ platform: "github" });
-    const config = aGitforgeConfig({ organization: "acme", proxied: { github: true } });
+    const config = aCodeHealthConfig({ organization: "acme", proxied: { github: true } });
 
     // when
     const settings = resolveSettings(auth, config);
@@ -82,7 +82,7 @@ describe("resolveSettings", () => {
     const auth = authWith({ token: "tok", platform: "github" });
 
     // when
-    const settings = resolveSettings(auth, EMPTY_GITFORGE_CONFIG);
+    const settings = resolveSettings(auth, EMPTY_CODE_HEALTH_CONFIG);
 
     // then
     expect(settings.ready).toBe(false);
@@ -93,7 +93,7 @@ describe("resolveSettings", () => {
     const auth = authWith({ username: "acme", platform: "github" });
 
     // when
-    const settings = resolveSettings(auth, EMPTY_GITFORGE_CONFIG);
+    const settings = resolveSettings(auth, EMPTY_CODE_HEALTH_CONFIG);
 
     // then
     expect(settings.ready).toBe(false);
@@ -104,7 +104,7 @@ describe("resolveSettings", () => {
     const auth = authWith({ token: "tok", username: "acme", platform: "github" });
 
     // when
-    const settings = resolveSettings(auth, EMPTY_GITFORGE_CONFIG);
+    const settings = resolveSettings(auth, EMPTY_CODE_HEALTH_CONFIG);
 
     // then
     expect(settings.sonar).toBeNull();
@@ -122,7 +122,7 @@ describe("resolveSettings", () => {
     });
 
     // when
-    const settings = resolveSettings(auth, EMPTY_GITFORGE_CONFIG);
+    const settings = resolveSettings(auth, EMPTY_CODE_HEALTH_CONFIG);
 
     // then
     expect(settings.sonar).toEqual({
@@ -145,7 +145,7 @@ describe("resolveSettings", () => {
     });
 
     // when
-    const settings = resolveSettings(auth, EMPTY_GITFORGE_CONFIG);
+    const settings = resolveSettings(auth, EMPTY_CODE_HEALTH_CONFIG);
 
     // then
     expect(settings.sonar?.baseUrl).toBe("https://sonar.internal");
@@ -163,7 +163,7 @@ describe("resolveSettings", () => {
     });
 
     // when
-    const settings = resolveSettings(auth, EMPTY_GITFORGE_CONFIG);
+    const settings = resolveSettings(auth, EMPTY_CODE_HEALTH_CONFIG);
 
     // then
     expect(settings.sonar).toBeNull();
@@ -172,7 +172,7 @@ describe("resolveSettings", () => {
   it("should enable Sonar without a token when it is proxied", () => {
     // given
     const auth = authWith({ token: "tok", username: "acme", platform: "github" });
-    const config = aGitforgeConfig({
+    const config = aCodeHealthConfig({
       proxied: { sonar: true },
       sonarType: "qube",
       sonarBaseUrl: "https://sonar.internal",
@@ -203,7 +203,7 @@ describe("resolveSettings", () => {
     });
 
     // when
-    const settings = resolveSettings(auth, EMPTY_GITFORGE_CONFIG);
+    const settings = resolveSettings(auth, EMPTY_CODE_HEALTH_CONFIG);
 
     // then
     expect(settings.sonar?.type).toBe("cloud");
@@ -219,7 +219,7 @@ describe("resolveSettings", () => {
     });
 
     // when
-    const settings = resolveSettings(auth, EMPTY_GITFORGE_CONFIG);
+    const settings = resolveSettings(auth, EMPTY_CODE_HEALTH_CONFIG);
 
     // then
     expect(settings.wakaTimeToken).toBe("waka");
@@ -229,7 +229,7 @@ describe("resolveSettings", () => {
   it("should enable WakaTime without a token when it is proxied", () => {
     // given
     const auth = authWith({ token: "tok", username: "acme", platform: "github" });
-    const config = aGitforgeConfig({ proxied: { wakatime: true } });
+    const config = aCodeHealthConfig({ proxied: { wakatime: true } });
 
     // when
     const settings = resolveSettings(auth, config);
@@ -243,12 +243,12 @@ describe("resolveSettings", () => {
 describe("requiresToken", () => {
   it("should require a token when the target is not proxied", () => {
     // given / when / then
-    expect(requiresToken(EMPTY_GITFORGE_CONFIG, "github")).toBe(true);
+    expect(requiresToken(EMPTY_CODE_HEALTH_CONFIG, "github")).toBe(true);
   });
 
   it("should not require a token when the target is proxied", () => {
     // given
-    const config = aGitforgeConfig({ proxied: { sonar: true } });
+    const config = aCodeHealthConfig({ proxied: { sonar: true } });
 
     // when / then
     expect(requiresToken(config, "sonar")).toBe(false);

@@ -7,7 +7,7 @@ import {
 } from "../../doubles/stub_backstage_apis";
 
 const DIRECT_ENDPOINT = { baseUrl: "https://sonarcloud.io", viaProxy: false };
-const PROXY_ENDPOINT = { baseUrl: "http://localhost:7007/api/proxy/gitforge-sonar", viaProxy: true };
+const PROXY_ENDPOINT = { baseUrl: "http://localhost:7007/api/proxy/code-health-sonar", viaProxy: true };
 
 describe("HttpSonarClient", () => {
   let stubFetch: ReturnType<typeof createStubFetchApi>;
@@ -80,7 +80,7 @@ describe("HttpSonarClient", () => {
 
     // then
     const [url, options] = stubFetch.fetch.mock.calls[0];
-    expect(url).toBe("http://localhost:7007/api/proxy/gitforge-sonar/api/projects/search");
+    expect(url).toBe("http://localhost:7007/api/proxy/code-health-sonar/api/projects/search");
     expect(options.headers.Authorization).toBeUndefined();
   });
 });

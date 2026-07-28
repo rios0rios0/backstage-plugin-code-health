@@ -7,7 +7,7 @@ import type { SonarType } from "./sonar_type";
  * anything a user configures in the Settings page, and the affected fields are
  * rendered read-only.
  */
-export interface GitforgeConfig {
+export interface CodeHealthConfig {
   readonly platform: Platform | null;
   readonly organization: string | null;
   readonly refreshIntervalMs: number | null;
@@ -18,7 +18,7 @@ export interface GitforgeConfig {
   readonly proxied: Readonly<Record<IntegrationTarget, boolean>>;
 }
 
-export const EMPTY_GITFORGE_CONFIG: GitforgeConfig = {
+export const EMPTY_CODE_HEALTH_CONFIG: CodeHealthConfig = {
   platform: null,
   organization: null,
   refreshIntervalMs: null,
@@ -34,5 +34,5 @@ export const EMPTY_GITFORGE_CONFIG: GitforgeConfig = {
 };
 
 /** A target needs a user supplied token only when it is not fronted by a proxy. */
-export const requiresToken = (config: GitforgeConfig, target: IntegrationTarget): boolean =>
+export const requiresToken = (config: CodeHealthConfig, target: IntegrationTarget): boolean =>
   !config.proxied[target];

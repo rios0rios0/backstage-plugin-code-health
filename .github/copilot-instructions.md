@@ -1,6 +1,6 @@
-# gitforge-dashboard
+# code-health
 
-gitforge-dashboard is a [Backstage](https://backstage.io) frontend plugin published as `@rios0rios0/backstage-plugin-gitforge-dashboard`. It displays CI workflow status, releases, tags, compliance checks, and contributor metrics across repositories from GitHub (GraphQL API) and Azure DevOps (REST API). It also integrates with SonarCloud and WakaTime for additional metrics. It has no backend of its own: requests go straight from the browser to each provider, or through a Backstage `proxy` endpoint when one is configured.
+code-health is a [Backstage](https://backstage.io) frontend plugin published as `@rios0rios0/backstage-plugin-code-health`. It displays CI workflow status, releases, tags, compliance checks, and contributor metrics across repositories from GitHub (GraphQL API) and Azure DevOps (REST API). It also integrates with SonarCloud and WakaTime for additional metrics. It has no backend of its own: requests go straight from the browser to each provider, or through a Backstage `proxy` endpoint when one is configured.
 
 Always reference these instructions first and fall back to search or bash commands only when you encounter unexpected information that does not match the info here.
 
@@ -42,7 +42,7 @@ src/presentation/     → Material UI components, hooks, pages (dashboard, contr
 src/main/             → Backstage utility APIs, ApiRefs, DI wiring, router
 src/plugin.ts         → createPlugin + createRoutableExtension
 src/routes.ts         → rootRouteRef and its sub-routes
-config.d.ts           → Backstage config schema for the `gitforgeDashboard` key
+config.d.ts           → Backstage config schema for the `codeHealth` key
 test/                 → Mirrors src/ structure; builders/ for test data, doubles/ for stubs
 ```
 
@@ -61,7 +61,7 @@ test/                 → Mirrors src/ structure; builders/ for test data, doubl
 - **Multi-platform**: Supports GitHub (GraphQL) and Azure DevOps (REST) via Adapter pattern. DI factories create platform-specific repositories and services at runtime.
 - **GraphQL over REST (GitHub)**: A single GraphQL query fetches CI status + latest release + latest tag for up to 100 repos.
 - **Two credential modes**: a Backstage `proxy` endpoint (the backend attaches the credential, nothing reaches the browser) or per-user PATs entered at runtime and encrypted with Web Crypto AES-GCM before storage in `localStorage`. `src/service/settings_resolver.ts` decides which applies.
-- **Config over user settings**: values pinned under `gitforgeDashboard` in `app-config.yaml` always win and render read-only.
+- **Config over user settings**: values pinned under `codeHealth` in `app-config.yaml` always win and render read-only.
 - **Utility APIs**: the plugin exposes four `ApiRef`s so an integrator can replace any of them; the data APIs rebuild their object graph per call so settings changes take effect immediately.
 - **No external state management**: State is managed locally in React hooks (`useState`, `useEffect`). No Redux, Zustand, or similar libraries.
 - **snake_case file names**: All source files use `snake_case`.

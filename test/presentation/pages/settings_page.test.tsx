@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { SettingsPage } from "../../../src/presentation/pages/settings_page";
-import { aGitforgeConfig } from "../../builders/gitforge_config_builder";
+import { aCodeHealthConfig } from "../../builders/code_health_config_builder";
 
 const defaultProps = {
   token: "ghp_test123",
@@ -213,7 +213,7 @@ describe("SettingsPage", () => {
 
   it("should lock the fields an administrator pinned in app-config", () => {
     // given
-    const config = aGitforgeConfig({ platform: "github", organization: "acme" });
+    const config = aCodeHealthConfig({ platform: "github", organization: "acme" });
 
     // when
     render(<SettingsPage {...defaultProps} config={config} />);
@@ -227,7 +227,7 @@ describe("SettingsPage", () => {
 
   it("should explain that a proxied platform needs no personal token", () => {
     // given
-    const config = aGitforgeConfig({ proxied: { github: true } });
+    const config = aCodeHealthConfig({ proxied: { github: true } });
 
     // when
     render(<SettingsPage {...defaultProps} config={config} />);
@@ -240,7 +240,7 @@ describe("SettingsPage", () => {
 
   it("should report Sonar as connected when it is reached through a proxy", () => {
     // given
-    const config = aGitforgeConfig({ proxied: { sonar: true } });
+    const config = aCodeHealthConfig({ proxied: { sonar: true } });
     const props = { ...defaultProps, sonarToken: null, sonarType: null };
 
     // when

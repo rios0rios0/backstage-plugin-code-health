@@ -1,9 +1,9 @@
-import type { GitforgeConfig } from "../domain/entities/gitforge_config";
+import type { CodeHealthConfig } from "../domain/entities/code_health_config";
 import type { Repository } from "../domain/entities/repository";
 import type { AuthenticationService } from "../domain/services/authentication_service";
 import type { DashboardService } from "../domain/services/dashboard_service";
 import { NOT_CONFIGURED_MESSAGE, resolveSettings } from "../service/settings_resolver";
-import type { GitforgeClients } from "./factories/repository_factory";
+import type { CodeHealthClients } from "./factories/repository_factory";
 import {
   createBadgeRepository,
   createComplianceRepository,
@@ -12,10 +12,10 @@ import {
 } from "./factories/repository_factory";
 import { createDashboardService } from "./factories/service_factory";
 
-export interface GitforgeApiDependencies {
-  readonly clients: GitforgeClients;
+export interface CodeHealthApiDependencies {
+  readonly clients: CodeHealthClients;
   readonly authService: AuthenticationService;
-  readonly config: GitforgeConfig;
+  readonly config: CodeHealthConfig;
 }
 
 /**
@@ -23,10 +23,10 @@ export interface GitforgeApiDependencies {
  * call so that changing the platform or an integration token on the Settings tab
  * takes effect immediately.
  */
-export class GitforgeDashboardApi implements DashboardService {
-  private readonly dependencies: GitforgeApiDependencies;
+export class CodeHealthRepositoriesApi implements DashboardService {
+  private readonly dependencies: CodeHealthApiDependencies;
 
-  constructor(dependencies: GitforgeApiDependencies) {
+  constructor(dependencies: CodeHealthApiDependencies) {
     this.dependencies = dependencies;
   }
 

@@ -21,61 +21,61 @@ import { NoOpSonarRepository, type SonarConfig, SonarRepositoryImpl } from "../.
 import { NoOpWakaTimeRepository, WakaTimeRepositoryImpl } from "../../infrastructure/repositories/wakatime_repository_impl";
 
 /** HTTP clients shared by every repository implementation. */
-export interface GitforgeClients {
+export interface CodeHealthClients {
   readonly graphQLClient: GraphQLClient;
   readonly adoRestClient: AdoRestClient;
   readonly sonarClient: SonarClient;
   readonly wakaTimeClient: WakaTimeClient;
 }
 
-const repositoryHandlers: Record<Platform, (clients: GitforgeClients) => RepositoryRepository> = {
+const repositoryHandlers: Record<Platform, (clients: CodeHealthClients) => RepositoryRepository> = {
   github: (clients) => new GitHubGraphQLRepositoryRepository(clients.graphQLClient),
   "azure-devops": (clients) => new AdoRestRepositoryRepository(clients.adoRestClient),
 };
 
-const contributorHandlers: Record<Platform, (clients: GitforgeClients) => ContributorRepository> = {
+const contributorHandlers: Record<Platform, (clients: CodeHealthClients) => ContributorRepository> = {
   github: (clients) => new GitHubGraphQLContributorRepository(clients.graphQLClient),
   "azure-devops": (clients) => new AdoRestContributorRepository(clients.adoRestClient),
 };
 
-const complianceHandlers: Record<Platform, (clients: GitforgeClients) => ComplianceRepository> = {
+const complianceHandlers: Record<Platform, (clients: CodeHealthClients) => ComplianceRepository> = {
   github: (clients) => new GitHubComplianceRepository(clients.graphQLClient),
   "azure-devops": (clients) => new AdoComplianceRepository(clients.adoRestClient),
 };
 
-const badgeHandlers: Record<Platform, (clients: GitforgeClients) => BadgeRepository> = {
+const badgeHandlers: Record<Platform, (clients: CodeHealthClients) => BadgeRepository> = {
   github: (clients) => new GitHubBadgeRepository(clients.graphQLClient),
   "azure-devops": () => new AdoBadgeRepository(),
 };
 
 export const createRepositoryRepository = (
   platform: Platform,
-  clients: GitforgeClients,
+  clients: CodeHealthClients,
 ): RepositoryRepository => repositoryHandlers[platform](clients);
 
 export const createContributorRepository = (
   platform: Platform,
-  clients: GitforgeClients,
+  clients: CodeHealthClients,
 ): ContributorRepository => contributorHandlers[platform](clients);
 
 export const createComplianceRepository = (
   platform: Platform,
-  clients: GitforgeClients,
+  clients: CodeHealthClients,
 ): ComplianceRepository => complianceHandlers[platform](clients);
 
 export const createBadgeRepository = (
   platform: Platform,
-  clients: GitforgeClients,
+  clients: CodeHealthClients,
 ): BadgeRepository => badgeHandlers[platform](clients);
 
 export const createSonarRepository = (
-  clients: GitforgeClients,
+  clients: CodeHealthClients,
   config?: SonarConfig | null,
 ): SonarRepository =>
   config ? new SonarRepositoryImpl(clients.sonarClient, config) : new NoOpSonarRepository();
 
 export const createWakaTimeRepository = (
-  clients: GitforgeClients,
+  clients: CodeHealthClients,
   token?: string | null,
 ): WakaTimeRepository =>
   token === null || token === undefined

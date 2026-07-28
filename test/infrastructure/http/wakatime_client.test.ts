@@ -8,7 +8,7 @@ import {
 
 const DIRECT_ENDPOINT = { baseUrl: "https://wakatime.com/api/v1", viaProxy: false };
 const PROXY_ENDPOINT = {
-  baseUrl: "http://localhost:7007/api/proxy/gitforge-wakatime",
+  baseUrl: "http://localhost:7007/api/proxy/code-health-wakatime",
   viaProxy: true,
 };
 
@@ -67,7 +67,7 @@ describe("HttpWakaTimeClient", () => {
 
     // then
     const [url, options] = stubFetch.fetch.mock.calls[0];
-    expect(url).toBe("http://localhost:7007/api/proxy/gitforge-wakatime/orgs/my-org/members");
+    expect(url).toBe("http://localhost:7007/api/proxy/code-health-wakatime/orgs/my-org/members");
     expect(options.headers.Authorization).toBeUndefined();
   });
 });

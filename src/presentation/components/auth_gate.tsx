@@ -70,7 +70,7 @@ export const AuthGate = ({ onLogin, error }: AuthGateProps) => {
       <Card style={{ width: "100%", maxWidth: 560 }}>
         <CardContent>
           <Typography variant="h5" gutterBottom>
-            Connect GitForge Dashboard
+            Connect Code Health
           </Typography>
           <Typography variant="body2" color="textSecondary" paragraph>
             Connect to your repositories to view CI status, releases, compliance and contributor

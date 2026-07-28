@@ -1,6 +1,6 @@
-import { EMPTY_GITFORGE_CONFIG } from "../../src/domain/entities/gitforge_config";
-import type { GitforgeClients } from "../../src/main/factories/repository_factory";
-import { GitforgeDashboardApi } from "../../src/main/gitforge_dashboard_api";
+import { EMPTY_CODE_HEALTH_CONFIG } from "../../src/domain/entities/code_health_config";
+import type { CodeHealthClients } from "../../src/main/factories/repository_factory";
+import { CodeHealthRepositoriesApi } from "../../src/main/code_health_repositories_api";
 import { NOT_CONFIGURED_MESSAGE } from "../../src/service/settings_resolver";
 import { StubAuthenticationService } from "../doubles/stub_authentication_service";
 import {
@@ -9,7 +9,7 @@ import {
   createStubSonarClient,
   createStubWakaTimeClient,
 } from "../doubles/stub_http_clients";
-import { aGitforgeConfig } from "../builders/gitforge_config_builder";
+import { aCodeHealthConfig } from "../builders/code_health_config_builder";
 
 const singlePage = (nodes: unknown[]) => ({
   user: { repositories: { pageInfo: { hasNextPage: false, endCursor: null }, nodes } },
@@ -38,7 +38,7 @@ const createHarness = () => {
   const sonar = createStubSonarClient();
   const wakaTime = createStubWakaTimeClient();
 
-  const clients: GitforgeClients = {
+  const clients: CodeHealthClients = {
     graphQLClient: graphQL.client,
     adoRestClient: ado.client,
     sonarClient: sonar.client,
@@ -56,14 +56,14 @@ const configuredAuth = () => {
   return authService;
 };
 
-describe("GitforgeDashboardApi", () => {
+describe("CodeHealthRepositoriesApi", () => {
   it("should throw a helpful error when nothing is configured", async () => {
     // given
     const { clients } = createHarness();
-    const api = new GitforgeDashboardApi({
+    const api = new CodeHealthRepositoriesApi({
       clients,
       authService: new StubAuthenticationService(),
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
 
     // when / then
@@ -77,10 +77,10 @@ describe("GitforgeDashboardApi", () => {
       .mockResolvedValueOnce(singlePage([repositoryNode]))
       .mockResolvedValue({ repository: { object: null, branchProtectionRules: { nodes: [] } } });
 
-    const api = new GitforgeDashboardApi({
+    const api = new CodeHealthRepositoriesApi({
       clients: harness.clients,
       authService: configuredAuth(),
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
 
     // when
@@ -99,10 +99,10 @@ describe("GitforgeDashboardApi", () => {
       .mockResolvedValueOnce(singlePage([]))
       .mockResolvedValue({ repository: { object: null, branchProtectionRules: { nodes: [] } } });
 
-    const api = new GitforgeDashboardApi({
+    const api = new CodeHealthRepositoriesApi({
       clients: harness.clients,
       authService: configuredAuth(),
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
 
     // when
@@ -120,10 +120,10 @@ describe("GitforgeDashboardApi", () => {
     harness.ado.get.mockResolvedValue({ value: [], count: 0 });
 
     const authService = new StubAuthenticationService();
-    const api = new GitforgeDashboardApi({
+    const api = new CodeHealthRepositoriesApi({
       clients: harness.clients,
       authService,
-      config: aGitforgeConfig({
+      config: aCodeHealthConfig({
         platform: "azure-devops",
         organization: "acme",
         proxied: { "azure-devops": true },
@@ -146,10 +146,10 @@ describe("GitforgeDashboardApi", () => {
       .mockResolvedValueOnce(singlePage([repositoryNode]))
       .mockResolvedValue({ repository: { object: null, branchProtectionRules: { nodes: [] } } });
 
-    const api = new GitforgeDashboardApi({
+    const api = new CodeHealthRepositoriesApi({
       clients: harness.clients,
       authService: configuredAuth(),
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
 
     // when
@@ -180,10 +180,10 @@ describe("GitforgeDashboardApi", () => {
     authService.setSonarToken("sonar-tok");
     authService.setSonarType("cloud");
 
-    const api = new GitforgeDashboardApi({
+    const api = new CodeHealthRepositoriesApi({
       clients: harness.clients,
       authService,
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
 
     // when
@@ -201,10 +201,10 @@ describe("GitforgeDashboardApi", () => {
     harness.ado.get.mockResolvedValue({ value: [], count: 0 });
 
     const authService = configuredAuth();
-    const api = new GitforgeDashboardApi({
+    const api = new CodeHealthRepositoriesApi({
       clients: harness.clients,
       authService,
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
     await api.listRepositories();
 

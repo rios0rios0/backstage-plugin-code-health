@@ -66,7 +66,7 @@ describe("BackstageEndpointResolver", () => {
   it("should build a proxy URL from the discovery base URL when a proxy path is configured", async () => {
     // given
     const resolver = createResolver(
-      { baseUrls: {}, proxyPaths: { github: "/gitforge-github" } },
+      { baseUrls: {}, proxyPaths: { github: "/code-health-github" } },
       "http://localhost:7007/api/proxy/",
     );
 
@@ -75,7 +75,7 @@ describe("BackstageEndpointResolver", () => {
 
     // then
     expect(result).toEqual({
-      baseUrl: "http://localhost:7007/api/proxy/gitforge-github",
+      baseUrl: "http://localhost:7007/api/proxy/code-health-github",
       viaProxy: true,
     });
   });
@@ -83,7 +83,7 @@ describe("BackstageEndpointResolver", () => {
   it("should tolerate a proxy path without a leading slash", async () => {
     // given
     const resolver = createResolver(
-      { baseUrls: {}, proxyPaths: { wakatime: "gitforge-wakatime/" } },
+      { baseUrls: {}, proxyPaths: { wakatime: "code-health-wakatime/" } },
       "http://localhost:7007/api/proxy",
     );
 
@@ -91,18 +91,18 @@ describe("BackstageEndpointResolver", () => {
     const result = await resolver.resolve("wakatime");
 
     // then
-    expect(result.baseUrl).toBe("http://localhost:7007/api/proxy/gitforge-wakatime");
+    expect(result.baseUrl).toBe("http://localhost:7007/api/proxy/code-health-wakatime");
   });
 
   it("should ignore the runtime override when the target is proxied", async () => {
     // given
-    const resolver = createResolver({ baseUrls: {}, proxyPaths: { sonar: "/gitforge-sonar" } });
+    const resolver = createResolver({ baseUrls: {}, proxyPaths: { sonar: "/code-health-sonar" } });
 
     // when
     const result = await resolver.resolve("sonar", "https://sonarqube.internal");
 
     // then
     expect(result.viaProxy).toBe(true);
-    expect(result.baseUrl).toBe("http://localhost:7007/api/proxy/gitforge-sonar");
+    expect(result.baseUrl).toBe("http://localhost:7007/api/proxy/code-health-sonar");
   });
 });

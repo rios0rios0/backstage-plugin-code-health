@@ -1,7 +1,7 @@
 {
-  "name": "@rios0rios0/backstage-plugin-gitforge-dashboard",
+  "name": "@rios0rios0/backstage-plugin-code-health",
   "version": "0.3.0",
-  "description": "Backstage frontend plugin that shows CI status, releases, tags, compliance checks and contributor metrics for GitHub and Azure DevOps repositories",
+  "description": "Backstage frontend plugin that shows CI status, releases, tags, compliance checks and contributor metrics for every GitHub and Azure DevOps repository",
   "license": "MIT",
   "packageManager": "yarn@4.12.0",
   "main": "src/index.ts",
@@ -16,21 +16,22 @@
   ],
   "backstage": {
     "role": "frontend-plugin",
-    "pluginId": "gitforge-dashboard",
+    "pluginId": "code-health",
     "pluginPackages": [
-      "@rios0rios0/backstage-plugin-gitforge-dashboard"
+      "@rios0rios0/backstage-plugin-code-health"
     ]
   },
   "configSchema": "config.d.ts",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rios0rios0/gitforge-dashboard.git"
+    "url": "git+https://github.com/rios0rios0/code-health.git"
   },
-  "homepage": "https://github.com/rios0rios0/gitforge-dashboard#readme",
-  "bugs": "https://github.com/rios0rios0/gitforge-dashboard/issues",
+  "homepage": "https://github.com/rios0rios0/code-health#readme",
+  "bugs": "https://github.com/rios0rios0/code-health/issues",
   "keywords": [
     "backstage",
     "backstage-plugin",
+    "code-health",
     "github",
     "azure-devops",
     "sonarcloud",

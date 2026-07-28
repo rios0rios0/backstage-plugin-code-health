@@ -1,6 +1,6 @@
-import { EMPTY_GITFORGE_CONFIG } from "../../src/domain/entities/gitforge_config";
-import type { GitforgeClients } from "../../src/main/factories/repository_factory";
-import { GitforgeContributorsApi } from "../../src/main/gitforge_contributors_api";
+import { EMPTY_CODE_HEALTH_CONFIG } from "../../src/domain/entities/code_health_config";
+import type { CodeHealthClients } from "../../src/main/factories/repository_factory";
+import { CodeHealthContributorsApi } from "../../src/main/code_health_contributors_api";
 import { NOT_CONFIGURED_MESSAGE } from "../../src/service/settings_resolver";
 import { StubAuthenticationService } from "../doubles/stub_authentication_service";
 import {
@@ -9,7 +9,7 @@ import {
   createStubSonarClient,
   createStubWakaTimeClient,
 } from "../doubles/stub_http_clients";
-import { aGitforgeConfig } from "../builders/gitforge_config_builder";
+import { aCodeHealthConfig } from "../builders/code_health_config_builder";
 
 const pullRequestNode = {
   number: 1,
@@ -34,7 +34,7 @@ const createHarness = () => {
   const sonar = createStubSonarClient();
   const wakaTime = createStubWakaTimeClient();
 
-  const clients: GitforgeClients = {
+  const clients: CodeHealthClients = {
     graphQLClient: graphQL.client,
     adoRestClient: ado.client,
     sonarClient: sonar.client,
@@ -52,14 +52,14 @@ const configuredAuth = () => {
   return authService;
 };
 
-describe("GitforgeContributorsApi", () => {
+describe("CodeHealthContributorsApi", () => {
   it("should throw a helpful error when nothing is configured", async () => {
     // given
     const { clients } = createHarness();
-    const api = new GitforgeContributorsApi({
+    const api = new CodeHealthContributorsApi({
       clients,
       authService: new StubAuthenticationService(),
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
 
     // when / then
@@ -71,10 +71,10 @@ describe("GitforgeContributorsApi", () => {
     const harness = createHarness();
     harness.graphQL.request.mockResolvedValueOnce(searchPage([pullRequestNode]));
 
-    const api = new GitforgeContributorsApi({
+    const api = new CodeHealthContributorsApi({
       clients: harness.clients,
       authService: configuredAuth(),
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
 
     // when
@@ -91,10 +91,10 @@ describe("GitforgeContributorsApi", () => {
     const harness = createHarness();
     harness.graphQL.request.mockResolvedValueOnce(searchPage([]));
 
-    const api = new GitforgeContributorsApi({
+    const api = new CodeHealthContributorsApi({
       clients: harness.clients,
       authService: configuredAuth(),
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
 
     // when
@@ -111,10 +111,10 @@ describe("GitforgeContributorsApi", () => {
     const harness = createHarness();
     harness.graphQL.request.mockResolvedValueOnce(searchPage([pullRequestNode]));
 
-    const api = new GitforgeContributorsApi({
+    const api = new CodeHealthContributorsApi({
       clients: harness.clients,
       authService: configuredAuth(),
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
 
     // when
@@ -135,10 +135,10 @@ describe("GitforgeContributorsApi", () => {
       })
       .mockResolvedValueOnce({ data: [{ grand_total: { total_seconds: 3600 } }] });
 
-    const api = new GitforgeContributorsApi({
+    const api = new CodeHealthContributorsApi({
       clients: harness.clients,
       authService: configuredAuth(),
-      config: aGitforgeConfig({ proxied: { wakatime: true } }),
+      config: aCodeHealthConfig({ proxied: { wakatime: true } }),
     });
 
     // when
@@ -157,10 +157,10 @@ describe("GitforgeContributorsApi", () => {
     const authService = configuredAuth();
     authService.setPlatform("azure-devops");
 
-    const api = new GitforgeContributorsApi({
+    const api = new CodeHealthContributorsApi({
       clients: harness.clients,
       authService,
-      config: EMPTY_GITFORGE_CONFIG,
+      config: EMPTY_CODE_HEALTH_CONFIG,
     });
 
     // when

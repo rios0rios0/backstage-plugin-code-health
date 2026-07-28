@@ -56,7 +56,7 @@ export class StubDiscoveryApi implements DiscoveryApi {
 
 /**
  * In-memory {@link ConfigApi} covering only what the plugin reads. Keys are
- * dot-separated paths, e.g. `gitforgeDashboard.github.proxyPath`.
+ * dot-separated paths, e.g. `codeHealth.github.proxyPath`.
  */
 export class StubConfigApi implements Pick<ConfigApi, "has" | "getOptionalString" | "getOptionalNumber"> {
   private readonly values: Record<string, string | number>;
