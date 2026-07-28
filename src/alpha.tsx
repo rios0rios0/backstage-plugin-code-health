@@ -4,6 +4,7 @@ import {
   createFrontendPlugin,
 } from "@backstage/frontend-plugin-api";
 import { compatWrapper, convertLegacyRouteRef } from "@backstage/core-compat-api";
+import AssessmentIcon from "@material-ui/icons/Assessment";
 import {
   codeHealthAuthApiFactory,
   codeHealthConfigApiFactory,
@@ -44,7 +45,10 @@ export const codeHealthContributorsApi = ApiBlueprint.make({
 export const codeHealthPage = PageBlueprint.make({
   params: {
     path: "/code-health",
+    // `title` and `icon` are what the app infers the sidebar nav item from;
+    // `NavItemBlueprint` is deprecated in favour of passing them here.
     title: "Code Health",
+    icon: <AssessmentIcon />,
     routeRef: convertLegacyRouteRef(rootRouteRef),
     loader: () => import("./main/router").then((m) => compatWrapper(<m.Router />)),
   },
