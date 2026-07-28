@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- added a `delivery > publish:npm` job to `.github/workflows/default.yaml` that publishes the package automatically when a version bump lands on `main`, gated on the same condition the shared workflow uses to cut the tag; it publishes with `npm publish --provenance` and no-ops when the version is already on the registry, so the tag-push recovery path stays safe to re-run
 - added documented `.trivyignore` entries for `CVE-2025-25288`, `CVE-2025-25289` and `CVE-2025-25290` in the `@octokit` packages that `@backstage/core-compat-api` pulls in transitively; `@backstage/integration` still pins the affected octokit majors in its latest release, so there is nothing to upgrade to
 - added an `/alpha` entry point exporting the plugin for Backstage's declarative frontend system, so apps built on `@backstage/frontend-defaults` can list it in `features` like any other plugin; the page mounts through `compatWrapper` and the route through `convertLegacyRouteRef`, matching how the community plugins bridge the two systems
 - added Backstage plugin scaffolding: `codeHealthPlugin`, the routable `CodeHealthPage` extension, `rootRouteRef` with `contributors` and `settings` sub-routes, and a `config.d.ts` schema for the `codeHealth` key

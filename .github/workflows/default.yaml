@@ -22,3 +22,86 @@ jobs:
     uses: 'rios0rios0/pipelines/.github/workflows/yarn-library.yaml@main'
     secrets:
       sonar_token: ${{ secrets.SONAR_TOKEN }}
+
+  # fourth stage
+  # `yarn-library.yaml` stops at cutting the release tag — publishing to a registry
+  # is not part of the shared workflow for any language, so it lives here.
+  delivery-publish:
+    name: 'delivery > publish:npm'
+    runs-on: 'ubuntu-latest'
+    permissions:
+      contents: 'read'
+      id-token: 'write' # delivery-publish (npm provenance attestation)
+    # Third-party actions are pinned to a commit SHA rather than a tag: a tag can be
+    # silently repointed by its owner, which is how the trivy-action and
+    # kics-github-action compromises reached their consumers. Bump the SHA and the
+    # trailing version comment together.
+    steps:
+      - name: 'Checkout code'
+        uses: 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803' # v6.1.0
+
+      - name: 'Enable Corepack'
+        run: 'corepack enable'
+
+      - name: 'Setup Node.js'
+        uses: 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38' # v6.5.0
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: |
+          yarn install --immutable
+          yarn build
+        shell: 'bash'
+
+      # Published with the npm CLI rather than `yarn npm publish` because only the
+      # former can attach a provenance attestation, which links the tarball back to
+      # this workflow run. `npm publish` runs the package's `prepack`/`postpack`
+      # scripts, so `backstage-cli` swaps `package.json` to its `dist/` entry points
+      # for the tarball and restores the source ones afterwards.
+      - name: 'Publish to npm'
+        run: |
+          set -eu
+
+          NAME="$(node -p 'require("./package.json").name')"
+          VERSION="$(node -p 'require("./package.json").version')"
+
+          # The workflow triggers on every tag, so reaching this step does not mean the
+          # tag names a release. `delivery-release` is safe by construction because it
+          # derives the version from the tag and skips when it cannot; this job reads
+          # the version from package.json instead, so it has to check the pairing
+          # explicitly — otherwise pushing an unrelated tag would ship whatever version
+          # package.json currently holds. The `v` prefix is optional to match the
+          # `tag_prefixes` input of the shared workflow.
+          case "${GITHUB_REF:-}" in
+            refs/tags/*)
+              TAG="${GITHUB_REF#refs/tags/}"
+              if [ "${TAG#v}" != "$VERSION" ]; then
+                echo "$(date "+%Y-%m-%d %H:%M:%S") - tag $TAG does not name version $VERSION, not publishing..."
+                exit 0
+              fi
+              ;;
+          esac
+
+          # The tag path below can re-run for a version that already shipped; npm
+          # rejects a duplicate publish, so treat it as a no-op instead of a failure.
+          if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
+            echo "$(date "+%Y-%m-%d %H:%M:%S") - $NAME@$VERSION is already on the registry, skipping..."
+            exit 0
+          fi
+
+          echo "$(date "+%Y-%m-%d %H:%M:%S") - publishing $NAME@$VERSION..."
+          npm publish --provenance --access public
+        shell: 'bash'
+        env:
+          NODE_AUTH_TOKEN: '${{ secrets.NPM_TOKEN }}'
+    needs: [ 'default' ]
+    # Mirrors the `delivery-release` condition in `yarn-library.yaml`, so a version is
+    # published exactly when its tag is cut: on a bump merged to main, and on a
+    # (re-)pushed version tag so a release whose quality gate failed can be recovered.
+    # The two triggers are gated separately on purpose — the main path keeps success()
+    # so a failing gate never publishes, while the tag path uses !cancelled() because
+    # every job in yarn.yaml skips on refs/tags/*, which makes the `default` need
+    # conclude "skipped" and would make an implicit success() skip this job too.
+    if: "(success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore/bump-') || contains(github.event.head_commit.message, 'chore(bump)'))) || (!cancelled() && startsWith(github.ref, 'refs/tags/'))"

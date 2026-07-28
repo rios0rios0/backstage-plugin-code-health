@@ -94,4 +94,19 @@ The toolchain is the Backstage CLI end to end: `backstage-cli package build`, `p
 ## Release
 
 CI runs `rios0rios0/pipelines/.github/workflows/yarn-library.yaml` on every push and pull request.
-The package is published to npm from a tag; there is no deployment target.
+There is no deployment target — the artifact is the npm package.
+
+Releasing follows the changelog process:
+
+1. Branch `bump/x.x.x`, move `[Unreleased]` into a dated version heading and set the same
+   version in `package.json`.
+2. Open a PR to `main`. The merge commit must carry `chore/bump-x.x.x` or
+   `chore(bump): ...version to x.x.x` — that string is what the pipeline matches on.
+3. On merge, `delivery-release` (from the shared workflow) cuts the tag and GitHub Release,
+   and `delivery-publish` (in `.github/workflows/default.yaml`) publishes to npm.
+
+`delivery-publish` is repo-local because publishing to a registry is not part of any of the
+shared `*-library.yaml` workflows. It runs only after the quality gate passes, publishes with
+`npm publish --provenance` so the tarball is attested to the workflow run, and no-ops when the
+version is already on the registry — which is what makes the tag-push recovery path safe to
+re-run. It needs an `NPM_TOKEN` repository secret with publish rights on the `@rios0rios0` scope.
