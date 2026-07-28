@@ -67,6 +67,23 @@ jobs:
           NAME="$(node -p 'require("./package.json").name')"
           VERSION="$(node -p 'require("./package.json").version')"
 
+          # The workflow triggers on every tag, so reaching this step does not mean the
+          # tag names a release. `delivery-release` is safe by construction because it
+          # derives the version from the tag and skips when it cannot; this job reads
+          # the version from package.json instead, so it has to check the pairing
+          # explicitly — otherwise pushing an unrelated tag would ship whatever version
+          # package.json currently holds. The `v` prefix is optional to match the
+          # `tag_prefixes` input of the shared workflow.
+          case "${GITHUB_REF:-}" in
+            refs/tags/*)
+              TAG="${GITHUB_REF#refs/tags/}"
+              if [ "${TAG#v}" != "$VERSION" ]; then
+                echo "$(date "+%Y-%m-%d %H:%M:%S") - tag $TAG does not name version $VERSION, not publishing..."
+                exit 0
+              fi
+              ;;
+          esac
+
           # The tag path below can re-run for a version that already shipped; npm
           # rejects a duplicate publish, so treat it as a no-op instead of a failure.
           if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
