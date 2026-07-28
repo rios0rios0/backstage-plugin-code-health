@@ -1,0 +1,62 @@
+import {
+  ApiBlueprint,
+  PageBlueprint,
+  createFrontendPlugin,
+} from "@backstage/frontend-plugin-api";
+import { compatWrapper, convertLegacyRouteRef } from "@backstage/core-compat-api";
+import {
+  codeHealthAuthApiFactory,
+  codeHealthConfigApiFactory,
+  codeHealthContributorsApiFactory,
+  codeHealthRepositoriesApiFactory,
+} from "./main/apis";
+import { rootRouteRef } from "./routes";
+
+/**
+ * Entry point for Backstage's declarative frontend system. Apps built on
+ * `@backstage/frontend-defaults` import the default export from
+ * `@rios0rios0/backstage-plugin-code-health/alpha` and list it in `features`.
+ *
+ * The page itself is still written against the legacy APIs, so it is mounted
+ * through `compatWrapper`, exactly as the community plugins do.
+ */
+
+export const codeHealthAuthApi = ApiBlueprint.make({
+  name: "auth",
+  params: (defineParams) => defineParams(codeHealthAuthApiFactory),
+});
+
+export const codeHealthConfigApi = ApiBlueprint.make({
+  name: "config",
+  params: (defineParams) => defineParams(codeHealthConfigApiFactory),
+});
+
+export const codeHealthRepositoriesApi = ApiBlueprint.make({
+  name: "repositories",
+  params: (defineParams) => defineParams(codeHealthRepositoriesApiFactory),
+});
+
+export const codeHealthContributorsApi = ApiBlueprint.make({
+  name: "contributors",
+  params: (defineParams) => defineParams(codeHealthContributorsApiFactory),
+});
+
+export const codeHealthPage = PageBlueprint.make({
+  params: {
+    path: "/code-health",
+    title: "Code Health",
+    routeRef: convertLegacyRouteRef(rootRouteRef),
+    loader: () => import("./main/router").then((m) => compatWrapper(<m.Router />)),
+  },
+});
+
+export default createFrontendPlugin({
+  pluginId: "code-health",
+  extensions: [
+    codeHealthAuthApi,
+    codeHealthConfigApi,
+    codeHealthRepositoriesApi,
+    codeHealthContributorsApi,
+    codeHealthPage,
+  ],
+});

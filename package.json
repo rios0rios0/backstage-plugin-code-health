@@ -58,8 +58,10 @@
     "postpack": "backstage-cli package postpack"
   },
   "dependencies": {
+    "@backstage/core-compat-api": "^0.5.13",
     "@backstage/core-components": "^0.18.12",
     "@backstage/core-plugin-api": "^1.12.8",
+    "@backstage/frontend-plugin-api": "^0.16.0",
     "@material-ui/core": "^4.12.4",
     "@material-ui/icons": "^4.11.3",
     "@tanstack/react-table": "^8.21.3"
@@ -118,6 +120,7 @@
       "!domain/services/**",
       "!service/mappers/*_node.ts",
       "!index.ts",
+      "!alpha.tsx",
       "!plugin.ts",
       "!routes.ts",
       "!main/api_refs.ts",
@@ -142,5 +145,20 @@
   },
   "jest-junit": {
     "outputName": "junit-report.xml"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./alpha": "./src/alpha.tsx",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "alpha": [
+        "src/alpha.tsx"
+      ],
+      "package.json": [
+        "package.json"
+      ]
+    }
   }
 }
