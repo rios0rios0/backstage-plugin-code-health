@@ -35,7 +35,31 @@ enriched with SonarCloud/SonarQube and WakaTime data.
 yarn --cwd packages/app add @rios0rios0/backstage-plugin-code-health
 ```
 
-Add the page to your app's routes in `packages/app/src/App.tsx`:
+The plugin ships two entry points. Use the one that matches your app.
+
+### New frontend system (`@backstage/frontend-defaults`)
+
+Import the default export from `/alpha` and add it to `features` in
+`packages/app/src/App.tsx`:
+
+```tsx
+import { createApp } from '@backstage/frontend-defaults';
+import codeHealthPlugin from '@rios0rios0/backstage-plugin-code-health/alpha';
+
+export default createApp({
+  features: [
+    /* ...your other plugins... */
+    codeHealthPlugin,
+  ],
+});
+```
+
+The page mounts at `/code-health` and registers a nav item titled **Code Health**, so it
+appears in the sidebar automatically — no `Sidebar.tsx` change needed.
+
+### Legacy frontend system (`createApp` from `@backstage/app-defaults`)
+
+Add the page to your routes in `packages/app/src/App.tsx`:
 
 ```tsx
 import { CodeHealthPage } from '@rios0rios0/backstage-plugin-code-health';
@@ -146,7 +170,8 @@ the proxy is recommended for those.
 
 | Export | Description |
 |--------|-------------|
-| `codeHealthPlugin` | The plugin instance, for `bindRoutes` and API overrides |
+| `codeHealthPlugin` | The plugin instance, for `bindRoutes` and API overrides (legacy system) |
+| default export of `/alpha` | The same plugin for the declarative frontend system |
 | `CodeHealthPage` | Routable extension rendering the whole dashboard |
 | `rootRouteRef`, `contributorsRouteRef`, `settingsRouteRef` | Route refs for external routing |
 | `codeHealthRepositoriesApiRef`, `codeHealthContributorsApiRef` | Data APIs, overridable with your own implementation |

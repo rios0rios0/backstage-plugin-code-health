@@ -1,8 +1,16 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreExportsUsedInFile": true,
-  "entry": ["src/index.ts", "src/setupTests.ts", "test/**/*.test.{ts,tsx}"],
-  "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"],
+  "entry": [
+    "src/index.ts",
+    "src/alpha.tsx",
+    "src/setupTests.ts",
+    "test/**/*.test.{ts,tsx}"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "test/**/*.{ts,tsx}"
+  ],
   "ignoreDependencies": [
     "@backstage/cli-defaults",
     "jest-junit"

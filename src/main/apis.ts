@@ -37,47 +37,60 @@ export const createCodeHealthClients = (
   };
 };
 
+/**
+ * The API factories are exported individually as well as in {@link codeHealthApis},
+ * so the `/alpha` entry point can register each one as its own extension without
+ * duplicating the wiring.
+ */
+export const codeHealthAuthApiFactory = createApiFactory({
+  api: codeHealthAuthApiRef,
+  deps: {},
+  factory: () => createAuthenticationService(),
+});
+
+export const codeHealthConfigApiFactory = createApiFactory({
+  api: codeHealthConfigApiRef,
+  deps: { configApi: configApiRef },
+  factory: ({ configApi }) => readCodeHealthConfig(configApi),
+});
+
+export const codeHealthRepositoriesApiFactory = createApiFactory({
+  api: codeHealthRepositoriesApiRef,
+  deps: {
+    configApi: configApiRef,
+    discoveryApi: discoveryApiRef,
+    fetchApi: fetchApiRef,
+    authService: codeHealthAuthApiRef,
+    config: codeHealthConfigApiRef,
+  },
+  factory: ({ configApi, discoveryApi, fetchApi, authService, config }) =>
+    new CodeHealthRepositoriesApi({
+      clients: createCodeHealthClients(fetchApi, discoveryApi, configApi),
+      authService,
+      config,
+    }),
+});
+
+export const codeHealthContributorsApiFactory = createApiFactory({
+  api: codeHealthContributorsApiRef,
+  deps: {
+    configApi: configApiRef,
+    discoveryApi: discoveryApiRef,
+    fetchApi: fetchApiRef,
+    authService: codeHealthAuthApiRef,
+    config: codeHealthConfigApiRef,
+  },
+  factory: ({ configApi, discoveryApi, fetchApi, authService, config }) =>
+    new CodeHealthContributorsApi({
+      clients: createCodeHealthClients(fetchApi, discoveryApi, configApi),
+      authService,
+      config,
+    }),
+});
+
 export const codeHealthApis: AnyApiFactory[] = [
-  createApiFactory({
-    api: codeHealthAuthApiRef,
-    deps: {},
-    factory: () => createAuthenticationService(),
-  }),
-  createApiFactory({
-    api: codeHealthConfigApiRef,
-    deps: { configApi: configApiRef },
-    factory: ({ configApi }) => readCodeHealthConfig(configApi),
-  }),
-  createApiFactory({
-    api: codeHealthRepositoriesApiRef,
-    deps: {
-      configApi: configApiRef,
-      discoveryApi: discoveryApiRef,
-      fetchApi: fetchApiRef,
-      authService: codeHealthAuthApiRef,
-      config: codeHealthConfigApiRef,
-    },
-    factory: ({ configApi, discoveryApi, fetchApi, authService, config }) =>
-      new CodeHealthRepositoriesApi({
-        clients: createCodeHealthClients(fetchApi, discoveryApi, configApi),
-        authService,
-        config,
-      }),
-  }),
-  createApiFactory({
-    api: codeHealthContributorsApiRef,
-    deps: {
-      configApi: configApiRef,
-      discoveryApi: discoveryApiRef,
-      fetchApi: fetchApiRef,
-      authService: codeHealthAuthApiRef,
-      config: codeHealthConfigApiRef,
-    },
-    factory: ({ configApi, discoveryApi, fetchApi, authService, config }) =>
-      new CodeHealthContributorsApi({
-        clients: createCodeHealthClients(fetchApi, discoveryApi, configApi),
-        authService,
-        config,
-      }),
-  }),
+  codeHealthAuthApiFactory,
+  codeHealthConfigApiFactory,
+  codeHealthRepositoriesApiFactory,
+  codeHealthContributorsApiFactory,
 ];
