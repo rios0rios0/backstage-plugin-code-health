@@ -112,12 +112,13 @@ version is already on the registry — which is what makes the tag-push recovery
 re-run.
 
 A tag push runs the workflow file **as it exists at that tag**, not the one on `main`. A tag cut
-before a change to `default.yaml` therefore keeps running the old job forever, and re-pushing it
-cannot pick the change up. That is why `1.0.0` — cut before OIDC landed, when the job still read
-a non-existent `NPM_TOKEN` — was published from a second tag, `v1.0.0`, placed on the commit that
-carried the new workflow; the version guard accepts it because it compares `${TAG#v}` against
-`package.json`. Both tags are kept: the provenance attestation references `refs/tags/v1.0.0`, so
-deleting it would leave the attestation pointing at a ref that no longer exists.
+before a change to `.github/workflows/default.yaml` therefore keeps running the old job forever,
+and re-pushing it cannot pick the change up. That is why `1.0.0` — cut before OIDC landed, when
+the job still read a non-existent `NPM_TOKEN` — was published from a second tag, `v1.0.0`, placed
+on the commit that carried the new workflow; the version guard accepts it because it compares
+`${TAG#v}` against `package.json`. Both tags are kept: the provenance attestation references
+`refs/tags/v1.0.0`, so deleting it would leave the attestation pointing at a ref that no longer
+exists.
 
 ### Authentication — trusted publishing (OIDC)
 
