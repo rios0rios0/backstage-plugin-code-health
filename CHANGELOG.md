@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - changed npm publishing to authenticate with OIDC trusted publishing instead of an `NPM_TOKEN` secret, so no long-lived publish credential exists in the repository at all; npm revoked classic tokens in December 2025 and 2FA-bypass tokens lose the ability to publish around January 2027, so token-based automation had no future
-- changed the publish job to Node 22 and a pinned npm 11.18.0, the minimum that can perform the OIDC exchange
+- changed the publish job to Node 22 and pinned npm to 11.18.0; the OIDC exchange needs npm 11.5.1 or newer and Node 22 bundles npm 10, so the pin is a deliberate choice above that floor rather than the floor itself
 
 ### Removed
 
 - removed the dependency cache from the publish job, so a poisoned cache entry cannot reach the published tarball
+
+## [1.0.0] - 2026-07-28
 
 ### Added
 
