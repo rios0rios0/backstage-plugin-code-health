@@ -1,3 +1,22 @@
+# @octokit/request 6.2.8, @octokit/request-error 3.0.3,
+# @octokit/plugin-paginate-rest 6.1.2 — CVE-2025-25290, CVE-2025-25289, CVE-2025-25288
+#
+# Pulled in transitively by @backstage/core-compat-api -> @backstage/integration-react
+# -> @backstage/integration, which the `/alpha` entry point needs for `compatWrapper`.
+# @backstage/integration@2.0.3 is the latest release and still pins `@octokit/rest@^19`
+# and `@octokit/auth-app@^4`, so there is no upstream version to move to — every
+# Backstage app carries these today. Forcing the patched octokit lines (8.x / 9.x)
+# onto v4-era `@octokit/core` crosses two majors, including octokit's move to native
+# fetch, and would break @backstage/integration's GitHub credential path.
+#
+# That path is never reached by this plugin: it talks to GitHub through its own
+# GraphQL client, and @backstage/integration arrives only as a transitive of the
+# compatibility layer. Drop these once Backstage ships an integration release on
+# a patched octokit.
+CVE-2025-25288
+CVE-2025-25289
+CVE-2025-25290
+
 # brace-expansion 1.1.16 / 2.1.2 — CVE-2026-14257 (GHSA-mh99-v99m-4gvg)
 #
 # Upstream patched only the 5.x line (5.0.8); the 1.x and 2.x lines that
