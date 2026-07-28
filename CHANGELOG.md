@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - removed the dependency cache from the publish job, so a poisoned cache entry cannot reach the published tarball
 
+### Fixed
+
+- fixed the `npm trust github` invocation documented in `CLAUDE.md`, which exited with a usage error: the workflow is named with `--file` rather than `--workflow`, and `--allow-publish` has to be passed or the trust entry is created without the permission CI needs
+- fixed the claim that npm requires a package to exist before accepting a trust entry; npm accepts one for a name that has never been published and the first CI run creates the package, so the manual bootstrap publish that section described was unnecessary — and impossible as written, since `npm publish --provenance` only generates provenance inside CI
+- fixed the release notes to record that a tag push runs the workflow file as it exists at that tag, so a tag cut before a change to `.github/workflows/default.yaml` keeps running the old job and re-pushing it cannot pick the change up
+
 ## [1.0.0] - 2026-07-28
 
 ### Added
