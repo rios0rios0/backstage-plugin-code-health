@@ -109,4 +109,33 @@ Releasing follows the changelog process:
 shared `*-library.yaml` workflows. It runs only after the quality gate passes, publishes with
 `npm publish --provenance` so the tarball is attested to the workflow run, and no-ops when the
 version is already on the registry — which is what makes the tag-push recovery path safe to
-re-run. It needs an `NPM_TOKEN` repository secret with publish rights on the `@rios0rios0` scope.
+re-run.
+
+### Authentication — trusted publishing (OIDC)
+
+**There is no `NPM_TOKEN` secret, and there must not be one.** The job authenticates with npm
+through OIDC trusted publishing: GitHub mints a short-lived id-token for the run, npm exchanges
+it for a credential scoped to this repository and this workflow file, and nothing long-lived is
+ever stored. This is not merely preferable, it is the only automated path with a future — npm
+revoked all classic tokens in December 2025, capped write-scoped granular tokens at 90 days, and
+2FA-bypass tokens (the only kind usable unattended) lose the ability to publish around January
+2027.
+
+The trust relationship is configured once, out of band, and npm requires the package to already
+exist before it will accept one:
+
+```bash
+npm login                                          # 2FA, 2-hour session
+npm publish --provenance --access public           # first version only, from a workstation
+npm trust github --workflow default.yaml           # then wire up CI
+npm trust list                                     # verify
+```
+
+Publishing must be pinned to the `rios0rios0/code-health` repository and the `default.yaml`
+workflow filename. Renaming that workflow file breaks publishing until the trust entry is
+updated.
+
+For a stricter posture, a trust relationship can be made **stage-only**: CI then runs
+`npm stage publish`, the version is held privately, and a maintainer releases it with
+`npm stage approve <stage-id>` under 2FA. That trades the hands-off release for a human
+checkpoint; the current setup publishes directly.

@@ -31,7 +31,7 @@ jobs:
     runs-on: 'ubuntu-latest'
     permissions:
       contents: 'read'
-      id-token: 'write' # delivery-publish (npm provenance attestation)
+      id-token: 'write' # delivery-publish (OIDC trusted publishing + provenance)
     # Third-party actions are pinned to a commit SHA rather than a tag: a tag can be
     # silently repointed by its owner, which is how the trivy-action and
     # kics-github-action compromises reached their consumers. Bump the SHA and the
@@ -43,23 +43,40 @@ jobs:
       - name: 'Enable Corepack'
         run: 'corepack enable'
 
+      # No dependency cache here on purpose, unlike the quality-gate jobs: a poisoned
+      # cache entry would be baked straight into the published tarball, and a release
+      # build runs rarely enough that the saved minutes are not worth the exposure.
       - name: 'Setup Node.js'
         uses: 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38' # v6.5.0
         with:
-          node-version: '20'
-          cache: 'yarn'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      # Node 22 bundles npm 10, but trusted publishing needs 11.5.1 or newer. Pinned
+      # for the same reason the actions above are — this is the process that builds,
+      # signs and uploads the tarball.
+      - name: 'Install a trusted-publishing capable npm'
+        run: 'npm install --global npm@11.18.0'
+        shell: 'bash'
 
       - run: |
           yarn install --immutable
           yarn build
         shell: 'bash'
 
+      # Authentication is OIDC trusted publishing: npm exchanges this run's
+      # short-lived id-token for a credential scoped to this repository and this
+      # workflow file, so there is no npm token in the repository secrets to leak,
+      # rotate or expire. That is now the only durable option — classic tokens were
+      # revoked in December 2025, granular tokens with write access are capped at 90
+      # days, and the 2FA-bypass tokens that CI depends on lose the ability to
+      # publish around January 2027.
+      #
       # Published with the npm CLI rather than `yarn npm publish` because only the
-      # former can attach a provenance attestation, which links the tarball back to
-      # this workflow run. `npm publish` runs the package's `prepack`/`postpack`
-      # scripts, so `backstage-cli` swaps `package.json` to its `dist/` entry points
-      # for the tarball and restores the source ones afterwards.
+      # former speaks OIDC and can attach a provenance attestation. `npm publish`
+      # runs the package's `prepack`/`postpack` scripts, so `backstage-cli` swaps
+      # `package.json` to its `dist/` entry points for the tarball and restores the
+      # source ones afterwards.
       - name: 'Publish to npm'
         run: |
           set -eu
@@ -91,11 +108,12 @@ jobs:
             exit 0
           fi
 
+          # Trusted publishing attaches provenance on its own, but asking for it
+          # explicitly makes the job fail rather than quietly ship an unattested
+          # tarball if the OIDC exchange ever stops being the credential in play.
           echo "$(date "+%Y-%m-%d %H:%M:%S") - publishing $NAME@$VERSION..."
           npm publish --provenance --access public
         shell: 'bash'
-        env:
-          NODE_AUTH_TOKEN: '${{ secrets.NPM_TOKEN }}'
     needs: [ 'default' ]
     # Mirrors the `delivery-release` condition in `yarn-library.yaml`, so a version is
     # published exactly when its tag is cut: on a bump merged to main, and on a
