@@ -111,6 +111,14 @@ shared `*-library.yaml` workflows. It runs only after the quality gate passes, p
 version is already on the registry — which is what makes the tag-push recovery path safe to
 re-run.
 
+A tag push runs the workflow file **as it exists at that tag**, not the one on `main`. A tag cut
+before a change to `default.yaml` therefore keeps running the old job forever, and re-pushing it
+cannot pick the change up. That is why `1.0.0` — cut before OIDC landed, when the job still read
+a non-existent `NPM_TOKEN` — was published from a second tag, `v1.0.0`, placed on the commit that
+carried the new workflow; the version guard accepts it because it compares `${TAG#v}` against
+`package.json`. Both tags are kept: the provenance attestation references `refs/tags/v1.0.0`, so
+deleting it would leave the attestation pointing at a ref that no longer exists.
+
 ### Authentication — trusted publishing (OIDC)
 
 **There is no `NPM_TOKEN` secret, and there must not be one.** The job authenticates with npm
@@ -121,15 +129,29 @@ revoked all classic tokens in December 2025, capped write-scoped granular tokens
 2FA-bypass tokens (the only kind usable unattended) lose the ability to publish around January
 2027.
 
-The trust relationship is configured once, out of band, and npm requires the package to already
-exist before it will accept one:
+The trust relationship is configured once, out of band. The package does **not** need to exist
+first: npm accepts a trust entry for a name that has never been published, and the first CI run
+creates the package. There is therefore no manual bootstrap publish, and no version that ships
+unattested.
 
 ```bash
-npm login                                          # 2FA, 2-hour session
-npm publish --provenance --access public           # first version only, from a workstation
-npm trust github --workflow default.yaml           # then wire up CI
-npm trust list                                     # verify
+npm login                                                  # 2FA, 2-hour session
+npm trust github @rios0rios0/backstage-plugin-code-health \
+  --file default.yaml \
+  --repo rios0rios0/code-health \
+  --allow-publish
+npm trust list @rios0rios0/backstage-plugin-code-health    # verify
 ```
+
+The workflow is named with `--file`, not `--workflow`, and `--allow-publish` has to be passed or
+the entry is created without the permission CI needs. Both `npm trust` and the OIDC exchange
+require npm 11.5.1 or newer — check `npm --version` before blaming the trust entry, because a
+version manager's default npm is easily older than the system one and reports `npm trust` as an
+unknown command.
+
+Do not try to bootstrap by hand with `npm publish --provenance` from a workstation. Provenance is
+only generated inside supported CI, so that command fails locally, and dropping the flag to force
+it through would publish an unattested tarball for no reason.
 
 Publishing must be pinned to the `rios0rios0/code-health` repository and the `default.yaml`
 workflow filename. Renaming that workflow file breaks publishing until the trust entry is
