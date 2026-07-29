@@ -1,6 +1,6 @@
 {
   "name": "@rios0rios0/backstage-plugin-code-health",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Backstage frontend plugin that shows CI status, releases, tags, compliance checks and contributor metrics for every GitHub and Azure DevOps repository",
   "license": "MIT",
   "packageManager": "yarn@4.12.0",

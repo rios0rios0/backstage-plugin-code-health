@@ -7,20 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-29
+
 ### Changed
 
 - changed npm publishing to authenticate with OIDC trusted publishing instead of an `NPM_TOKEN` secret, so no long-lived publish credential exists in the repository at all; npm revoked classic tokens in December 2025 and 2FA-bypass tokens lose the ability to publish around January 2027, so token-based automation had no future
 - changed the publish job to Node 22 and pinned npm to 11.18.0; the OIDC exchange needs npm 11.5.1 or newer and Node 22 bundles npm 10, so the pin is a deliberate choice above that floor rather than the floor itself
-
-### Removed
-
-- removed the dependency cache from the publish job, so a poisoned cache entry cannot reach the published tarball
 
 ### Fixed
 
 - fixed the `npm trust github` invocation documented in `CLAUDE.md`, which exited with a usage error: the workflow is named with `--file` rather than `--workflow`, and `--allow-publish` has to be passed or the trust entry is created without the permission CI needs
 - fixed the claim that npm requires a package to exist before accepting a trust entry; npm accepts one for a name that has never been published and the first CI run creates the package, so the manual bootstrap publish that section described was unnecessary — and impossible as written, since `npm publish --provenance` only generates provenance inside CI
 - fixed the release notes to record that a tag push runs the workflow file as it exists at that tag, so a tag cut before a change to `.github/workflows/default.yaml` keeps running the old job and re-pushing it cannot pick the change up
+
+### Removed
+
+- removed the dependency cache from the publish job, so a poisoned cache entry cannot reach the published tarball
 
 ## [1.0.0] - 2026-07-28
 
