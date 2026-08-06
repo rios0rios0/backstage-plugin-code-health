@@ -1,11 +1,11 @@
-<h1 align="center">code-health</h1>
+<h1 align="center">backstage-plugin-code-health</h1>
 <p align="center">
-    <a href="https://github.com/rios0rios0/code-health/releases/latest">
-        <img src="https://img.shields.io/github/release/rios0rios0/code-health.svg?style=for-the-badge&logo=github" alt="Latest Release"/></a>
-    <a href="https://github.com/rios0rios0/code-health/blob/main/LICENSE">
-        <img src="https://img.shields.io/github/license/rios0rios0/code-health.svg?style=for-the-badge&logo=github" alt="License"/></a>
-    <a href="https://github.com/rios0rios0/code-health/actions/workflows/default.yaml">
-        <img src="https://img.shields.io/github/actions/workflow/status/rios0rios0/code-health/default.yaml?branch=main&style=for-the-badge&logo=github" alt="Build Status"/></a>
+    <a href="https://github.com/rios0rios0/backstage-plugin-code-health/releases/latest">
+        <img src="https://img.shields.io/github/release/rios0rios0/backstage-plugin-code-health.svg?style=for-the-badge&logo=github" alt="Latest Release"/></a>
+    <a href="https://github.com/rios0rios0/backstage-plugin-code-health/blob/main/LICENSE">
+        <img src="https://img.shields.io/github/license/rios0rios0/backstage-plugin-code-health.svg?style=for-the-badge&logo=github" alt="License"/></a>
+    <a href="https://github.com/rios0rios0/backstage-plugin-code-health/actions/workflows/default.yaml">
+        <img src="https://img.shields.io/github/actions/workflow/status/rios0rios0/backstage-plugin-code-health/default.yaml?branch=main&style=for-the-badge&logo=github" alt="Build Status"/></a>
     <a href="https://www.npmjs.com/package/@rios0rios0/backstage-plugin-code-health">
         <img src="https://img.shields.io/npm/v/@rios0rios0/backstage-plugin-code-health?style=for-the-badge&logo=npm" alt="npm"/></a>
 </p>
