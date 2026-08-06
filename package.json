@@ -69,7 +69,7 @@
   "peerDependencies": {
     "react": "^17.0.0 || ^18.0.0",
     "react-dom": "^17.0.0 || ^18.0.0",
-    "react-router-dom": "^6.30.2"
+    "react-router-dom": "^7.0.0"
   },
   "//resolutions": "Patched versions of transitive build-tooling dependencies carrying published advisories. Every target is the version GitHub records as the first patched release for the advisory in question.",
   "resolutions": {
@@ -98,7 +98,7 @@
     "jest-junit": "^16.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.30.2",
+    "react-router-dom": "^7.0.0",
     "typescript": "~5.9.3"
   },
   "jest": {
