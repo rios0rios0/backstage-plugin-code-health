@@ -139,7 +139,7 @@ unattested.
 npm login                                                  # 2FA, 2-hour session
 npm trust github @rios0rios0/backstage-plugin-code-health \
   --file default.yaml \
-  --repo rios0rios0/code-health \
+  --repo rios0rios0/backstage-plugin-code-health \
   --allow-publish
 npm trust list @rios0rios0/backstage-plugin-code-health    # verify
 ```
@@ -154,9 +154,13 @@ Do not try to bootstrap by hand with `npm publish --provenance` from a workstati
 only generated inside supported CI, so that command fails locally, and dropping the flag to force
 it through would publish an unattested tarball for no reason.
 
-Publishing must be pinned to the `rios0rios0/code-health` repository and the `default.yaml`
-workflow filename. Renaming that workflow file breaks publishing until the trust entry is
-updated.
+Publishing must be pinned to the `rios0rios0/backstage-plugin-code-health` repository and the
+`default.yaml` workflow filename. Both halves of that pin are load-bearing: renaming the workflow
+file breaks publishing, and so does renaming the repository, because the OIDC token's `repository`
+claim is matched against a stored string that no rename updates. `npm trust` has no update verb —
+only `github` to create, `list` and `revoke --id` — so a rename is handled by adding an entry for
+the new name and revoking the old one. That is what the `code-health` →
+`backstage-plugin-code-health` rename required.
 
 For a stricter posture, a trust relationship can be made **stage-only**: CI then runs
 `npm stage publish`, the version is held privately, and a maintainer releases it with

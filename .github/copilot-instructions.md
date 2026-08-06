@@ -1,6 +1,6 @@
-# code-health
+# backstage-plugin-code-health
 
-code-health is a [Backstage](https://backstage.io) frontend plugin published as `@rios0rios0/backstage-plugin-code-health`. It displays CI workflow status, releases, tags, compliance checks, and contributor metrics across repositories from GitHub (GraphQL API) and Azure DevOps (REST API). It also integrates with SonarCloud and WakaTime for additional metrics. It has no backend of its own: requests go straight from the browser to each provider, or through a Backstage `proxy` endpoint when one is configured.
+backstage-plugin-code-health is a [Backstage](https://backstage.io) frontend plugin published as `@rios0rios0/backstage-plugin-code-health`. It displays CI workflow status, releases, tags, compliance checks, and contributor metrics across repositories from GitHub (GraphQL API) and Azure DevOps (REST API). It also integrates with SonarCloud and WakaTime for additional metrics. It has no backend of its own: requests go straight from the browser to each provider, or through a Backstage `proxy` endpoint when one is configured.
 
 Always reference these instructions first and fall back to search or bash commands only when you encounter unexpected information that does not match the info here.
 
