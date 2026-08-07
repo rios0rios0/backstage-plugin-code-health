@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- changed `@backstage/frontend-plugin-api` from `^0.16.0` to `^0.17.3`, which is what `@backstage/core-plugin-api@1.12.8` and `@backstage/core-compat-api@0.5.13` — both already direct dependencies here — require. The stale range made consumers nest a second copy of the package under `node_modules/@rios0rios0/backstage-plugin-code-health/`, alongside the hoisted `0.17.3`. That duplicated `zod`, `zod-to-json-schema` and the whole blueprint set in the app bundle, and it is a latent break rather than a cosmetic one: extension data refs and React contexts do not reliably cross copy boundaries, and one consuming app already had to annotate an `ExtensionDefinition` by hand to stop `tsc` failing with `TS2742` on a type it could only name through the nested path. Nothing in the plugin used an API removed in `0.17` — `NavItemBlueprint` is the only casualty and this plugin never referenced it — so the build, lint and all `413` tests pass unchanged.
 - changed the GitHub repository name from `code-health` to `backstage-plugin-code-health` so it matches the published package; the npm package name, the plugin id, the `codeHealth` app-config key, the proxy paths and the browser storage keys are all unchanged, so nothing consumers depend on moved
 - changed the npm trusted-publishing trust entry to pin the new repository name, since the OIDC `repository` claim is matched against a stored string that a rename does not update
+
+### Fixed
+
+- fixed the installation guide overstating how the sidebar entry appears. The page emits a title and icon and the new frontend system derives a nav entry from those, but an app that replaces the sidebar with its own `NavContentBlueprint` places items explicitly and can drop it silently. The README now names the extension IDs (`page:code-health`, plus the four `api:code-health/*`) that such an app needs for `nav.take(...)` and `app.extensions`, and states outright that there is no `nav-item:code-health` to reference.
 
 ## [1.0.1] - 2026-07-29
 

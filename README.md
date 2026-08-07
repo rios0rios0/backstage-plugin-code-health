@@ -54,8 +54,21 @@ export default createApp({
 });
 ```
 
-The page mounts at `/code-health` and registers a nav item titled **Code Health**, so it
-appears in the sidebar automatically — no `Sidebar.tsx` change needed.
+The page mounts at `/code-health` and emits a title and icon, which is what the new frontend
+system derives a nav entry from, so it appears in the sidebar automatically — no `Sidebar.tsx`
+change needed.
+
+Apps that replace the sidebar with their own `NavContentBlueprint` are the exception: those
+place items explicitly and must not filter this one out. The extension IDs to reference are
+
+| Extension | ID |
+|-----------|-----|
+| Page | `page:code-health` |
+| APIs | `api:code-health/auth`, `api:code-health/config`, `api:code-health/repositories`, `api:code-health/contributors` |
+
+so `nav.take('page:code-health')` places it by hand and `app.extensions` can override it by
+the same ID. There is no `nav-item:code-health` — `NavItemBlueprint` no longer exists in
+`@backstage/frontend-plugin-api`.
 
 ### Legacy frontend system (`createApp` from `@backstage/app-defaults`)
 
