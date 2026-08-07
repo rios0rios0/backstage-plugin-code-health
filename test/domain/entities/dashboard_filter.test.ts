@@ -231,3 +231,131 @@ describe("sortRepositories", () => {
     expect(result.map((r) => r.name)).toEqual(["new", "old"]);
   });
 });
+
+describe("sortRepositories by the remaining columns", () => {
+  it("should sort by release date with the newest release first", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create()
+        .withName("old-release")
+        .withLatestRelease({ publishedAt: "2025-01-01T00:00:00Z" })
+        .build(),
+      RepositoryBuilder.create()
+        .withName("new-release")
+        .withLatestRelease({ publishedAt: "2026-05-01T00:00:00Z" })
+        .build(),
+    ];
+
+    // when
+    const result = sortRepositories(repos, "releaseDate", "asc");
+
+    // then
+    expect(result.map((r) => r.name)).toEqual(["new-release", "old-release"]);
+  });
+
+  it("should rank a repository with no release last when sorting by release date", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create().withName("never-released").build(),
+      RepositoryBuilder.create()
+        .withName("released")
+        .withLatestRelease({ publishedAt: "2026-05-01T00:00:00Z" })
+        .build(),
+    ];
+
+    // when
+    const result = sortRepositories(repos, "releaseDate", "asc");
+
+    // then
+    expect(result.map((r) => r.name)).toEqual(["released", "never-released"]);
+  });
+
+  it("should sort by primary language, placing repositories without one first", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create().withName("typescript").withLanguage("TypeScript").build(),
+      RepositoryBuilder.create().withName("unknown").build(),
+      RepositoryBuilder.create().withName("go").withLanguage("Go").build(),
+    ];
+
+    // when
+    const result = sortRepositories(repos, "language", "asc");
+
+    // then
+    expect(result.map((r) => r.name)).toEqual(["unknown", "go", "typescript"]);
+  });
+
+  it("should sort by latest tag, placing untagged repositories first", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create().withName("tagged").withLatestTag({ name: "v2.0.0" }).build(),
+      RepositoryBuilder.create().withName("untagged").build(),
+    ];
+
+    // when
+    const result = sortRepositories(repos, "latestTag", "asc");
+
+    // then
+    expect(result.map((r) => r.name)).toEqual(["untagged", "tagged"]);
+  });
+
+  it("should sort by visibility with private before public", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create().withName("public-repo").build(),
+      RepositoryBuilder.create().withName("private-repo").asPrivate().build(),
+    ];
+
+    // when
+    const result = sortRepositories(repos, "visibility", "asc");
+
+    // then
+    expect(result.map((r) => r.name)).toEqual(["private-repo", "public-repo"]);
+  });
+
+  it("should treat an unknown CI state as the lowest priority", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create().withName("weird").withCiStatus("MADE_UP" as never).build(),
+      RepositoryBuilder.create().withName("failing").withCiStatus("FAILURE").build(),
+    ];
+
+    // when
+    const result = sortRepositories(repos, "ciStatus", "asc");
+
+    // then
+    expect(result.map((r) => r.name)).toEqual(["failing", "weird"]);
+  });
+
+  it("should treat a repository with no CI status as having none", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create().withName("no-ci").build(),
+      RepositoryBuilder.create().withName("erroring").withCiStatus("ERROR").build(),
+    ];
+
+    // when
+    const result = sortRepositories(repos, "ciStatus", "asc");
+
+    // then
+    expect(result.map((r) => r.name)).toEqual(["erroring", "no-ci"]);
+  });
+
+  it("should keep the original order when the sort field is not recognised", () => {
+    // given
+    const repos = [
+      RepositoryBuilder.create().withName("second").build(),
+      RepositoryBuilder.create().withName("first").build(),
+    ];
+
+    // when
+    const result = sortRepositories(
+      repos,
+      "unsupported" as unknown as Parameters<typeof sortRepositories>[1],
+      "asc",
+    );
+
+    // then
+    expect(result.map((r) => r.name)).toEqual(["second", "first"]);
+  });
+});

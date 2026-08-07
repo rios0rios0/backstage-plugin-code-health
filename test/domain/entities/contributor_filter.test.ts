@@ -3,6 +3,7 @@ import {
   filterContributors,
   sortContributors,
 } from "../../../src/domain/entities/contributor_filter";
+import type { SonarMetrics } from "../../../src/domain/entities/sonar_metrics";
 import { ContributorBuilder } from "../../builders/contributor_builder";
 
 describe("filterContributors", () => {
@@ -152,5 +153,118 @@ describe("sortContributors", () => {
 
     // then
     expect(result.map((c) => c.username)).toEqual(["buggy", "clean"]);
+  });
+});
+
+describe("sortContributors by Sonar metrics", () => {
+  const withSonar = (username: string, overrides: Partial<SonarMetrics>) =>
+    ContributorBuilder.create()
+      .withUsername(username)
+      .withSonarMetrics({
+        bugs: 0,
+        codeSmells: 0,
+        securityHotspots: 0,
+        vulnerabilities: 0,
+        coverage: 0,
+        duplications: 0,
+        technicalDebt: "0min",
+        qualityGateStatus: "NONE",
+        ...overrides,
+      })
+      .build();
+
+  it.each([
+    ["codeSmells", { codeSmells: 42 }],
+    ["securityHotspots", { securityHotspots: 7 }],
+    ["vulnerabilities", { vulnerabilities: 3 }],
+    ["coverage", { coverage: 91.4 }],
+    ["duplications", { duplications: 12.5 }],
+  ] as const)("should sort by %s descending", (field, overrides) => {
+    // given
+    const contributors = [
+      withSonar("low", {}),
+      withSonar("high", overrides),
+    ];
+
+    // when
+    const result = sortContributors(contributors, field, "desc");
+
+    // then
+    expect(result.map((c) => c.username)).toEqual(["high", "low"]);
+  });
+
+  it("should rank technical debt by its parsed duration, not its string form", () => {
+    // given
+    const contributors = [
+      withSonar("oneHour", { technicalDebt: "1h" }),
+      withSonar("twoDays", { technicalDebt: "2d" }),
+      withSonar("ninetyMinutes", { technicalDebt: "1h30min" }),
+    ];
+
+    // when
+    const result = sortContributors(contributors, "technicalDebt", "asc");
+
+    // then
+    expect(result.map((c) => c.username)).toEqual(["oneHour", "ninetyMinutes", "twoDays"]);
+  });
+
+  it("should treat an unparseable technical debt string as no debt", () => {
+    // given
+    const contributors = [
+      withSonar("unknown", { technicalDebt: "n/a" }),
+      withSonar("someDebt", { technicalDebt: "5min" }),
+    ];
+
+    // when
+    const result = sortContributors(contributors, "technicalDebt", "asc");
+
+    // then
+    expect(result.map((c) => c.username)).toEqual(["unknown", "someDebt"]);
+  });
+
+  it("should combine days, hours and minutes when ranking technical debt", () => {
+    // given
+    const contributors = [
+      withSonar("dayOnly", { technicalDebt: "1d" }),
+      withSonar("dayPlus", { technicalDebt: "1d2h30min" }),
+    ];
+
+    // when
+    const result = sortContributors(contributors, "technicalDebt", "desc");
+
+    // then
+    expect(result.map((c) => c.username)).toEqual(["dayPlus", "dayOnly"]);
+  });
+
+  it("should keep the original order when the sort field is not recognised", () => {
+    // given
+    const contributors = [
+      ContributorBuilder.create().withUsername("second").build(),
+      ContributorBuilder.create().withUsername("first").build(),
+    ];
+
+    // when
+    const result = sortContributors(
+      contributors,
+      "unsupported" as unknown as Parameters<typeof sortContributors>[1],
+      "asc",
+    );
+
+    // then
+    expect(result.map((c) => c.username)).toEqual(["second", "first"]);
+  });
+
+  it("should treat a contributor without Sonar metrics as zero on every Sonar field", () => {
+    // given
+    const contributors = [
+      withSonar("measured", { coverage: 80 }),
+      ContributorBuilder.create().withUsername("unmeasured").build(),
+    ];
+
+    // when
+    const result = sortContributors(contributors, "coverage", "desc");
+
+    // then
+    expect(result.map((c) => c.username)).toEqual(["measured", "unmeasured"]);
   });
 });

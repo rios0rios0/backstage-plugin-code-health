@@ -261,4 +261,113 @@ describe("SettingsPage", () => {
     // then
     expect(onForgetCredentials).toHaveBeenCalled();
   });
+
+  it("should not save VCS credentials when the token is cleared", () => {
+    // given
+    const onUpdateVcs = jest.fn();
+    render(<SettingsPage {...defaultProps} onUpdateVcs={onUpdateVcs} />);
+    fireEvent.click(screen.getAllByText("Edit")[0]);
+    fireEvent.change(screen.getByLabelText("Personal Access Token"), {
+      target: { value: "   " },
+    });
+
+    // when
+    fireEvent.click(screen.getByText("Save"));
+
+    // then
+    expect(onUpdateVcs).not.toHaveBeenCalled();
+  });
+
+  it("should refuse to save a SonarQube integration without an instance URL", () => {
+    // given
+    const onUpdateSonar = jest.fn();
+    const props = { ...defaultProps, sonarType: "qube" as const, sonarUrl: null };
+    render(<SettingsPage {...props} onUpdateSonar={onUpdateSonar} />);
+    fireEvent.click(screen.getAllByText("Edit")[1]);
+
+    // when
+    fireEvent.click(screen.getByText("Save"));
+
+    // then
+    expect(onUpdateSonar).not.toHaveBeenCalled();
+  });
+
+  it("should save a SonarQube integration together with its instance URL", () => {
+    // given
+    const onUpdateSonar = jest.fn();
+    const props = {
+      ...defaultProps,
+      sonarType: "qube" as const,
+      sonarUrl: "https://sonar.example.com",
+    };
+    render(<SettingsPage {...props} onUpdateSonar={onUpdateSonar} />);
+    fireEvent.click(screen.getAllByText("Edit")[1]);
+
+    // when
+    fireEvent.click(screen.getByText("Save"));
+
+    // then
+    expect(onUpdateSonar).toHaveBeenCalledWith({
+      type: "qube",
+      token: "squ_sonar123",
+      url: "https://sonar.example.com",
+    });
+  });
+
+  it("should restore the Sonar fields when the Sonar card is cancelled", () => {
+    // given
+    render(<SettingsPage {...defaultProps} />);
+    fireEvent.click(screen.getAllByText("Edit")[1]);
+    fireEvent.change(screen.getByLabelText("SonarCloud Token"), {
+      target: { value: "changed" },
+    });
+
+    // when
+    fireEvent.click(screen.getByText("Cancel"));
+
+    // then
+    fireEvent.click(screen.getAllByText("Edit")[1]);
+    expect(screen.getByLabelText("SonarCloud Token")).toHaveValue("squ_sonar123");
+  });
+
+  it("should restore the WakaTime key when the WakaTime card is cancelled", () => {
+    // given
+    render(<SettingsPage {...defaultProps} />);
+    fireEvent.click(screen.getAllByText("Edit")[2]);
+    fireEvent.change(screen.getByLabelText("API Key"), {
+      target: { value: "changed" },
+    });
+
+    // when
+    fireEvent.click(screen.getByText("Cancel"));
+
+    // then
+    fireEvent.click(screen.getAllByText("Edit")[2]);
+    expect(screen.getByLabelText("API Key")).toHaveValue("wk_test123");
+  });
+
+  it("should start with an empty WakaTime key when none is stored", () => {
+    // given
+    const props = { ...defaultProps, wakaTimeToken: null };
+
+    // when
+    render(<SettingsPage {...props} />);
+    fireEvent.click(screen.getAllByText("Edit")[2]);
+
+    // then
+    expect(screen.getByLabelText("API Key")).toHaveValue("");
+  });
+
+  it("should lock the SonarQube URL when an administrator pinned it in app-config", () => {
+    // given
+    const config = aCodeHealthConfig({ sonarBaseUrl: "https://sonar.acme.com" });
+    const props = { ...defaultProps, sonarType: "qube" as const, sonarUrl: null };
+
+    // when
+    render(<SettingsPage {...props} config={config} />);
+    fireEvent.click(screen.getAllByText("Edit")[1]);
+
+    // then
+    expect(screen.getByLabelText("SonarQube Instance URL")).toBeDisabled();
+  });
 });

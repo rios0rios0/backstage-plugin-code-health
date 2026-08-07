@@ -87,4 +87,17 @@ describe("useRepositories", () => {
     // then
     expect(listSpy).toHaveBeenCalled();
   });
+
+  it("should report a generic message when the service rejects with a non-Error", async () => {
+    // given
+    const service = new StubDashboardService().withError("boom" as unknown as Error);
+
+    // when
+    const { result } = renderHook(() => useRepositories(service, true));
+
+    // then
+    await waitFor(() => {
+      expect(result.current.error).toBe("Failed to fetch repositories");
+    });
+  });
 });

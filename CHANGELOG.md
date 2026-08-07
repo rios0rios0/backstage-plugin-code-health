@@ -7,14 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- added tests for everything the coverage config previously hid: the plugin definition, both entry points, the route and API refs, the DI wiring in `main/apis.ts`, the tab router, and the IndexedDB key store. `collectCoverageFrom` now excludes only files that compile to no executable statements (entity shapes, port interfaces, GraphQL/REST node types), so the reported number describes the whole package instead of a chosen subset
+- added a hand-rolled in-memory IndexedDB double (`test/doubles/stub_indexed_db.ts`), since jsdom ships none and the key store is the one place a lost key silently invalidates every stored credential. It keeps the real `CryptoKey` across opens, so a test can prove a token encrypted before a reload still decrypts after one
+
 ### Changed
 
+- changed `react-router-dom` from `7.0.0` to `^7.18.2`. The lockfile had been pinned to `7.0.0` since the repository was created and carried nine high-severity advisories — XSS via open redirects, SSR XSS in `ScrollRestoration`, pre-render data spoofing, unauthenticated RCE through the vendored `turbo-stream@2`, and DoS via both `__manifest` path expansion and inefficient route matching. `7.18.2` has none, and drops the vulnerable `turbo-stream` from the tree entirely
+- changed the `react-router-dom` peer range to `^6.30.2 || ^7.0.0`. The plugin never imports it, but every `@backstage/*` package it depends on peers on `^6.30.2`, so the previous `^7.0.0`-only range made a stock Backstage app report an unsatisfiable peer
+- changed `jest` and `jest-environment-jsdom` to `^30`, `@types/jest` to `^30`, `@testing-library/jest-dom` to `^7`, `jest-junit` to `^17` and `@types/node` to `^26.1.2`. `@backstage/cli@0.36.4` declares `jest ^29 || ^30`, so the runner move is supported rather than tolerated
+- changed the pinned versions of the patched transitive dependencies: `brace-expansion` to `1.1.18`/`2.1.4`/`5.0.9`, `js-yaml` to `4.3.1` and `undici` to `7.29.0`, clearing the last `yarn npm audit` and Trivy SCA findings
+- changed the enforced coverage thresholds from 90/90/77/90 to 95 lines, 95 statements, 92 functions and 88 branches, against measured 99.2/98.9/97.6/93.6 across the whole package
 - changed `@backstage/frontend-plugin-api` from `^0.16.0` to `^0.17.3`, which is what `@backstage/core-plugin-api@1.12.8` and `@backstage/core-compat-api@0.5.13` — both already direct dependencies here — require. The stale range made consumers nest a second copy of the package under `node_modules/@rios0rios0/backstage-plugin-code-health/`, alongside the hoisted `0.17.3`. That duplicated `zod`, `zod-to-json-schema` and the whole blueprint set in the app bundle, and it is a latent break rather than a cosmetic one: extension data refs and React contexts do not reliably cross copy boundaries, and one consuming app already had to annotate an `ExtensionDefinition` by hand to stop `tsc` failing with `TS2742` on a type it could only name through the nested path. Nothing in the plugin used an API removed in `0.17` — `NavItemBlueprint` is the only casualty and this plugin never referenced it — so the build, lint and all `413` tests pass unchanged.
 - changed the GitHub repository name from `code-health` to `backstage-plugin-code-health` so it matches the published package; the npm package name, the plugin id, the `codeHealth` app-config key, the proxy paths and the browser storage keys are all unchanged, so nothing consumers depend on moved
 - changed the npm trusted-publishing trust entry to pin the new repository name, since the OIDC `repository` claim is matched against a stored string that a rename does not update
 
+### Removed
+
+- removed the `brace-expansion` suppressions from `.yarnrc.yml` and `.trivyignore`. Upstream backported the DoS fix to every line in the tree on 2026-07-30, so the advisory is now pinned away rather than hidden. The `@octokit/*` and `uuid` entries stay: `@backstage/integration@2.0.3` is still the newest release and still pins `@octokit/rest@^19`, and `@backstage/core-components` still pins `@material-table/core@^3`, whose `require("uuid").default.v4()` call no patched `uuid` supports
+
 ### Fixed
 
+- fixed the `security > sca:yarn-audit` and `security > sca:trivy` jobs, both of which had been failing on `main`
 - fixed the installation guide overstating how the sidebar entry appears. The page emits a title and icon and the new frontend system derives a nav entry from those, but an app that replaces the sidebar with its own `NavContentBlueprint` places items explicitly and can drop it silently. The README now names the extension IDs (`page:code-health`, plus the four `api:code-health/*`) that such an app needs for `nav.take(...)` and `app.extensions`, and states outright that there is no `nav-item:code-health` to reference.
 
 ## [1.0.1] - 2026-07-29

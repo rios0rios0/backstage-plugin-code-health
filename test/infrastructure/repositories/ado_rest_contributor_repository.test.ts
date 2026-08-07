@@ -131,4 +131,52 @@ describe("AdoRestContributorRepository", () => {
     // then
     expect(result).toEqual([]);
   });
+
+  it("should narrow the PR search to the requested date range", async () => {
+    // given
+    mockedAdo
+      .mockResolvedValueOnce({ value: [createProject("proj1")], count: 1 })
+      .mockResolvedValueOnce({ value: [createRepo("repo1", "proj1")], count: 1 })
+      .mockResolvedValueOnce({ value: [], count: 0 });
+
+    // when
+    await repository.listContributors("token", "org", "2026-01-01", "2026-06-30");
+
+    // then
+    const prRequestPath = mockedAdo.mock.calls[2][1] as string;
+    expect(prRequestPath).toContain("searchCriteria.minTime=2026-01-01");
+    expect(prRequestPath).toContain("searchCriteria.maxTime=2026-06-30");
+  });
+
+  it("should omit both date bounds when no range is requested", async () => {
+    // given
+    mockedAdo
+      .mockResolvedValueOnce({ value: [createProject("proj1")], count: 1 })
+      .mockResolvedValueOnce({ value: [createRepo("repo1", "proj1")], count: 1 })
+      .mockResolvedValueOnce({ value: [], count: 0 });
+
+    // when
+    await repository.listContributors("token", "org", null, null);
+
+    // then
+    const prRequestPath = mockedAdo.mock.calls[2][1] as string;
+    expect(prRequestPath).not.toContain("searchCriteria.minTime");
+    expect(prRequestPath).not.toContain("searchCriteria.maxTime");
+  });
+
+  it("should keep only the lower bound when just a start date is requested", async () => {
+    // given
+    mockedAdo
+      .mockResolvedValueOnce({ value: [createProject("proj1")], count: 1 })
+      .mockResolvedValueOnce({ value: [createRepo("repo1", "proj1")], count: 1 })
+      .mockResolvedValueOnce({ value: [], count: 0 });
+
+    // when
+    await repository.listContributors("token", "org", "2026-01-01", null);
+
+    // then
+    const prRequestPath = mockedAdo.mock.calls[2][1] as string;
+    expect(prRequestPath).toContain("searchCriteria.minTime=2026-01-01");
+    expect(prRequestPath).not.toContain("searchCriteria.maxTime");
+  });
 });
