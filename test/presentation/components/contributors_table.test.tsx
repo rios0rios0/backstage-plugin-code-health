@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { ContributorsTable } from "../../../src/presentation/components/contributors_table";
 import { ContributorBuilder } from "../../builders/contributor_builder";
 
@@ -209,18 +209,23 @@ describe("ContributorsTable", () => {
     expect(screen.getByText(/2 of 5 contributors/)).toBeInTheDocument();
   });
 
-  it("should show a dash for the Sonar columns of a contributor with no metrics", () => {
+  it("should show a dash in every Sonar cell of a contributor with no metrics", () => {
     // given
     const contributors = [
       ContributorBuilder.create().withUsername("unmeasured").build(),
     ];
+    const sonarHeaders = ["Bugs", "Smells", "Vulns", "Hotspots", "Coverage", "Dups", "Debt"];
 
     // when
     render(<ContributorsTable {...defaultProps} contributors={contributors} totalCount={1} />);
 
     // then
-    expect(screen.getByRole("columnheader", { name: /Coverage/ })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: /Dups/ })).toBeInTheDocument();
+    const headerCells = screen.getAllByRole("columnheader");
+    const dataCells = within(screen.getAllByRole("row")[2]).getAllByRole("cell");
+    for (const header of sonarHeaders) {
+      const index = headerCells.findIndex((cell) => cell.textContent?.includes(header));
+      expect(dataCells[index]).toHaveTextContent("-");
+    }
   });
 
   it("should render coverage, duplications and debt when Sonar measured the contributor", () => {

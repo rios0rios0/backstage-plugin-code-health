@@ -180,7 +180,7 @@ describe("GitHubContributorService", () => {
     expect(result[0].sonarMetrics?.technicalDebt).toBe("2h 30min");
   });
 
-  it("should zero out the Sonar counts of a contributor no author key matches", async () => {
+  it("should zero out the Sonar counts of a contributor when no author key matches", async () => {
     // given
     const contributors = [
       ContributorBuilder.create().withUsername("zoe").withLinesOfCode(400).build(),

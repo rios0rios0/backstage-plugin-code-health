@@ -32,7 +32,6 @@ describe("getOrCreateKey", () => {
     const second = await getOrCreateKey();
 
     // then
-    expect(second).toBe(first);
     await expect(decrypt(second, ciphertext)).resolves.toBe("ghp_persisted");
   });
 
@@ -73,6 +72,7 @@ describe("getOrCreateKey", () => {
     // given
     restore = installStubIndexedDB(new StubIndexedDB());
     const first = await getOrCreateKey();
+    const ciphertext = await encrypt(first, "ghp_persisted");
     restore();
 
     // when
@@ -80,6 +80,6 @@ describe("getOrCreateKey", () => {
     const second = await getOrCreateKey();
 
     // then
-    expect(second).not.toBe(first);
+    await expect(decrypt(second, ciphertext)).resolves.toBeNull();
   });
 });
