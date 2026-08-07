@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { ContributorsTable } from "../../../src/presentation/components/contributors_table";
 import { ContributorBuilder } from "../../builders/contributor_builder";
 
@@ -207,5 +207,113 @@ describe("ContributorsTable", () => {
 
     // then
     expect(screen.getByText(/2 of 5 contributors/)).toBeInTheDocument();
+  });
+
+  it("should show a dash in every Sonar cell of a contributor with no metrics", () => {
+    // given
+    const contributors = [
+      ContributorBuilder.create().withUsername("unmeasured").build(),
+    ];
+    const sonarHeaders = ["Bugs", "Smells", "Vulns", "Hotspots", "Coverage", "Dups", "Debt"];
+
+    // when
+    render(<ContributorsTable {...defaultProps} contributors={contributors} totalCount={1} />);
+
+    // then
+    const headerCells = screen.getAllByRole("columnheader");
+    const dataCells = within(screen.getAllByRole("row")[2]).getAllByRole("cell");
+    for (const header of sonarHeaders) {
+      const index = headerCells.findIndex((cell) => cell.textContent?.includes(header));
+      expect(dataCells[index]).toHaveTextContent("-");
+    }
+  });
+
+  it("should render coverage, duplications and debt when Sonar measured the contributor", () => {
+    // given
+    const contributors = [
+      ContributorBuilder.create()
+        .withUsername("measured")
+        .withSonarMetrics({
+          bugs: 1,
+          codeSmells: 2,
+          securityHotspots: 3,
+          vulnerabilities: 4,
+          coverage: 87.5,
+          duplications: 3.25,
+          technicalDebt: "2h 15min",
+          qualityGateStatus: "OK",
+        })
+        .build(),
+    ];
+
+    // when
+    render(<ContributorsTable {...defaultProps} contributors={contributors} totalCount={1} />);
+
+    // then
+    expect(screen.getByText("87.5%")).toBeInTheDocument();
+    expect(screen.getByText("3.3%")).toBeInTheDocument();
+    expect(screen.getByText("2h 15min")).toBeInTheDocument();
+  });
+
+  it("should leave the WakaTime cells empty for a contributor with no tracked time", () => {
+    // given
+    const tracked = ContributorBuilder.create().withUsername("tracked").build();
+    const untracked = ContributorBuilder.create().withUsername("untracked").build();
+    const contributors = [
+      { ...tracked, wakaTimeMetrics: { totalSeconds: 9000, dailyAverageSeconds: 1800 } },
+      untracked,
+    ];
+
+    // when
+    render(<ContributorsTable {...defaultProps} contributors={contributors} totalCount={2} />);
+
+    // then
+    expect(screen.getByText("2h 30m")).toBeInTheDocument();
+    expect(screen.getByText("30m")).toBeInTheDocument();
+  });
+
+  it("should apply an open-ended date range when neither bound is filled in", () => {
+    // given
+    const onDateRangeApply = jest.fn();
+    const contributors = [ContributorBuilder.create().withUsername("alice").build()];
+    render(
+      <ContributorsTable
+        {...defaultProps}
+        contributors={contributors}
+        totalCount={1}
+        onDateRangeApply={onDateRangeApply}
+      />,
+    );
+
+    // when
+    fireEvent.click(screen.getByText("Apply"));
+
+    // then
+    expect(onDateRangeApply).toHaveBeenCalledWith(null, null);
+  });
+
+  it("should page through more contributors than fit on one page", () => {
+    // given
+    const contributors = Array.from({ length: 30 }, (_, index) =>
+      ContributorBuilder.create()
+        .withUsername(`user-${String(index).padStart(2, "0")}`)
+        .withLinesOfCode(index)
+        .build(),
+    );
+    render(
+      <ContributorsTable {...defaultProps} contributors={contributors} totalCount={30} />,
+    );
+
+    // when
+    fireEvent.click(screen.getByText("Next"));
+
+    // then
+    expect(screen.getByText("2 / 2")).toBeInTheDocument();
+
+    // when
+    fireEvent.click(screen.getByText("Previous"));
+
+    // then
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
   });
 });

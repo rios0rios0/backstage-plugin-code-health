@@ -17,17 +17,6 @@ CVE-2025-25288
 CVE-2025-25289
 CVE-2025-25290
 
-# brace-expansion 1.1.16 / 2.1.2 — CVE-2026-14257 (GHSA-mh99-v99m-4gvg)
-#
-# Upstream patched only the 5.x line (5.0.8); the 1.x and 2.x lines that
-# `minimatch@3` and `minimatch@9` depend on have no fixed release. Forcing 5.x
-# onto them breaks at runtime: `minimatch@3` calls the module as a function and
-# `@ts-morph/common`'s `minimatch` calls its default export, neither of which
-# brace-expansion 5 provides. It is a build-time glob dependency that never
-# reaches the published plugin. The same advisory is suppressed for `yarn npm
-# audit` in `.yarnrc.yml`. Drop both once a 1.x/2.x fix ships.
-CVE-2026-14257
-
 # uuid 3.4.0 — CVE-2026-41907
 #
 # Reached only through @material-table/core@3.2.5, a transitive dependency of

@@ -189,4 +189,101 @@ describe("AuthGate", () => {
     // then
     expect(screen.queryByText("Invalid token")).not.toBeInTheDocument();
   });
+
+  it("should submit a SonarCloud integration when a token is entered", () => {
+    // given
+    const onLogin = jest.fn();
+    render(<AuthGate onLogin={onLogin} error={null} />);
+    fireEvent.change(screen.getByLabelText(/GitHub Username/), { target: { value: "user" } });
+    fireEvent.change(screen.getByLabelText(/Personal Access Token/), {
+      target: { value: "token" },
+    });
+    fireEvent.click(screen.getByText("SonarCloud"));
+    fireEvent.change(screen.getByLabelText("SonarCloud Token"), {
+      target: { value: " squ_token " },
+    });
+
+    // when
+    fireEvent.click(screen.getByText("Connect"));
+
+    // then
+    expect(onLogin).toHaveBeenCalledWith(
+      "token",
+      "user",
+      expect.objectContaining({ sonar: { type: "cloud", token: "squ_token", url: undefined } }),
+      "github",
+    );
+  });
+
+  it("should submit a SonarQube integration together with its instance URL", () => {
+    // given
+    const onLogin = jest.fn();
+    render(<AuthGate onLogin={onLogin} error={null} />);
+    fireEvent.change(screen.getByLabelText(/GitHub Username/), { target: { value: "user" } });
+    fireEvent.change(screen.getByLabelText(/Personal Access Token/), {
+      target: { value: "token" },
+    });
+    fireEvent.click(screen.getByText("SonarQube"));
+    fireEvent.change(screen.getByLabelText(/SonarQube Instance URL/), {
+      target: { value: " https://sonar.example.com " },
+    });
+    fireEvent.change(screen.getByLabelText("SonarQube Token"), {
+      target: { value: "squ_token" },
+    });
+
+    // when
+    fireEvent.click(screen.getByText("Connect"));
+
+    // then
+    expect(onLogin).toHaveBeenCalledWith(
+      "token",
+      "user",
+      expect.objectContaining({
+        sonar: { type: "qube", token: "squ_token", url: "https://sonar.example.com" },
+      }),
+      "github",
+    );
+  });
+
+  it("should block submission when SonarQube is selected without a valid instance URL", () => {
+    // given
+    const onLogin = jest.fn();
+    render(<AuthGate onLogin={onLogin} error={null} />);
+    fireEvent.change(screen.getByLabelText(/GitHub Username/), { target: { value: "user" } });
+    fireEvent.change(screen.getByLabelText(/Personal Access Token/), {
+      target: { value: "token" },
+    });
+    fireEvent.click(screen.getByText("SonarQube"));
+    fireEvent.change(screen.getByLabelText("SonarQube Token"), {
+      target: { value: "squ_token" },
+    });
+
+    // when
+    fireEvent.click(screen.getByText("Connect"));
+
+    // then
+    expect(onLogin).not.toHaveBeenCalled();
+  });
+
+  it("should skip the Sonar integration when a type is chosen but no token is entered", () => {
+    // given
+    const onLogin = jest.fn();
+    render(<AuthGate onLogin={onLogin} error={null} />);
+    fireEvent.change(screen.getByLabelText(/GitHub Username/), { target: { value: "user" } });
+    fireEvent.change(screen.getByLabelText(/Personal Access Token/), {
+      target: { value: "token" },
+    });
+    fireEvent.click(screen.getByText("SonarCloud"));
+
+    // when
+    fireEvent.click(screen.getByText("Connect"));
+
+    // then
+    expect(onLogin).toHaveBeenCalledWith(
+      "token",
+      "user",
+      expect.objectContaining({ sonar: null }),
+      "github",
+    );
+  });
 });

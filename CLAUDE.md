@@ -70,7 +70,10 @@ src/main/             → Backstage utility APIs, ApiRefs, DI wiring, router
 - **Stubs over Mocks** — test doubles in `test/doubles/`
 - **Builders** for test data — `test/builders/repository_builder.ts`
 - Material UI **v4** (`@material-ui/core`), matching what `@backstage/core-components` uses
-- React **18** and `react-router-dom` **v6**, matching the Backstage peer ranges
+- React **18**, matching the Backstage peer ranges. `react-router-dom` is peered as
+  `^6.30.2 || ^7.0.0`: the plugin never imports it, `@backstage/*` peers on `^6.30.2`, and the
+  devDependency tracks the newest `7.x` because the whole `7.0.x` line carries high-severity
+  advisories that no `6.x` release fixes either way
 
 ## Testing
 
@@ -79,8 +82,16 @@ components. All tests run on Jest through `backstage-cli package test`, with Tes
 `TestApiProvider` from `@backstage/test-utils` for the few components that resolve a Backstage
 utility API. Tests live in `test/`, wired in through the `jest.roots` override in `package.json`.
 
-Coverage thresholds enforced at 90%+ lines/functions/statements and 77%+ branches. CI posts a coverage
-PR comment, test result annotations, and uploads the HTML coverage report as an artifact.
+Coverage thresholds are enforced at 95% lines/statements, 92% functions and 88% branches. CI posts a
+coverage PR comment, test result annotations, and uploads the HTML coverage report as an artifact.
+
+`collectCoverageFrom` excludes **only** files that compile to no executable statements — entity
+shapes, port interfaces under `domain/repositories` and `domain/services`, and the `*_node.ts`
+GraphQL/REST payload types. Everything that runs is measured, including `plugin.ts`, `alpha.tsx`,
+`routes.ts`, `main/api_refs.ts`, `main/apis.ts`, `main/router.tsx` and the IndexedDB key store. Do
+not add an exclusion to make a threshold pass; write the test instead. The one knowingly-thin file
+is `alpha.tsx`, whose `ApiBlueprint`/`PageBlueprint` `params` callbacks only ever run inside the
+declarative frontend runtime.
 
 ```bash
 make test              # Full suite (ALWAYS use this)
@@ -90,6 +101,22 @@ yarn test:watch        # Watch mode for TDD
 
 The toolchain is the Backstage CLI end to end: `backstage-cli package build`, `package lint`
 (ESLint 8 via `.eslintrc.js` and `@backstage/cli/config/eslint-factory`) and `package test` (Jest).
+
+### Jobs that skip on purpose
+
+Two jobs in the shared workflow are grey rather than green, and both are correct:
+
+- `code-check > quality:basic-checks` is gated on `github.event_name == 'pull_request'`, so it never
+  runs on a push to `main`. On a pull request it does run, and it fails unless the branch is rebased
+  on `main` **and** `CHANGELOG.md` gained entries under `[Unreleased]`.
+- `management > report:sonarqube` is gated on a non-empty `sonar_host` input, which
+  `.github/workflows/default.yaml` does not pass. The repository forwards `SONAR_TOKEN` but has no
+  SonarCloud project, so enabling the input would turn a skip into a failure.
+
+`tests > test:all` also emits a warning annotation about a missing `vite.config.ts`. That comes from
+`davelosert/vitest-coverage-report-action` in the shared workflow, which hardcodes the path; the
+action still reads the Jest `coverage-summary.json` correctly and the job passes. Do not add a
+`vite.config.ts` to silence it — this project has no Vite in its toolchain.
 
 ## Release
 
