@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-07
+
 ### Changed
 
 - changed the GitHub repository name from `code-health` to `backstage-plugin-code-health` so it matches the published package; the npm package name, the plugin id, the `codeHealth` app-config key, the proxy paths and the browser storage keys are all unchanged, so nothing consumers depend on moved
