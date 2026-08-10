@@ -238,7 +238,16 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
       0,
     );
 
+    const freshUntil = states
+      .map((state) => state.incrementalThrough.getTime())
+      .reduce<number | null>(
+        (earliestSoFar, value) =>
+          earliestSoFar === null ? value : Math.min(earliestSoFar, value),
+        null,
+      );
+
     return {
+      freshUntil: freshUntil === null ? null : new Date(freshUntil),
       earliestDay: days.at(0) ?? null,
       latestDay: days.at(-1) ?? null,
       lastIngestedAt: [...this.chunks.values()].sort((a, b) => b.getTime() - a.getTime())[0] ?? null,

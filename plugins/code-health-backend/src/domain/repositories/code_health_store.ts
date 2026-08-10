@@ -22,6 +22,13 @@ export interface CoverageCounts {
   readonly earliestDay: Day | null;
   readonly latestDay: Day | null;
   readonly lastIngestedAt: Date | null;
+  /**
+   * The instant *every* tracked repository has data through, which is the real
+   * ceiling of what the dashboard can answer for. It runs ahead of `latestDay`,
+   * because the incremental phase collects part-days that are not recorded as
+   * covered until they finish.
+   */
+  readonly freshUntil: Date | null;
   readonly repositories: number;
   readonly complete: number;
   readonly failing: number;

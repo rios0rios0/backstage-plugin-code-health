@@ -4,4 +4,8 @@
  * @packageDocumentation
  */
 
-export { codeHealthPlugin as default, DISCOVERY_TASK_ID } from "./plugin";
+export {
+  codeHealthPlugin as default,
+  DISCOVERY_TASK_ID,
+  INGESTION_TASK_ID,
+} from "./plugin";

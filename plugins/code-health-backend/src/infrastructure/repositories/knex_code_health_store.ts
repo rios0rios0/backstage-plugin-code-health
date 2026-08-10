@@ -439,6 +439,7 @@ export class KnexCodeHealthStore implements CodeHealthStore {
         `${INGESTION_STATE}.backfill_floor`,
         `${INGESTION_STATE}.backfill_cursor`,
         `${INGESTION_STATE}.status`,
+        `${INGESTION_STATE}.incremental_through`,
       );
 
     const expectedDays = states.reduce(
@@ -458,7 +459,18 @@ export class KnexCodeHealthStore implements CodeHealthStore {
     const lastIngestedAt = (bounds as { last_ingested_at?: Date | string | null } | undefined)
       ?.last_ingested_at;
 
+    // The *minimum* across repositories, not the maximum: the dashboard can
+    // only claim to answer up to the point the least fresh repository reaches.
+    const freshUntil = states
+      .map((row) => toDate(row.incremental_through).getTime())
+      .reduce<number | null>(
+        (earliestSoFar, value) =>
+          earliestSoFar === null ? value : Math.min(earliestSoFar, value),
+        null,
+      );
+
     return {
+      freshUntil: freshUntil === null ? null : new Date(freshUntil),
       earliestDay: earliest === null || earliest === undefined ? null : fromStoredDate(earliest),
       latestDay: latest === null || latest === undefined ? null : fromStoredDate(latest),
       lastIngestedAt:

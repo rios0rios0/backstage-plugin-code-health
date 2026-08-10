@@ -46,10 +46,17 @@ const startBackend = async (entities: Entity[]) => {
             github: [{ host: "github.com", token: "fixture-token-placeholder" }],
           },
           codeHealth: {
-            // `mockServices.scheduler` runs tasks immediately at startup, so a
-            // short frequency here keeps the test from waiting on the default.
             ingestion: {
+              // `startTestBackend` runs scheduled tasks immediately, so a short
+              // frequency here keeps the test from waiting on the default.
               discoverySchedule: { frequency: { seconds: 1 }, timeout: { seconds: 30 } },
+              // Ingestion is held back to a manual trigger. Left on a schedule
+              // it would start immediately and issue real requests to
+              // api.github.com, which would make this suite slow, flaky and
+              // dependent on the network. What it does with a window is covered
+              // against a real server elsewhere.
+              schedule: { frequency: { trigger: "manual" }, timeout: { minutes: 1 } },
+              snapshotSchedule: { frequency: { trigger: "manual" }, timeout: { minutes: 1 } },
             },
           },
         },
@@ -159,4 +166,23 @@ describe("codeHealthPlugin", () => {
     const response = await request(server).get("/api/code-health/v1/coverage");
     expect(response.body.backfill.repositories).toBe(1);
   });
+
+  it("should expose how fresh the data is once ingestion has run", async () => {
+    // given
+    // The dashboard needs a ceiling it can trust. `freshUntil` is the minimum
+    // across repositories, so it states the point *every* one has data through
+    // rather than the point the luckiest one reached.
+    const { server } = await startBackend([componentWithSlug("pipelines", "rios0rios0/pipelines")]);
+
+    // when
+    await waitFor(async () => {
+      const response = await request(server).get("/api/code-health/v1/coverage");
+      return response.body.backfill.repositories === 1;
+    });
+
+    // then
+    const response = await request(server).get("/api/code-health/v1/coverage");
+    expect(response.body).toHaveProperty("freshUntil");
+  });
+
 });

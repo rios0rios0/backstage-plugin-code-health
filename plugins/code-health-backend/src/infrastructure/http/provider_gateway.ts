@@ -1,25 +1,13 @@
 import type { LoggerService } from "@backstage/backend-plugin-api";
+import {
+  CircuitOpenError,
+  ProviderRequestError,
+} from "../../domain/entities/provider_errors";
+
+// Re-exported so callers of the gateway can catch these without also reaching
+// into the domain for the class.
+export { CircuitOpenError, ProviderRequestError };
 import type { RequestBudget } from "../../domain/entities/request_budget";
-
-/** Raised when a host has failed enough times that the gateway stopped calling it. */
-export class CircuitOpenError extends Error {
-  constructor(readonly host: string, readonly openUntil: number) {
-    super(`circuit open for ${host}`);
-    this.name = "CircuitOpenError";
-  }
-}
-
-/** Raised for a response the gateway will not retry. */
-export class ProviderRequestError extends Error {
-  constructor(
-    readonly status: number,
-    readonly url: string,
-    readonly body: string,
-  ) {
-    super(`provider request to ${url} failed with ${status}`);
-    this.name = "ProviderRequestError";
-  }
-}
 
 export interface GatewayRequest {
   readonly url: string;

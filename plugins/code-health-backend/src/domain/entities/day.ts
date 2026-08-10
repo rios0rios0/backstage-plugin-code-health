@@ -51,6 +51,22 @@ export const fromStoredDate = (value: Date | string): Day => {
   return `${year}-${month}-${dayOfMonth}`;
 };
 
+/**
+ * The days a window covers *completely*, from its first instant to its last.
+ *
+ * A window that starts or ends mid-day does not cover that day, and saying it
+ * did would make the dashboard offer a range it can only answer part of. The
+ * incremental phase advances in partial days by nature, so this is what keeps
+ * "fetched" honest until the day actually finishes.
+ */
+export const fullyCoveredDays = (from: Date, to: Date): Day[] => {
+  const first = from.getTime() === startOfDay(toDay(from)).getTime() ? toDay(from) : addDays(toDay(from), 1);
+  const lastCandidate = addDays(toDay(to), -1);
+  const endOfLast = startOfDay(addDays(lastCandidate, 1)).getTime();
+  const last = endOfLast <= to.getTime() ? lastCandidate : addDays(lastCandidate, -1);
+  return daysInRange(first, last);
+};
+
 export const isDay = (value: string): boolean =>
   DateTime.fromFormat(value, DAY_FORMAT, { zone: "utc" }).isValid;
 

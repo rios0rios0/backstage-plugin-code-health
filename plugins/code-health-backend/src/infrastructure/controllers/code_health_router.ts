@@ -36,6 +36,7 @@ export const createCodeHealthRouter = (options: CodeHealthRouterOptions): expres
       earliestDay: counts.earliestDay,
       latestDay: counts.latestDay,
       lastIngestedAt: counts.lastIngestedAt?.toISOString() ?? null,
+      freshUntil: counts.freshUntil?.toISOString() ?? null,
       backfill: {
         repositories: counts.repositories,
         complete: counts.complete,

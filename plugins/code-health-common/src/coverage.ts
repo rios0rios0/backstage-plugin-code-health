@@ -31,6 +31,13 @@ export interface CoverageInfo {
   readonly latestDay: string | null;
   /** When the ingestion task last wrote anything, as an ISO 8601 instant. */
   readonly lastIngestedAt: string | null;
+  /**
+   * The instant every tracked repository has data through, as an ISO 8601
+   * instant. This is the real ceiling of what can be asked for, and it runs
+   * ahead of `latestDay`, because the incremental phase collects part-days that
+   * are not recorded as covered until they finish.
+   */
+  readonly freshUntil: string | null;
   readonly backfill: BackfillProgress;
 }
 
