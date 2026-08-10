@@ -109,17 +109,58 @@ Provider access sits behind two ports, so a new forge is an implementation and a
 
 ## Releasing
 
-Follow the changelog process: branch `bump/x.x.x`, move `[Unreleased]` into a dated version heading,
-and set the same version in **all three** `package.json` files. The merge commit must carry
-`chore/bump-x.x.x` or `chore(bump): ...version to x.x.x` — that string is what the pipeline matches
-on.
-
-A new package name needs its own npm trusted-publishing entry before it can ship; `npm trust` has no
-update verb, so this is done once, out of band, with npm 11.5.1 or newer:
+Releases are cut with [AutoBump](https://github.com/rios0rios0/autobump), which reads `[Unreleased]`,
+works out the next version from it, moves those entries under a dated heading, writes the version to
+every `package.json`, and opens the pull request:
 
 ```bash
+autobump -c ~/.autobump.yaml local .
+```
+
+The `-c` is not optional here. AutoBump looks for a config file in the working directory before the
+home directory, under the same names as this repository's `.autobump.yaml`, so running it from the
+repository root without naming the global config makes it read the per-project overrides as the
+global config — which holds no credentials.
+
+`.autobump.yaml` adds `plugins/*/package.json` to the version files AutoBump knows about. Its
+TypeScript defaults cover only the root `package.json`, which in this workspace is private and never
+published, so without that entry a release would leave all three packages on the previous version
+and fail `delivery-publish`'s tag-versus-`package.json` guard.
+
+The version follows from how the changelog entries are written: an entry that **begins** with
+`- **BREAKING CHANGE:**` makes it a major release, anything under `### Added` a minor one, and the
+rest a patch. A breaking change described mid-sentence does not count — put the marker first.
+
+AutoBump names the branch `chore/bump-x.x.x` and the commit `chore(bump): bumped version to x.x.x`.
+Keep both: `delivery-release` matches on that string in the merge commit, and a squash or a rename
+that loses it means no tag and no release.
+
+### A package name that has never been published
+
+CI cannot publish a new name until it has a trusted-publishing entry, and npm cannot create that
+entry until the name exists — `npm trust` posts to `/-/package/<name>/trust`, which returns `E404`
+for a package the registry has never seen. There is no pending-publisher concept. Break the cycle
+once, by hand, with npm 11.5.1 or newer:
+
+```bash
+npm login   # 2FA, 2-hour session
+
+# 1. create the name with a throwaway version, off the `latest` tag
+cd plugins/code-health-backend
+npm version --no-git-tag-version 0.0.1
+npm publish --tag bootstrap --access public   # no --provenance; it only works inside CI
+git checkout -- package.json
+
+# 2. now the trust entry is accepted
 npm trust github @rios0rios0/backstage-plugin-code-health-backend \
   --file default.yaml --repo rios0rios0/backstage-plugin-code-health --allow-publish
-npm trust github @rios0rios0/backstage-plugin-code-health-common \
-  --file default.yaml --repo rios0rios0/backstage-plugin-code-health --allow-publish
+
+# 3. after CI has published the real version, retire the placeholder
+npm dist-tag rm @rios0rios0/backstage-plugin-code-health-backend bootstrap
+npm deprecate @rios0rios0/backstage-plugin-code-health-backend@0.0.1 \
+  'placeholder that created the package for trusted publishing'
 ```
+
+`--allow-publish` is not implied, and the workflow is named with `--file`, not `--workflow`. `npm
+trust` has no update verb — only `github`, `list` and `revoke --id` — so a repository rename is
+handled by adding an entry and revoking the old one.

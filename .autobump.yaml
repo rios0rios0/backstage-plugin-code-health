@@ -1,0 +1,33 @@
+# Per-project AutoBump overrides.
+#
+# AutoBump's TypeScript defaults know exactly one version file, `package.json`.
+# In this workspace that file is the private root, which is never published;
+# the three packages under `plugins/` are what npm actually receives, and
+# `delivery-publish` compares the release tag against each of their `version`
+# fields. A release that moved only the root would leave all three behind and
+# fail that guard, so the glob below is appended to the defaults.
+#
+# `version_files` merges by path: the upstream `package.json` entry is left
+# alone rather than restated here, so its pattern stays upstream's to change.
+#
+# The second pattern moves the range the frontend and the backend declare on
+# `-common`. They ship as one release and a caret range does not cross a major,
+# so leaving it behind publishes two packages whose only sibling dependency
+# cannot resolve to anything that exists.
+#
+# Run the bump from outside this directory, or name the global config
+# explicitly:
+#
+#   autobump -c ~/.autobump.yaml local .
+#
+# AutoBump searches the working directory for a config file before the home
+# directory, and under the same four names this file uses. Running plain
+# `autobump local` from here would read this file as the *global* config, which
+# holds no credentials and no project list.
+languages:
+  typescript:
+    version_files:
+      - path: 'plugins/*/package.json'
+        patterns:
+          - '(\s*"version":\s*")\d+\.\d+\.\d+(",)'
+          - '(\s*"@rios0rios0/backstage-plugin-code-health-common":\s*"\^)\d+\.\d+\.\d+(",)'

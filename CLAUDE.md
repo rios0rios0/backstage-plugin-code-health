@@ -160,13 +160,24 @@ add later, which suppressing the findings by id would not.
 CI runs `rios0rios0/pipelines/.github/workflows/yarn-library.yaml` on every push and pull request.
 There is no deployment target — the artifacts are three npm packages.
 
-Releasing follows the changelog process:
+Releasing is [AutoBump](https://github.com/rios0rios0/autobump)'s job: `autobump -c ~/.autobump.yaml
+local .` reads `[Unreleased]`, derives the version, moves the entries under a dated heading, writes
+that version to all four `package.json` files, branches `chore/bump-x.x.x`, and opens the PR.
 
-1. Branch `bump/x.x.x`, move `[Unreleased]` into a dated version heading and set the same version in
-   **all three** `package.json` files.
-2. Open a PR to `main`. The merge commit must carry `chore/bump-x.x.x` or
-   `chore(bump): ...version to x.x.x` — that string is what the pipeline matches on.
-3. On merge, `delivery-release` (from the shared workflow) cuts the tag and GitHub Release, and
+1. Naming the global config with `-c` is required, not tidiness. AutoBump searches the working
+   directory before `$HOME`, under the same four names `.autobump.yaml` uses, so from the repository
+   root it would otherwise load the per-project overrides *as* the global config and find no
+   credentials in them.
+2. `.autobump.yaml` exists because AutoBump's TypeScript defaults know one version file. Here that is
+   the private workspace root, which is never published, so `plugins/*/package.json` is appended.
+   Without it a release ships three packages still claiming the previous version, and
+   `delivery-publish`'s tag-versus-`package.json` guard fails all three.
+3. The bump level comes from the changelog itself: a line **beginning** `- **BREAKING CHANGE:**` is
+   major, `### Added` is minor, everything else patch. A breaking change explained mid-sentence
+   counts for nothing — this is why the `2.0.0` entries lead with the marker.
+4. The merge commit must keep `chore/bump-x.x.x` or `chore(bump): ...version to x.x.x` — that string
+   is what the pipeline matches on.
+5. On merge, `delivery-release` (from the shared workflow) cuts the tag and GitHub Release, and
    `delivery-publish` (in `.github/workflows/default.yaml`) publishes each package to npm.
 
 `delivery-publish` is repo-local because publishing to a registry is not part of any of the shared
@@ -192,9 +203,15 @@ stored. This is not merely preferable, it is the only automated path with a futu
 classic tokens in December 2025, capped write-scoped granular tokens at 90 days, and 2FA-bypass
 tokens (the only kind usable unattended) lose the ability to publish around January 2027.
 
-**Each package name needs its own trust entry.** They are configured once, out of band. A package
-does not need to exist first: npm accepts a trust entry for a name that has never been published, and
-the first CI run creates the package.
+**Each package name needs its own trust entry, and the package has to exist before you can create
+one.** The endpoint is package-scoped — `POST /-/package/<name>/trust` — so a name npm has never seen
+returns `E404`, whatever the credentials. npm has no pending-publisher concept the way PyPI does.
+That makes the first publish of a new name a chicken-and-egg problem: CI cannot publish it without a
+trust entry, and the trust entry cannot exist without the package. It is broken by publishing once by
+hand, then creating the entry, after which every later release comes from CI.
+
+`1.0.1` recorded the opposite ("a package does not need to exist first"). That was wrong, and cost a
+release cycle when `-backend` and `-common` both returned `E404` on `2.0.0`.
 
 ```bash
 npm login                                                  # 2FA, 2-hour session
@@ -214,9 +231,12 @@ entry is created without the permission CI needs. Both `npm trust` and the OIDC 
 11.5.1 or newer — check `npm --version` before blaming the trust entry, because a version manager's
 default npm is easily older than the system one and reports `npm trust` as an unknown command.
 
-Do not try to bootstrap by hand with `npm publish --provenance` from a workstation. Provenance is
-only generated inside supported CI, so that command fails locally, and dropping the flag to force it
-through would publish an unattested tarball for no reason.
+The bootstrap publish must drop `--provenance`. Provenance is only generated inside supported CI, so
+that flag fails on a workstation; the one hand-published version is therefore unattested, and that is
+the price of creating the name. Keep it off the release: publish a throwaway version under a
+non-`latest` dist-tag, create the trust entry, let CI publish the real one with provenance, then
+deprecate the throwaway. Publishing the release itself by hand would leave the version everybody
+installs as the only unattested one there is.
 
 Publishing must be pinned to the `rios0rios0/backstage-plugin-code-health` repository and the
 `default.yaml` workflow filename. Both halves of that pin are load-bearing: renaming the workflow
