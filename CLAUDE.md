@@ -160,13 +160,24 @@ add later, which suppressing the findings by id would not.
 CI runs `rios0rios0/pipelines/.github/workflows/yarn-library.yaml` on every push and pull request.
 There is no deployment target — the artifacts are three npm packages.
 
-Releasing follows the changelog process:
+Releasing is [AutoBump](https://github.com/rios0rios0/autobump)'s job: `autobump -c ~/.autobump.yaml
+local .` reads `[Unreleased]`, derives the version, moves the entries under a dated heading, writes
+that version to all four `package.json` files, branches `chore/bump-x.x.x`, and opens the PR.
 
-1. Branch `bump/x.x.x`, move `[Unreleased]` into a dated version heading and set the same version in
-   **all three** `package.json` files.
-2. Open a PR to `main`. The merge commit must carry `chore/bump-x.x.x` or
-   `chore(bump): ...version to x.x.x` — that string is what the pipeline matches on.
-3. On merge, `delivery-release` (from the shared workflow) cuts the tag and GitHub Release, and
+1. Naming the global config with `-c` is required, not tidiness. AutoBump searches the working
+   directory before `$HOME`, under the same four names `.autobump.yaml` uses, so from the repository
+   root it would otherwise load the per-project overrides *as* the global config and find no
+   credentials in them.
+2. `.autobump.yaml` exists because AutoBump's TypeScript defaults know one version file. Here that is
+   the private workspace root, which is never published, so `plugins/*/package.json` is appended.
+   Without it a release ships three packages still claiming the previous version, and
+   `delivery-publish`'s tag-versus-`package.json` guard fails all three.
+3. The bump level comes from the changelog itself: a line **beginning** `- **BREAKING CHANGE:**` is
+   major, `### Added` is minor, everything else patch. A breaking change explained mid-sentence
+   counts for nothing — this is why the `2.0.0` entries lead with the marker.
+4. The merge commit must keep `chore/bump-x.x.x` or `chore(bump): ...version to x.x.x` — that string
+   is what the pipeline matches on.
+5. On merge, `delivery-release` (from the shared workflow) cuts the tag and GitHub Release, and
    `delivery-publish` (in `.github/workflows/default.yaml`) publishes each package to npm.
 
 `delivery-publish` is repo-local because publishing to a registry is not part of any of the shared
