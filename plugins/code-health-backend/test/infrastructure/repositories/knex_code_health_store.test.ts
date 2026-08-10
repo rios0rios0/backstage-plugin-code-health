@@ -772,4 +772,88 @@ describe("KnexCodeHealthStore", () => {
       expect(events[0].payload).toBeNull();
     });
   });
+
+  describe("contributor metrics", () => {
+    it("should store and read back measures per contributor", async () => {
+      // given
+      const store = await createStore();
+
+      // when
+      await store.saveContributorMetrics({
+        day: "2026-08-10",
+        capturedAt: NOW,
+        metrics: new Map([
+          ["dev@example.com", { totalSeconds: 3600, dailyAverageSeconds: 120 }],
+          ["other@example.com", { totalSeconds: 60, dailyAverageSeconds: 2 }],
+        ]),
+      });
+
+      // then
+      const metrics = await store.listLatestContributorMetrics("2026-08-10");
+      expect(metrics.get("dev@example.com")).toEqual({
+        totalSeconds: 3600,
+        dailyAverageSeconds: 120,
+      });
+      expect(metrics.size).toBe(2);
+    });
+
+    it("should return the most recent measures at or before the requested day", async () => {
+      // given
+      const store = await createStore();
+      for (const [day, seconds] of [
+        ["2026-08-08", 100],
+        ["2026-08-09", 200],
+        ["2026-08-11", 300],
+      ] as const) {
+        await store.saveContributorMetrics({
+          day,
+          capturedAt: NOW,
+          metrics: new Map([["dev@example.com", { totalSeconds: seconds, dailyAverageSeconds: 1 }]]),
+        });
+      }
+
+      // when
+      const metrics = await store.listLatestContributorMetrics("2026-08-10");
+
+      // then
+      // A later capture must not leak into a past window, or the contributors
+      // view would show today's numbers against last month.
+      expect(metrics.get("dev@example.com")?.totalSeconds).toBe(200);
+    });
+
+    it("should overwrite measures captured twice on the same day", async () => {
+      // given
+      const store = await createStore();
+      const write = (seconds: number) =>
+        store.saveContributorMetrics({
+          day: "2026-08-10",
+          capturedAt: NOW,
+          metrics: new Map([["dev@example.com", { totalSeconds: seconds, dailyAverageSeconds: 1 }]]),
+        });
+
+      // when
+      await write(100);
+      await write(250);
+
+      // then
+      const metrics = await store.listLatestContributorMetrics("2026-08-10");
+      expect(metrics.get("dev@example.com")?.totalSeconds).toBe(250);
+    });
+
+    it("should do nothing when there are no measures to store", async () => {
+      // given
+      const store = await createStore();
+
+      // when
+      await store.saveContributorMetrics({
+        day: "2026-08-10",
+        capturedAt: NOW,
+        metrics: new Map(),
+      });
+
+      // then
+      const metrics = await store.listLatestContributorMetrics("2026-08-10");
+      expect(metrics.size).toBe(0);
+    });
+  });
 });

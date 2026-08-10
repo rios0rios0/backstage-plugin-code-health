@@ -5,6 +5,8 @@ import type {
   CollectedFacts,
   CollectionWindow,
   CollectorContext,
+  ProviderSnapshot,
+  SnapshotContext,
   VcsCollector,
 } from "../../src/domain/services/vcs_collector";
 
@@ -73,6 +75,57 @@ export class StubVcsCollector implements VcsCollector {
 
     return {
       events: this.events.map((event) => ({ ...event, repositoryId: repository.id })),
+      ...(this.facts === undefined ? {} : { repositoryFacts: this.facts }),
+    };
+  }
+
+  private snapshotPayload: ProviderSnapshot["payload"] = {
+    description: null,
+    primaryLanguage: null,
+    visibility: "PUBLIC",
+    isArchived: false,
+    isFork: false,
+    defaultBranch: "main",
+    updatedAt: "2026-08-10T00:00:00.000Z",
+    ciStatus: null,
+    latestRelease: null,
+    latestTag: null,
+    branches: ["main"],
+    complianceStatus: null,
+    badgeStatus: null,
+  };
+
+  private snapshotEvents: CodeHealthEvent[] = [];
+
+  /** Repositories a snapshot was taken of, in order. */
+  readonly snapshots: string[] = [];
+
+  withSnapshot(payload: Partial<ProviderSnapshot["payload"]>): StubVcsCollector {
+    this.snapshotPayload = { ...this.snapshotPayload, ...payload };
+    return this;
+  }
+
+  withSnapshotEvents(events: CodeHealthEvent[]): StubVcsCollector {
+    this.snapshotEvents = events;
+    return this;
+  }
+
+  async snapshot(
+    repository: TrackedRepository,
+    context: SnapshotContext,
+  ): Promise<ProviderSnapshot> {
+    this.snapshots.push(repository.entityRef);
+
+    for (let index = 0; index < this.requestsPerCollect; index += 1) {
+      context.budget.consume();
+    }
+
+    const failure = this.failures.get(repository.entityRef);
+    if (failure) throw failure;
+
+    return {
+      payload: this.snapshotPayload,
+      events: this.snapshotEvents.map((event) => ({ ...event, repositoryId: repository.id })),
       ...(this.facts === undefined ? {} : { repositoryFacts: this.facts }),
     };
   }

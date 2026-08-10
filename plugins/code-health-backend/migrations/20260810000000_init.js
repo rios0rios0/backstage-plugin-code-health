@@ -120,6 +120,18 @@ exports.up = async function up(knex) {
     table.index(['day'], 'code_health_ingested_chunks_day_idx');
   });
 
+  await knex.schema.createTable('code_health_contributor_metrics', table => {
+    table.date('day').notNullable();
+    // Normalised contributor identity, the same key commit events carry, so the
+    // two can be joined without an identity mapping table.
+    table.string('contributor_key', 255).notNullable();
+    table.datetime('captured_at').notNullable();
+    table.text('payload').notNullable();
+
+    table.primary(['day', 'contributor_key']);
+    table.index(['day'], 'code_health_contributor_metrics_day_idx');
+  });
+
   await knex.schema.createTable('code_health_snapshots', table => {
     table
       .string('repository_id', 255)
@@ -141,6 +153,7 @@ exports.up = async function up(knex) {
  */
 exports.down = async function down(knex) {
   await knex.schema.dropTableIfExists('code_health_snapshots');
+  await knex.schema.dropTableIfExists('code_health_contributor_metrics');
   await knex.schema.dropTableIfExists('code_health_ingested_chunks');
   await knex.schema.dropTableIfExists('code_health_events');
   await knex.schema.dropTableIfExists('code_health_ingestion_state');

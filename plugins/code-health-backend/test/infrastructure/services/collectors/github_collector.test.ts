@@ -683,4 +683,177 @@ describe("GithubCollector", () => {
       expect(result.events.filter((event) => event.kind === "build")).toEqual([]);
     });
   });
+
+  describe("snapshot", () => {
+    const snapshotContext = () => ({
+      budget: new RequestBudget(50),
+      projectCache: new Map<string, unknown>(),
+    });
+
+    const snapshotBody = (overrides: Record<string, unknown> = {}) => ({
+      data: {
+        rateLimit: { limit: 5000, remaining: 4999, resetAt: "2026-08-10T13:00:00Z" },
+        repository: {
+          databaseId: 12345,
+          description: "the pipelines",
+          isArchived: false,
+          isFork: false,
+          isPrivate: false,
+          updatedAt: "2026-08-10T02:00:00Z",
+          primaryLanguage: { name: "Go" },
+          defaultBranchRef: {
+            name: "main",
+            target: {
+              oid: "abc123",
+              messageHeadline: "fixed the thing",
+              url: "https://github.com/commit/abc123",
+              statusCheckRollup: { state: "SUCCESS" },
+            },
+          },
+          latestRelease: {
+            tagName: "v1.2.0",
+            name: "1.2.0",
+            publishedAt: "2026-08-09T10:00:00Z",
+            url: "https://github.com/release",
+            isPrerelease: false,
+          },
+          tags: { nodes: [{ name: "v1.2.0", target: { oid: "abc123" } }] },
+          branches: { nodes: [{ name: "main" }, { name: "release" }] },
+          branchProtectionRules: { totalCount: 1 },
+          rulesets: { totalCount: 0 },
+          readme: {
+            text: "![Build Status](https://img.shields.io/github/actions/workflow/status/x/y)",
+          },
+          workflows: { entries: [{ name: "default.yaml", type: "blob" }] },
+          ...overrides,
+        },
+      },
+    });
+
+    it("should assemble everything in a single request", async () => {
+      // given
+      // The previous design spent three requests per repository per dashboard
+      // load on this; one document a day replaces all of them.
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({ body: snapshotBody() }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      expect(server.requests).toHaveLength(1);
+      expect(result.payload).toMatchObject({
+        description: "the pipelines",
+        primaryLanguage: "Go",
+        visibility: "PUBLIC",
+        defaultBranch: "main",
+        branches: ["main", "release"],
+      });
+      expect(result.payload.ciStatus).toMatchObject({ state: "SUCCESS", commitSha: "abc123" });
+      expect(result.payload.latestRelease).toMatchObject({ tagName: "v1.2.0" });
+      expect(result.payload.latestTag).toMatchObject({ name: "v1.2.0" });
+    });
+
+    it("should treat a ruleset as branch protection", async () => {
+      // given
+      // Rulesets are the newer mechanism; a repository configured only with them
+      // would otherwise read as completely unprotected.
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({
+        body: snapshotBody({
+          branchProtectionRules: { totalCount: 0 },
+          rulesets: { totalCount: 2 },
+        }),
+      }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      expect(result.payload.complianceStatus?.branchProtection).toBe(true);
+    });
+
+    it("should report no pipeline when the workflow directory holds no workflow", async () => {
+      // given
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({
+        body: snapshotBody({ workflows: { entries: [{ name: "README.md", type: "blob" }] } }),
+      }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      expect(result.payload.complianceStatus?.pipelineExists).toBe(false);
+    });
+
+    it("should mark a private repository private", async () => {
+      // given
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({ body: snapshotBody({ isPrivate: true }) }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      expect(result.payload.visibility).toBe("PRIVATE");
+    });
+
+    it("should emit a release event for the latest release", async () => {
+      // given
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({ body: snapshotBody() }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0]).toMatchObject({
+        kind: "release",
+        externalId: "v1.2.0",
+        occurredAt: new Date("2026-08-09T10:00:00Z"),
+      });
+    });
+
+    it("should read badges out of the README", async () => {
+      // given
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({ body: snapshotBody() }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      const build = result.payload.badgeStatus?.checks.find(
+        (check) => check.label === "Build Status",
+      );
+      expect(build?.present).toBe(true);
+    });
+
+    it("should leave badges unset when there is no README", async () => {
+      // given
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({ body: snapshotBody({ readme: null }) }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      expect(result.payload.badgeStatus).toBeNull();
+    });
+
+    it("should fail when GitHub returns no repository", async () => {
+      // given
+      // Storing an empty snapshot would overwrite yesterday's real one with
+      // nothing, and that day cannot be recovered.
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({ body: { data: {} } }));
+
+      // when / then
+      await expect(
+        collector.snapshot(aTrackedRepository(), snapshotContext()),
+      ).rejects.toThrow("returned no repository");
+    });
+  });
 });

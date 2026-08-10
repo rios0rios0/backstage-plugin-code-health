@@ -1,5 +1,6 @@
 import type { LoggerService } from "@backstage/backend-plugin-api";
-import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
+import type { CIState, Platform } from "@rios0rios0/backstage-plugin-code-health-common";
+import { parseBadgesFromReadme } from "@rios0rios0/backstage-plugin-code-health-common";
 import type {
   CodeHealthEvent,
   EventOutcome,
@@ -10,9 +11,16 @@ import type {
   CollectedFacts,
   CollectionWindow,
   CollectorContext,
+  ProviderSnapshot,
+  SnapshotContext,
   VcsCollector,
 } from "../../../domain/services/vcs_collector";
 import type { ProviderGateway } from "../../http/provider_gateway";
+import { buildCompliance } from "./compliance";
+import type {
+  GithubSnapshotResponse,
+} from "./github_snapshot_query";
+import { SNAPSHOT_QUERY } from "./github_snapshot_query";
 import type {
   GithubHistoryResponse,
   GithubPullRequestNode,
@@ -101,6 +109,18 @@ query CodeHealthPullRequests($search: String!, $cursor: String) {
   }
 }`;
 
+/**
+ * GitHub's rollup states, mapped onto the dashboard's vocabulary. `EXPECTED`
+ * means a required check has been declared but has not reported yet.
+ */
+const ROLLUP_STATES: ReadonlyMap<string, CIState> = new Map([
+  ["SUCCESS", "SUCCESS"],
+  ["FAILURE", "FAILURE"],
+  ["ERROR", "ERROR"],
+  ["PENDING", "PENDING"],
+  ["EXPECTED", "EXPECTED"],
+]);
+
 const isoOrNull = (value: string | undefined | null): Date | null => {
   if (!value) return null;
   const parsed = new Date(value);
@@ -169,6 +189,119 @@ export class GithubCollector implements VcsCollector {
     return {
       events: [...history.events, ...pullRequests, ...runs],
       repositoryFacts: history.facts,
+    };
+  }
+
+  async snapshot(
+    repository: TrackedRepository,
+    context: SnapshotContext,
+  ): Promise<ProviderSnapshot> {
+    const headers = await this.options.credentials.resolve(repository);
+
+    const body = await this.graphql<GithubSnapshotResponse>(
+      { query: SNAPSHOT_QUERY, variables: { owner: repository.owner, name: repository.name } },
+      headers,
+      context,
+    );
+
+    const node = body.data?.repository;
+    if (!node) throw new Error(`GitHub returned no repository for ${repository.entityRef}`);
+
+    const target = node.defaultBranchRef?.target;
+    const rollup = target?.statusCheckRollup?.state;
+    const latestTag = node.tags?.nodes?.find((tag) => tag?.name);
+    const branches = (node.branches?.nodes ?? [])
+      .map((branch) => branch?.name)
+      .filter((name): name is string => Boolean(name));
+
+    // A repository with a `.github/workflows` directory has CI declared, which
+    // is the same thing the compliance check used to establish with its own
+    // request.
+    const hasWorkflows = (node.workflows?.entries ?? []).some(
+      (entry) => entry.type === "blob" && /\.ya?ml$/.test(entry.name ?? ""),
+    );
+    // Either mechanism protects the branch; rulesets are the newer one and a
+    // repository configured only with those would otherwise read as unprotected.
+    const protectedBranch =
+      (node.branchProtectionRules?.totalCount ?? 0) > 0 ||
+      (node.rulesets?.totalCount ?? 0) > 0;
+
+    const events: CodeHealthEvent[] = [];
+    const releasePublishedAt = isoOrNull(node.latestRelease?.publishedAt);
+    if (node.latestRelease?.tagName && releasePublishedAt) {
+      events.push({
+        repositoryId: repository.id,
+        kind: "release",
+        externalId: node.latestRelease.tagName,
+        occurredAt: releasePublishedAt,
+        actorKey: null,
+        actorName: null,
+        actorAvatarUrl: null,
+        outcome: null,
+        additions: null,
+        deletions: null,
+        changedFiles: null,
+        payload: {
+          tagName: node.latestRelease.tagName,
+          name: node.latestRelease.name ?? null,
+          url: node.latestRelease.url ?? null,
+          isPrerelease: node.latestRelease.isPrerelease ?? false,
+        },
+      });
+    }
+
+    const payload: ProviderSnapshot["payload"] = {
+      description: node.description ?? null,
+      primaryLanguage: node.primaryLanguage?.name ?? null,
+      visibility: node.isPrivate ? "PRIVATE" : "PUBLIC",
+      isArchived: node.isArchived ?? false,
+      isFork: node.isFork ?? false,
+      defaultBranch: node.defaultBranchRef?.name ?? repository.defaultBranch ?? "",
+      updatedAt: node.updatedAt ?? new Date(0).toISOString(),
+      ciStatus:
+        target?.oid === undefined
+          ? null
+          : {
+              state: ROLLUP_STATES.get(rollup ?? "") ?? "NONE",
+              commitSha: target.oid,
+              commitMessage: target.messageHeadline ?? "",
+              commitUrl: target.url ?? "",
+            },
+      latestRelease:
+        node.latestRelease?.tagName === undefined
+          ? null
+          : {
+              tagName: node.latestRelease.tagName,
+              name: node.latestRelease.name ?? node.latestRelease.tagName,
+              publishedAt: node.latestRelease.publishedAt ?? "",
+              url: node.latestRelease.url ?? "",
+              isPrerelease: node.latestRelease.isPrerelease ?? false,
+            },
+      latestTag:
+        latestTag?.name === undefined
+          ? null
+          : { name: latestTag.name, commitSha: latestTag.target?.oid ?? "" },
+      branches,
+      complianceStatus: buildCompliance({
+        pipelineExists: hasWorkflows,
+        // GitHub expresses "a build must pass before merging" as a required
+        // status check inside branch protection, so the two travel together.
+        buildPolicyOnPRs: protectedBranch && hasWorkflows,
+        buildPolicyExpiration: protectedBranch && hasWorkflows,
+        branchProtection: protectedBranch,
+      }),
+      badgeStatus: node.readme?.text ? parseBadgesFromReadme(node.readme.text) : null,
+    };
+
+    return {
+      payload,
+      events,
+      repositoryFacts: {
+        defaultBranch: node.defaultBranchRef?.name ?? repository.defaultBranch,
+        externalId:
+          node.databaseId === undefined ? repository.externalId : String(node.databaseId),
+        archived: node.isArchived ?? false,
+      },
     };
   }
 

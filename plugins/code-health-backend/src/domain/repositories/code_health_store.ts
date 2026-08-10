@@ -1,4 +1,7 @@
-import type { EventKind } from "@rios0rios0/backstage-plugin-code-health-common";
+import type {
+  EventKind,
+  WakaTimeMetrics,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthEvent } from "../entities/code_health_event";
 import type { Day } from "../entities/day";
 import type { IngestionState } from "../entities/ingestion_state";
@@ -98,6 +101,20 @@ export interface CodeHealthStore {
   }): Promise<void>;
 
   saveSnapshot(snapshot: RepositorySnapshot): Promise<void>;
+
+  /**
+   * Stores coding-time measures per contributor for one day. They are keyed by
+   * the same normalised identity commit events carry, so the contributors view
+   * joins them without an identity mapping table.
+   */
+  saveContributorMetrics(options: {
+    day: Day;
+    capturedAt: Date;
+    metrics: ReadonlyMap<string, WakaTimeMetrics>;
+  }): Promise<void>;
+
+  /** The most recent contributor measures at or before `day`. */
+  listLatestContributorMetrics(day: Day): Promise<Map<string, WakaTimeMetrics>>;
 
   /** Most recent snapshot at or before `day`, per repository. */
   listLatestSnapshots(options: {

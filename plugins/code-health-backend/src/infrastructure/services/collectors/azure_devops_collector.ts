@@ -1,5 +1,6 @@
 import type { LoggerService } from "@backstage/backend-plugin-api";
-import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
+import type { CIState, Platform } from "@rios0rios0/backstage-plugin-code-health-common";
+import { parseBadgesFromReadme } from "@rios0rios0/backstage-plugin-code-health-common";
 import type {
   CodeHealthEvent,
   EventOutcome,
@@ -10,10 +11,18 @@ import type {
   CollectedFacts,
   CollectionWindow,
   CollectorContext,
+  ProviderSnapshot,
+  SnapshotContext,
   VcsCollector,
 } from "../../../domain/services/vcs_collector";
 import type { ProviderGateway } from "../../http/provider_gateway";
+import { evaluatePolicies, pickLatestTag } from "./azure_devops_snapshot";
+import { buildCompliance } from "./compliance";
 import type {
+  AdoBuildDefinitionNode,
+  AdoItemNode,
+  AdoPolicyConfigurationNode,
+  AdoRefNode,
   AdoBuildNode,
   AdoCommitNode,
   AdoIdentityNode,
@@ -51,6 +60,13 @@ const BUILD_OUTCOMES: ReadonlyMap<string, EventOutcome> = new Map([
   ["partiallySucceeded", "succeeded"],
   ["failed", "failed"],
   ["canceled", "canceled"],
+]);
+
+const CI_STATES_BY_RESULT: ReadonlyMap<string, CIState> = new Map([
+  ["succeeded", "SUCCESS"],
+  ["partiallySucceeded", "SUCCESS"],
+  ["failed", "FAILURE"],
+  ["canceled", "ERROR"],
 ]);
 
 const PULL_REQUEST_OUTCOMES: ReadonlyMap<string, EventOutcome> = new Map([
@@ -126,6 +142,144 @@ export class AzureDevOpsCollector implements VcsCollector {
         ...(repositoryNode?.isDisabled === undefined ? {} : { archived: repositoryNode.isDisabled }),
       },
     };
+  }
+
+  async snapshot(
+    repository: TrackedRepository,
+    context: SnapshotContext,
+  ): Promise<ProviderSnapshot> {
+    const headers = await this.options.credentials.resolve(repository);
+    const project = this.projectUrl(repository);
+
+    const repositoryNode = await this.getJson<AdoRepositoryNode>(
+      `${project}/_apis/git/repositories/${encodeURIComponent(repository.name)}?api-version=${API_VERSION}`,
+      headers,
+      context,
+    );
+    const repositoryId = repositoryNode.id ?? repository.externalId ?? repository.name;
+    const defaultBranch = repositoryNode.defaultBranch?.replace(/^refs\/heads\//, "") ?? null;
+
+    const [policies, definitions, tags, branches, latestBuild, readme] = await Promise.all([
+      this.projectPolicies(repository, headers, context),
+      this.getJson<AdoListResponse<AdoBuildDefinitionNode>>(
+        `${project}/_apis/build/definitions?repositoryId=${encodeURIComponent(repositoryId)}` +
+          `&repositoryType=TfsGit&api-version=${API_VERSION}`,
+        headers,
+        context,
+      ),
+      this.getJson<AdoListResponse<AdoRefNode>>(
+        `${project}/_apis/git/repositories/${encodeURIComponent(repositoryId)}/refs` +
+          `?filter=tags/&peelTags=true&$top=1000&api-version=${API_VERSION}`,
+        headers,
+        context,
+      ),
+      this.getJson<AdoListResponse<AdoRefNode>>(
+        `${project}/_apis/git/repositories/${encodeURIComponent(repositoryId)}/refs` +
+          `?filter=heads/&$top=1000&api-version=${API_VERSION}`,
+        headers,
+        context,
+      ),
+      this.getJson<AdoListResponse<AdoBuildNode>>(
+        `${project}/_apis/build/builds?repositoryId=${encodeURIComponent(repositoryId)}` +
+          `&repositoryType=TfsGit&$top=1&queryOrder=finishTimeDescending&api-version=${API_VERSION}`,
+        headers,
+        context,
+      ),
+      this.readme(repository, repositoryId, headers, context),
+    ]);
+
+    const findings = evaluatePolicies(policies, repositoryId);
+    const build = latestBuild.value?.[0];
+
+    return {
+      events: [],
+      payload: {
+        description: null,
+        // Azure DevOps has no language detection, so this stays unset rather
+        // than being guessed from file extensions.
+        primaryLanguage: null,
+        // A repository is only reachable by a caller the project already
+        // authorises, so anything visible here is effectively private.
+        visibility: "PRIVATE",
+        isArchived: repositoryNode.isDisabled ?? false,
+        isFork: false,
+        defaultBranch: defaultBranch ?? repository.defaultBranch ?? "",
+        updatedAt: build?.finishTime ?? new Date(0).toISOString(),
+        ciStatus:
+          build === undefined
+            ? null
+            : {
+                state: CI_STATES_BY_RESULT.get(build.result ?? "") ?? "PENDING",
+                commitSha: build.buildNumber ?? "",
+                commitMessage: build.definition?.name ?? "",
+                commitUrl: "",
+              },
+        // Azure DevOps Repos has no release concept. The nearest equivalent is
+        // an Azure Pipelines release, which is a different product that not
+        // every organisation uses, so claiming one here would be an invention.
+        latestRelease: null,
+        latestTag: pickLatestTag(tags.value ?? []),
+        branches: (branches.value ?? [])
+          .map((ref) => (ref.name ?? "").replace(/^refs\/heads\//, ""))
+          .filter((name) => name !== ""),
+        complianceStatus: buildCompliance({
+          pipelineExists: (definitions.value ?? []).length > 0,
+          ...findings,
+        }),
+        badgeStatus: readme === null ? null : parseBadgesFromReadme(readme),
+      },
+      repositoryFacts: {
+        defaultBranch: defaultBranch ?? repository.defaultBranch,
+        externalId: repositoryNode.id ?? repository.externalId,
+        archived: repositoryNode.isDisabled ?? false,
+      },
+    };
+  }
+
+  /**
+   * Branch policies are configured per project, so the list is fetched once per
+   * project and reused for every repository in it during the same pass.
+   *
+   * The previous design fetched this identical payload once per repository —
+   * forty repositories in a project meant forty downloads of the same list —
+   * which was the single largest source of avoidable Azure DevOps traffic.
+   */
+  private async projectPolicies(
+    repository: TrackedRepository,
+    headers: Record<string, string>,
+    context: SnapshotContext,
+  ): Promise<AdoPolicyConfigurationNode[]> {
+    const key = `ado-policies:${repository.host}/${repository.owner}/${repository.project}`;
+    const cached = context.projectCache.get(key);
+    if (cached) return cached as AdoPolicyConfigurationNode[];
+
+    const body = await this.getJson<AdoListResponse<AdoPolicyConfigurationNode>>(
+      `${this.projectUrl(repository)}/_apis/policy/configurations?api-version=${API_VERSION}`,
+      headers,
+      context,
+    );
+    const policies = [...(body.value ?? [])];
+    context.projectCache.set(key, policies);
+    return policies;
+  }
+
+  private async readme(
+    repository: TrackedRepository,
+    repositoryId: string,
+    headers: Record<string, string>,
+    context: SnapshotContext,
+  ): Promise<string | null> {
+    const url =
+      `${this.projectUrl(repository)}/_apis/git/repositories/${encodeURIComponent(repositoryId)}` +
+      `/items?path=/README.md&includeContent=true&api-version=${API_VERSION}`;
+
+    try {
+      const item = await this.getJson<AdoItemNode>(url, headers, context);
+      return item.content ?? null;
+    } catch {
+      // A repository with no README answers 404, which is the common case.
+      return null;
+    }
   }
 
   /**

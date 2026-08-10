@@ -73,3 +73,36 @@ export interface AdoListResponse<T> {
   readonly count?: number;
   readonly value?: readonly T[];
 }
+
+export interface AdoPolicyConfigurationNode {
+  readonly isEnabled?: boolean;
+  readonly isBlocking?: boolean;
+  readonly type?: { readonly id?: string; readonly displayName?: string };
+  readonly settings?: {
+    readonly validDuration?: number;
+    readonly buildDefinitionId?: number;
+    readonly scope?: readonly {
+      readonly repositoryId?: string | null;
+      readonly refName?: string;
+      readonly matchKind?: string;
+    }[];
+  };
+}
+
+export interface AdoBuildDefinitionNode {
+  readonly id?: number;
+  readonly name?: string;
+  readonly path?: string;
+  readonly queueStatus?: string;
+}
+
+export interface AdoRefNode {
+  readonly name?: string;
+  readonly objectId?: string;
+  readonly peeledObjectId?: string;
+}
+
+export interface AdoItemNode {
+  readonly path?: string;
+  readonly content?: string;
+}

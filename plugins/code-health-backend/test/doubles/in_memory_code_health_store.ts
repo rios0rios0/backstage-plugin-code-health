@@ -1,4 +1,7 @@
-import type { EventKind } from "@rios0rios0/backstage-plugin-code-health-common";
+import type {
+  EventKind,
+  WakaTimeMetrics,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthEvent } from "../../src/domain/entities/code_health_event";
 import { eventId } from "../../src/domain/entities/code_health_event";
 import { addDays, daysBetween, toDay, type Day } from "../../src/domain/entities/day";
@@ -32,6 +35,7 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
   private events = new Map<string, CodeHealthEvent>();
   private chunks = new Map<string, Date>();
   private snapshots = new Map<string, RepositorySnapshot>();
+  private contributorMetrics = new Map<string, { day: Day; metrics: WakaTimeMetrics }>();
 
   /** Number of `commitIngestion` calls, so tests can assert on write volume. */
   commitCount = 0;
@@ -185,6 +189,27 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
 
   async saveSnapshot(snapshot: RepositorySnapshot): Promise<void> {
     this.snapshots.set(`${snapshot.repositoryId}:${snapshot.day}`, snapshot);
+  }
+
+  async saveContributorMetrics(options: {
+    day: Day;
+    capturedAt: Date;
+    metrics: ReadonlyMap<string, WakaTimeMetrics>;
+  }): Promise<void> {
+    for (const [key, metrics] of options.metrics) {
+      this.contributorMetrics.set(`${options.day}:${key}`, { day: options.day, metrics });
+    }
+  }
+
+  async listLatestContributorMetrics(day: Day): Promise<Map<string, WakaTimeMetrics>> {
+    const latest = new Map<string, WakaTimeMetrics>();
+    for (const [key, entry] of [...this.contributorMetrics.entries()].sort(([a], [b]) =>
+      a.localeCompare(b),
+    )) {
+      if (entry.day > day) continue;
+      latest.set(key.split(":").slice(1).join(":"), entry.metrics);
+    }
+    return latest;
   }
 
   async listLatestSnapshots(options: {

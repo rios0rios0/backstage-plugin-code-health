@@ -1,5 +1,9 @@
 import { resolvePackagePath, type DatabaseService } from "@backstage/backend-plugin-api";
-import type { EventKind, Platform } from "@rios0rios0/backstage-plugin-code-health-common";
+import type {
+  EventKind,
+  Platform,
+  WakaTimeMetrics,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import type { Knex } from "knex";
 import type { CodeHealthEvent, EventOutcome } from "../../domain/entities/code_health_event";
 import { eventId } from "../../domain/entities/code_health_event";
@@ -30,6 +34,7 @@ const INGESTION_STATE = "code_health_ingestion_state";
 const EVENTS = "code_health_events";
 const CHUNKS = "code_health_ingested_chunks";
 const SNAPSHOTS = "code_health_snapshots";
+const CONTRIBUTOR_METRICS = "code_health_contributor_metrics";
 
 /** Rows are inserted in batches so a large window does not build one huge statement. */
 const INSERT_BATCH_SIZE = 200;
@@ -378,6 +383,45 @@ export class KnexCodeHealthStore implements CodeHealthStore {
       })
       .onConflict(["repository_id", "day"])
       .merge(["captured_at", "payload"]);
+  }
+
+  async saveContributorMetrics(options: {
+    day: Day;
+    capturedAt: Date;
+    metrics: ReadonlyMap<string, WakaTimeMetrics>;
+  }): Promise<void> {
+    const rows = [...options.metrics.entries()].map(([contributorKey, metrics]) => ({
+      day: options.day,
+      contributor_key: contributorKey,
+      captured_at: options.capturedAt,
+      payload: JSON.stringify(metrics),
+    }));
+    if (rows.length === 0) return;
+
+    for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
+      await this.client(CONTRIBUTOR_METRICS)
+        .insert(rows.slice(index, index + INSERT_BATCH_SIZE))
+        .onConflict(["day", "contributor_key"])
+        .merge(["captured_at", "payload"]);
+    }
+  }
+
+  async listLatestContributorMetrics(day: Day): Promise<Map<string, WakaTimeMetrics>> {
+    const rows = await this.client<{
+      day: Date | string;
+      contributor_key: string;
+      payload: string;
+    }>(CONTRIBUTOR_METRICS)
+      .where("day", "<=", day)
+      .orderBy("contributor_key")
+      .orderBy("day", "desc");
+
+    const latest = new Map<string, WakaTimeMetrics>();
+    for (const row of rows) {
+      if (latest.has(row.contributor_key)) continue;
+      latest.set(row.contributor_key, JSON.parse(row.payload) as WakaTimeMetrics);
+    }
+    return latest;
   }
 
   async listLatestSnapshots(options: {

@@ -599,4 +599,161 @@ describe("AzureDevOpsCollector", () => {
       expect(result.events[0].occurredAt).toEqual(new Date("2026-08-09T10:00:00Z"));
     });
   });
+
+  describe("snapshot", () => {
+    const snapshotContext = () => ({
+      budget: new RequestBudget(50),
+      projectCache: new Map<string, unknown>(),
+    });
+
+    const withSnapshotRoutes = () =>
+      server
+        .onPath("/repositories/gateway", () => ({
+          body: { id: "guid-1", defaultBranch: "refs/heads/main", isDisabled: false },
+        }))
+        .on("/policy/configurations", () => ({
+          body: {
+            value: [
+              {
+                isEnabled: true,
+                isBlocking: true,
+                type: { id: "0609b952-1397-4640-95ec-e00a01b2c241" },
+                settings: { validDuration: 720, scope: [{ repositoryId: null }] },
+              },
+            ],
+          },
+        }))
+        .on("/build/definitions", () => ({ body: { value: [{ id: 1, name: "ci" }] } }))
+        .on("/refs", (request) => ({
+          body: {
+            value:
+              request.query.get("filter") === "tags/"
+                ? [
+                    { name: "refs/tags/v1.0.0", objectId: "t1", peeledObjectId: "c1" },
+                    { name: "refs/tags/v1.10.0", objectId: "t2", peeledObjectId: "c2" },
+                  ]
+                : [{ name: "refs/heads/main" }, { name: "refs/heads/release" }],
+          },
+        }))
+        .on("/build/builds", () => ({
+          body: {
+            value: [
+              {
+                id: 5,
+                result: "succeeded",
+                finishTime: "2026-08-10T01:00:00Z",
+                buildNumber: "20260810.1",
+                definition: { name: "ci" },
+              },
+            ],
+          },
+        }))
+        .on("/items", () => ({
+          body: { content: "![Build Status](https://img.shields.io/github/actions/workflow/status/x/y)" },
+        }));
+
+    it("should assemble the repository's current state", async () => {
+      // given
+      const { collector } = createCollector();
+      withSnapshotRoutes();
+
+      // when
+      const result = await collector.snapshot(anAzureRepository(server.baseUrl), snapshotContext());
+
+      // then
+      expect(result.payload).toMatchObject({
+        defaultBranch: "main",
+        isArchived: false,
+        branches: ["main", "release"],
+        latestTag: { name: "v1.10.0", commitSha: "c2" },
+      });
+      expect(result.payload.ciStatus?.state).toBe("SUCCESS");
+    });
+
+    it("should derive compliance from the project's policies", async () => {
+      // given
+      const { collector } = createCollector();
+      withSnapshotRoutes();
+
+      // when
+      const result = await collector.snapshot(anAzureRepository(server.baseUrl), snapshotContext());
+
+      // then
+      expect(result.payload.complianceStatus).toEqual({
+        pipelineExists: true,
+        buildPolicyOnPRs: true,
+        buildPolicyExpiration: true,
+        branchProtection: true,
+        color: "green",
+      });
+    });
+
+    it("should fetch a project's policies once for the whole pass", async () => {
+      // given
+      // This is the single largest request saving in the snapshot: policies are
+      // configured per project, and the previous design downloaded the identical
+      // list once per repository.
+      const { collector } = createCollector();
+      withSnapshotRoutes();
+      const context = snapshotContext();
+
+      // when
+      await collector.snapshot(anAzureRepository(server.baseUrl), context);
+      await collector.snapshot(
+        anAzureRepository(server.baseUrl, { entityRef: "component:default/other" }),
+        context,
+      );
+
+      // then
+      expect(server.requestsFor("/policy/configurations")).toHaveLength(1);
+    });
+
+    it("should read badges out of the README", async () => {
+      // given
+      const { collector } = createCollector();
+      withSnapshotRoutes();
+
+      // when
+      const result = await collector.snapshot(anAzureRepository(server.baseUrl), snapshotContext());
+
+      // then
+      const build = result.payload.badgeStatus?.checks.find(
+        (check) => check.label === "Build Status",
+      );
+      expect(build?.present).toBe(true);
+    });
+
+    it("should tolerate a repository with no README", async () => {
+      // given
+      // A missing README answers 404 and is the common case, not a failure of
+      // the snapshot.
+      const { collector } = createCollector();
+      server
+        .onPath("/repositories/gateway", () => ({ body: { id: "guid-1" } }))
+        .on("/policy/configurations", () => ({ body: { value: [] } }))
+        .on("/build/definitions", () => ({ body: { value: [] } }))
+        .on("/refs", () => ({ body: { value: [] } }))
+        .on("/build/builds", () => ({ body: { value: [] } }))
+        .on("/items", () => ({ status: 404, body: { message: "not found" } }));
+
+      // when
+      const result = await collector.snapshot(anAzureRepository(server.baseUrl), snapshotContext());
+
+      // then
+      expect(result.payload.badgeStatus).toBeNull();
+    });
+
+    it("should not invent a release, because Azure DevOps Repos has none", async () => {
+      // given
+      const { collector } = createCollector();
+      withSnapshotRoutes();
+
+      // when
+      const result = await collector.snapshot(anAzureRepository(server.baseUrl), snapshotContext());
+
+      // then
+      expect(result.payload.latestRelease).toBeNull();
+      expect(result.events).toEqual([]);
+    });
+  });
 });

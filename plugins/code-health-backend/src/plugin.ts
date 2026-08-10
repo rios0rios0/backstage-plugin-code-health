@@ -3,6 +3,7 @@ import { ScmIntegrations } from "@backstage/integration";
 import { catalogServiceRef } from "@backstage/plugin-catalog-node";
 import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
 import { CODE_HEALTH_PLUGIN_ID } from "@rios0rios0/backstage-plugin-code-health-common";
+import { CaptureRepositorySnapshots } from "./domain/commands/capture_repository_snapshots";
 import { DiscoverRepositories } from "./domain/commands/discover_repositories";
 import { IngestRepositoryHistory } from "./domain/commands/ingest_repository_history";
 import type { VcsCollector } from "./domain/services/vcs_collector";
@@ -15,9 +16,12 @@ import { readCodeHealthSettings } from "./infrastructure/services/backstage_sett
 import { AzureDevOpsCollector } from "./infrastructure/services/collectors/azure_devops_collector";
 import { GithubCollector } from "./infrastructure/services/collectors/github_collector";
 import { IntegrationsCredentialsResolver } from "./infrastructure/services/integrations_credentials_resolver";
+import { SonarqubeEnricher } from "./infrastructure/services/sonarqube_enricher";
+import { WakaTimeApiEnricher } from "./infrastructure/services/wakatime_enricher";
 
 export const DISCOVERY_TASK_ID = "code-health.discover";
 export const INGESTION_TASK_ID = "code-health.ingest";
+export const SNAPSHOT_TASK_ID = "code-health.snapshot";
 
 /**
  * Code Health backend plugin.
@@ -36,6 +40,7 @@ export const codeHealthPlugin = createBackendPlugin({
       deps: {
         auth: coreServices.auth,
         catalog: catalogServiceRef,
+        discovery: coreServices.discovery,
         config: coreServices.rootConfig,
         database: coreServices.database,
         httpAuth: coreServices.httpAuth,
@@ -43,7 +48,17 @@ export const codeHealthPlugin = createBackendPlugin({
         logger: coreServices.logger,
         scheduler: coreServices.scheduler,
       },
-      async init({ auth, catalog, config, database, httpAuth, httpRouter, logger, scheduler }) {
+      async init({
+        auth,
+        catalog,
+        config,
+        database,
+        discovery,
+        httpAuth,
+        httpRouter,
+        logger,
+        scheduler,
+      }) {
         const settings = readCodeHealthSettings(config);
         const store = await KnexCodeHealthStore.create({ database });
         const integrations = ScmIntegrations.fromConfig(config);
@@ -91,6 +106,27 @@ export const codeHealthPlugin = createBackendPlugin({
           collectors,
           settings: settings.ingestion,
           logger: logger.child({ task: INGESTION_TASK_ID }),
+        });
+
+        const snapshots = new CaptureRepositorySnapshots({
+          store,
+          collectors,
+          sonar: settings.sonar.enabled
+            ? new SonarqubeEnricher({ gateway, auth, discovery, logger })
+            : null,
+          wakaTime: settings.wakaTime.apiKey
+            ? new WakaTimeApiEnricher({ gateway, settings: settings.wakaTime, logger })
+            : null,
+          settings: settings.ingestion,
+          logger: logger.child({ task: SNAPSHOT_TASK_ID }),
+        });
+
+        await scheduler.scheduleTask({
+          ...settings.ingestion.snapshotSchedule,
+          id: SNAPSHOT_TASK_ID,
+          fn: async (signal) => {
+            await snapshots.run({ now: new Date(), signal });
+          },
         });
 
         await scheduler.scheduleTask({
