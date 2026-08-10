@@ -31,6 +31,18 @@
         "src/**/*.ts",
         "test/**/*.ts"
       ]
+    },
+    "plugins/code-health-backend": {
+      "entry": [
+        "src/index.ts",
+        "dev/index.ts",
+        "test/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.ts",
+        "dev/**/*.ts"
+      ]
     }
   }
 }
