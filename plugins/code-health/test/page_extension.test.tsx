@@ -5,14 +5,14 @@ import { renderInTestApp, TestApiProvider } from "@backstage/test-utils";
 import { CodeHealthPage } from "../src/plugin";
 import { rootRouteRef } from "../src/routes";
 import {
-  codeHealthAuthApiRef,
+  codeHealthCoverageApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthRepositoriesApiRef,
 } from "../src/main/api_refs";
-import { aCodeHealthConfig } from "./builders/code_health_config_builder";
+import { DEFAULT_CODE_HEALTH_CONFIG } from "../src/domain/entities/code_health_config";
 import { StubAppThemeApi } from "./doubles/stub_app_theme_api";
-import { StubAsyncAuthenticationService } from "./doubles/stub_async_authentication_service";
+import { StubCoverageService } from "./doubles/stub_coverage_service";
 import { StubContributorService } from "./doubles/stub_contributor_service";
 import { StubDashboardService } from "./doubles/stub_dashboard_service";
 
@@ -21,13 +21,13 @@ import { StubDashboardService } from "./doubles/stub_dashboard_service";
  * to `rootRouteRef` — which is the only way the lazy `import()` of the router
  * actually runs.
  */
-const renderPage = (authService: StubAsyncAuthenticationService) =>
+const renderPage = (coverageService: StubCoverageService) =>
   renderInTestApp(
     <TestApiProvider
       apis={[
         [appThemeApiRef, new StubAppThemeApi("light")],
-        [codeHealthAuthApiRef, authService],
-        [codeHealthConfigApiRef, aCodeHealthConfig()],
+        [codeHealthCoverageApiRef, coverageService],
+        [codeHealthConfigApiRef, DEFAULT_CODE_HEALTH_CONFIG],
         [codeHealthRepositoriesApiRef, new StubDashboardService().withRepositories([])],
         [codeHealthContributorsApiRef, new StubContributorService().withContributors([])],
       ]}
@@ -40,32 +40,31 @@ const renderPage = (authService: StubAsyncAuthenticationService) =>
   );
 
 describe("CodeHealthPage", () => {
-  it("should lazily load the router and ask for credentials when none are stored", async () => {
+  it("should lazily load the router and render the dashboard", async () => {
     // given
-    const authService = new StubAsyncAuthenticationService();
+    // The extension loads its router through a dynamic import, which only runs
+    // when the page is mounted behind a route bound to its route ref.
+    const coverageService = new StubCoverageService();
 
     // when
-    await renderPage(authService);
-
-    // then
-    await waitFor(() => {
-      expect(screen.getByText("Connect Code Health")).toBeInTheDocument();
-    });
-  });
-
-  it("should lazily load the router and show the dashboard once credentials exist", async () => {
-    // given
-    const authService = new StubAsyncAuthenticationService();
-    authService.setToken("ghp_token");
-    authService.setUsername("acme");
-    authService.setPlatform("github");
-
-    // when
-    await renderPage(authService);
+    await renderPage(coverageService);
 
     // then
     await waitFor(() => {
       expect(screen.getByRole("tab", { name: "Repositories" })).toBeInTheDocument();
+    });
+  });
+
+  it("should surface a missing backend rather than an empty dashboard", async () => {
+    // given
+    const coverageService = new StubCoverageService().withError(new Error("404 Not Found"));
+
+    // when
+    await renderPage(coverageService);
+
+    // then
+    await waitFor(() => {
+      expect(screen.getByText(/The Code Health backend is not reachable/)).toBeInTheDocument();
     });
   });
 });

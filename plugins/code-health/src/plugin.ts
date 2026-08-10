@@ -1,6 +1,6 @@
 import { createPlugin, createRoutableExtension } from "@backstage/core-plugin-api";
 import { codeHealthApis } from "./main/apis";
-import { contributorsRouteRef, rootRouteRef, settingsRouteRef } from "./routes";
+import { contributorsRouteRef, rootRouteRef } from "./routes";
 
 export const codeHealthPlugin = createPlugin({
   id: "code-health",
@@ -8,7 +8,6 @@ export const codeHealthPlugin = createPlugin({
   routes: {
     root: rootRouteRef,
     contributors: contributorsRouteRef,
-    settings: settingsRouteRef,
   },
 });
 

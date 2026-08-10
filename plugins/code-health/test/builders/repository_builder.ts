@@ -1,15 +1,26 @@
-import type { BadgeStatus, CIState, ComplianceStatus, Release, Tag, WorkflowStatus } from "@rios0rios0/backstage-plugin-code-health-common";
-import type { Repository } from "../../src/domain/entities/repository";
+import type {
+  BadgeStatus,
+  CIState,
+  ComplianceStatus,
+  Release,
+  RepositoryActivity,
+  RepositorySummary,
+  Tag,
+  WorkflowStatus,
+} from "@rios0rios0/backstage-plugin-code-health-common";
+import { EMPTY_REPOSITORY_ACTIVITY } from "@rios0rios0/backstage-plugin-code-health-common";
 
 let counter = 0;
 
 export class RepositoryBuilder {
-  private props: Repository;
+  private props: RepositorySummary;
 
   constructor() {
     counter += 1;
     this.props = {
       id: `id-${counter}`,
+      entityRef: `component:default/repo-${counter}`,
+      platform: "github",
       name: `repo-${counter}`,
       fullName: `user/repo-${counter}`,
       url: `https://github.com/user/repo-${counter}`,
@@ -23,11 +34,12 @@ export class RepositoryBuilder {
       ciStatus: null,
       latestRelease: null,
       latestTag: null,
-      hasWorkflows: false,
       branches: ["main"],
       sonarMetrics: null,
       complianceStatus: null,
       badgeStatus: null,
+      wakaTimeMetrics: null,
+      activity: EMPTY_REPOSITORY_ACTIVITY,
     };
   }
 
@@ -57,7 +69,7 @@ export class RepositoryBuilder {
       commitMessage: "test commit",
       commitUrl: `${this.props.url}/commit/abc123`,
     };
-    this.props = { ...this.props, ciStatus, hasWorkflows: true };
+    this.props = { ...this.props, ciStatus };
     return this;
   }
 
@@ -114,7 +126,15 @@ export class RepositoryBuilder {
     return this;
   }
 
-  build(): Repository {
+  withActivity(overrides: Partial<RepositoryActivity>): this {
+    this.props = {
+      ...this.props,
+      activity: { ...EMPTY_REPOSITORY_ACTIVITY, ...overrides },
+    };
+    return this;
+  }
+
+  build(): RepositorySummary {
     return { ...this.props };
   }
 }

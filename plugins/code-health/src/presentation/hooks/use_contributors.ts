@@ -1,44 +1,50 @@
-import { useCallback, useEffect, useState } from "react";
-import type { Contributor } from "../../domain/entities/contributor";
-import type { ContributorService } from "../../domain/services/contributor_service";
+import type {
+  ContributorSummary,
+  TimeWindow,
+} from "@rios0rios0/backstage-plugin-code-health-common";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ContributorService } from "../../domain/services/dashboard_service";
 
 export interface UseContributorsResult {
-  contributors: Contributor[];
+  contributors: ContributorSummary[];
   isLoading: boolean;
   error: string | null;
   lastFetchedAt: Date | null;
-  refetch: (dateFrom?: string | null, dateTo?: string | null) => Promise<void>;
+  refetch: () => Promise<void>;
 }
 
 export const useContributors = (
   contributorService: ContributorService,
+  window: TimeWindow,
   enabled: boolean,
 ): UseContributorsResult => {
-  const [contributors, setContributors] = useState<Contributor[]>([]);
+  const [contributors, setContributors] = useState<ContributorSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
-  const fetchContributors = useCallback(
-    async (dateFrom: string | null = null, dateTo: string | null = null) => {
-      if (!enabled) return;
+  const requestId = useRef(0);
 
-      setIsLoading(true);
-      setError(null);
+  const fetchContributors = useCallback(async () => {
+    if (!enabled) return;
 
-      try {
-        const data = await contributorService.listContributors(dateFrom, dateTo);
-        setContributors(data);
-        setLastFetchedAt(new Date());
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to fetch contributors";
-        setError(message);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [contributorService, enabled],
-  );
+    const current = requestId.current + 1;
+    requestId.current = current;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const items = await contributorService.listContributors(window);
+      if (requestId.current !== current) return;
+      setContributors(items);
+      setLastFetchedAt(new Date());
+    } catch (caught) {
+      if (requestId.current !== current) return;
+      setError(caught instanceof Error ? caught.message : "Failed to fetch contributors");
+    } finally {
+      if (requestId.current === current) setIsLoading(false);
+    }
+  }, [contributorService, enabled, window]);
 
   useEffect(() => {
     fetchContributors();

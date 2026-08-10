@@ -1,9 +1,7 @@
 import { useMemo, useState } from "react";
 import Avatar from "@material-ui/core/Avatar";
 import Box from "@material-ui/core/Box";
-import Button from "@material-ui/core/Button";
 import Link from "@material-ui/core/Link";
-import TextField from "@material-ui/core/TextField";
 import Typography from "@material-ui/core/Typography";
 import { makeStyles } from "@material-ui/core/styles";
 import type { ColumnDef, ColumnFiltersState, SortingState } from "@tanstack/react-table";
@@ -14,16 +12,15 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import type { Contributor } from "../../domain/entities/contributor";
+import type { ContributorSummary } from "@rios0rios0/backstage-plugin-code-health-common";
 import { formatDuration } from "@rios0rios0/backstage-plugin-code-health-common";
 import { DataTable, PaginationControls } from "./data_table";
 import { EmptyCell } from "./empty_cell";
 
 interface ContributorsTableProps {
-  contributors: Contributor[];
+  contributors: ContributorSummary[];
   totalCount: number;
   isLoading: boolean;
-  onDateRangeApply: (dateFrom: string | null, dateTo: string | null) => void;
 }
 
 const formatRate = (rate: number): string => `${rate.toFixed(1)}%`;
@@ -56,23 +53,27 @@ const RateCell = ({ rate }: { rate: number }) => {
 const MetricCell = ({ value }: { value: string | number | null }) =>
   value === null ? <EmptyCell /> : <Typography variant="body2">{value}</Typography>;
 
-const ContributorCell = ({ contributor }: { contributor: Contributor }) => {
+const ContributorCell = ({ contributor }: { contributor: ContributorSummary }) => {
   const classes = useStyles();
   return (
     <Box display="flex" alignItems="center" gridGap={8}>
       <Avatar
-        src={contributor.avatarUrl}
-        alt={contributor.username}
+        src={contributor.avatarUrl ?? undefined}
+        alt={contributor.displayName}
         className={classes.avatar}
       />
-      <Link href={contributor.profileUrl} target="_blank" rel="noopener noreferrer">
-        {contributor.username}
-      </Link>
+      {contributor.profileUrl === null ? (
+        <Typography variant="body2">{contributor.displayName}</Typography>
+      ) : (
+        <Link href={contributor.profileUrl} target="_blank" rel="noopener noreferrer">
+          {contributor.displayName}
+        </Link>
+      )}
     </Box>
   );
 };
 
-const LinesOfCodeCell = ({ contributor }: { contributor: Contributor }) => {
+const LinesOfCodeCell = ({ contributor }: { contributor: ContributorSummary }) => {
   const classes = useStyles();
   return (
     <Box>
@@ -86,21 +87,21 @@ const LinesOfCodeCell = ({ contributor }: { contributor: Contributor }) => {
   );
 };
 
-const columns: ColumnDef<Contributor>[] = [
+const columns: ColumnDef<ContributorSummary>[] = [
   {
-    accessorKey: "username",
+    accessorKey: "displayName",
     header: "Contributor",
     cell: ({ row }) => <ContributorCell contributor={row.original} />,
     filterFn: "includesString",
   },
   {
-    accessorKey: "approvedPRs",
+    accessorKey: "reviewsApproved",
     header: "Approved PRs",
     cell: ({ row }) => (
       <Typography variant="body2" component="span">
-        {row.original.approvedPRs}{" "}
+        {row.original.reviewsApproved}{" "}
         <Typography variant="caption" component="span" color="textSecondary">
-          / {row.original.totalPRs}
+          / {row.original.reviewsGiven}
         </Typography>
       </Typography>
     ),
@@ -125,7 +126,7 @@ const columns: ColumnDef<Contributor>[] = [
       <Box display="flex" alignItems="baseline" gridGap={4}>
         <RateCell rate={row.original.pipelineSuccessRate} />
         <Typography variant="caption" color="textSecondary">
-          ({row.original.successfulPipelineRuns}/{row.original.totalPipelineRuns})
+          ({row.original.pipelineRunsSucceeded}/{row.original.pipelineRuns})
         </Typography>
       </Box>
     ),
@@ -188,7 +189,7 @@ const columns: ColumnDef<Contributor>[] = [
   },
 ];
 
-const wakaTimeColumns: ColumnDef<Contributor>[] = [
+const wakaTimeColumns: ColumnDef<ContributorSummary>[] = [
   {
     id: "totalTime",
     accessorFn: (row) => row.wakaTimeMetrics?.totalSeconds ?? 0,
@@ -215,12 +216,9 @@ export const ContributorsTable = ({
   contributors,
   totalCount,
   isLoading,
-  onDateRangeApply,
 }: ContributorsTableProps) => {
   const [sorting, setSorting] = useState<SortingState>([{ id: "linesOfCode", desc: true }]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
 
   const hasWakaTime = contributors.some((c) => c.wakaTimeMetrics !== null);
   const allColumns = useMemo(
@@ -263,31 +261,6 @@ export const ContributorsTable = ({
           <Typography variant="body2" color="textSecondary">
             {table.getFilteredRowModel().rows.length} of {totalCount} contributors
           </Typography>
-          <TextField
-            type="date"
-            size="small"
-            inputProps={{ "aria-label": "Date from" }}
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-          />
-          <Typography variant="caption" color="textSecondary">
-            to
-          </Typography>
-          <TextField
-            type="date"
-            size="small"
-            inputProps={{ "aria-label": "Date to" }}
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-          />
-          <Button
-            size="small"
-            color="primary"
-            variant="contained"
-            onClick={() => onDateRangeApply(dateFrom || null, dateTo || null)}
-          >
-            Apply
-          </Button>
         </Box>
         <PaginationControls
           pageIndex={table.getState().pagination.pageIndex}

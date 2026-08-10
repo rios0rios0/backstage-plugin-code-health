@@ -6,7 +6,6 @@ describe("ContributorsTable", () => {
   const defaultProps = {
     totalCount: 0,
     isLoading: false,
-    onDateRangeApply: jest.fn(),
   };
 
   it("should render 'No contributors found.' when contributors is empty", () => {
@@ -28,12 +27,12 @@ describe("ContributorsTable", () => {
     expect(skeletonRows.length).toBeGreaterThan(0);
   });
 
-  it("should render contributor rows with avatar, username, PR counts, and LOC", () => {
+  it("should render contributor rows with avatar, displayName, PR counts, and LOC", () => {
     // given
     const contributors = [
       ContributorBuilder.create()
-        .withUsername("alice")
-        .withApprovedPRs(8)
+        .withDisplayName("alice")
+        .withReviewsApproved(8)
         .withLinesOfCode(5000)
         .build(),
     ];
@@ -44,7 +43,6 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -65,7 +63,6 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -86,7 +83,6 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -108,7 +104,6 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -122,7 +117,7 @@ describe("ContributorsTable", () => {
     // given
     const contributors = [
       {
-        ...ContributorBuilder.create().withUsername("alice").build(),
+        ...ContributorBuilder.create().withDisplayName("alice").build(),
         wakaTimeMetrics: { totalSeconds: 3600, dailyAverageSeconds: 1800 },
       },
     ];
@@ -133,7 +128,6 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -152,7 +146,6 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
-        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -161,38 +154,11 @@ describe("ContributorsTable", () => {
     expect(screen.queryByText("Daily Avg")).not.toBeInTheDocument();
   });
 
-  it("should call onDateRangeApply when Apply button is clicked with date inputs", () => {
-    // given
-    const onDateRangeApply = jest.fn();
-    const contributors = [ContributorBuilder.create().build()];
-    render(
-      <ContributorsTable
-        contributors={contributors}
-        totalCount={1}
-        isLoading={false}
-        onDateRangeApply={onDateRangeApply}
-      />,
-    );
-
-    fireEvent.change(screen.getByLabelText("Date from"), {
-      target: { value: "2026-01-01" },
-    });
-    fireEvent.change(screen.getByLabelText("Date to"), {
-      target: { value: "2026-02-01" },
-    });
-
-    // when
-    fireEvent.click(screen.getByText("Apply"));
-
-    // then
-    expect(onDateRangeApply).toHaveBeenCalledWith("2026-01-01", "2026-02-01");
-  });
-
   it("should render contributor count", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("a").build(),
-      ContributorBuilder.create().withUsername("b").build(),
+      ContributorBuilder.create().withDisplayName("a").build(),
+      ContributorBuilder.create().withDisplayName("b").build(),
     ];
 
     // when
@@ -201,7 +167,6 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={5}
         isLoading={false}
-        onDateRangeApply={jest.fn()}
       />,
     );
 
@@ -212,7 +177,7 @@ describe("ContributorsTable", () => {
   it("should show a dash in every Sonar cell of a contributor with no metrics", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("unmeasured").build(),
+      ContributorBuilder.create().withDisplayName("unmeasured").build(),
     ];
     const sonarHeaders = ["Bugs", "Smells", "Vulns", "Hotspots", "Coverage", "Dups", "Debt"];
 
@@ -232,7 +197,7 @@ describe("ContributorsTable", () => {
     // given
     const contributors = [
       ContributorBuilder.create()
-        .withUsername("measured")
+        .withDisplayName("measured")
         .withSonarMetrics({
           bugs: 1,
           codeSmells: 2,
@@ -257,8 +222,8 @@ describe("ContributorsTable", () => {
 
   it("should leave the WakaTime cells empty for a contributor with no tracked time", () => {
     // given
-    const tracked = ContributorBuilder.create().withUsername("tracked").build();
-    const untracked = ContributorBuilder.create().withUsername("untracked").build();
+    const tracked = ContributorBuilder.create().withDisplayName("tracked").build();
+    const untracked = ContributorBuilder.create().withDisplayName("untracked").build();
     const contributors = [
       { ...tracked, wakaTimeMetrics: { totalSeconds: 9000, dailyAverageSeconds: 1800 } },
       untracked,
@@ -272,31 +237,11 @@ describe("ContributorsTable", () => {
     expect(screen.getByText("30m")).toBeInTheDocument();
   });
 
-  it("should apply an open-ended date range when neither bound is filled in", () => {
-    // given
-    const onDateRangeApply = jest.fn();
-    const contributors = [ContributorBuilder.create().withUsername("alice").build()];
-    render(
-      <ContributorsTable
-        {...defaultProps}
-        contributors={contributors}
-        totalCount={1}
-        onDateRangeApply={onDateRangeApply}
-      />,
-    );
-
-    // when
-    fireEvent.click(screen.getByText("Apply"));
-
-    // then
-    expect(onDateRangeApply).toHaveBeenCalledWith(null, null);
-  });
-
   it("should page through more contributors than fit on one page", () => {
     // given
     const contributors = Array.from({ length: 30 }, (_, index) =>
       ContributorBuilder.create()
-        .withUsername(`user-${String(index).padStart(2, "0")}`)
+        .withDisplayName(`user-${String(index).padStart(2, "0")}`)
         .withLinesOfCode(index)
         .build(),
     );

@@ -1,10 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { TIME_RANGES } from "../../../src/domain/entities/time_range";
 import { DashboardToolbar } from "../../../src/presentation/components/dashboard_toolbar";
 
 const defaultProps = {
   lastFetchedAt: null as Date | null,
   refreshInterval: 300000 as const,
   isLoading: false,
+  ranges: TIME_RANGES,
+  selectedRange: "day" as const,
+  onRangeChange: jest.fn(),
   onRefresh: jest.fn(),
   onIntervalChange: jest.fn(),
 };
@@ -82,5 +86,33 @@ describe("DashboardToolbar", () => {
 
     // then
     expect(screen.queryByText(/Last updated/)).not.toBeInTheDocument();
+  });
+
+  it("should offer only the ranges it was given", () => {
+    // given
+    // Offering a year when only a week has been ingested would render an empty
+    // chart that reads as an outage rather than as a backfill still running.
+    const ranges = TIME_RANGES.slice(0, 2);
+
+    // when
+    render(<DashboardToolbar {...defaultProps} ranges={ranges} />);
+
+    // then
+    const select = screen.getByLabelText("Time range");
+    expect(select).toBeInTheDocument();
+    expect(screen.getByText("Last hour")).toBeInTheDocument();
+    expect(screen.queryByText("Last 365 days")).not.toBeInTheDocument();
+  });
+
+  it("should report the range a user picked", () => {
+    // given
+    const onRangeChange = jest.fn();
+    render(<DashboardToolbar {...defaultProps} onRangeChange={onRangeChange} />);
+
+    // when
+    fireEvent.change(screen.getByLabelText("Time range"), { target: { value: "month" } });
+
+    // then
+    expect(onRangeChange).toHaveBeenCalledWith("month");
   });
 });

@@ -1,38 +1,21 @@
-import type { IntegrationTarget } from "./integration_target";
-import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
-import type { SonarType } from "./sonar_type";
+import type { TimeRangeId } from "./time_range";
+import { DEFAULT_RANGE_ID } from "./time_range";
 
 /**
- * Values an administrator pinned in `app-config.yaml`. They take precedence over
- * anything a user configures in the Settings page, and the affected fields are
- * rendered read-only.
+ * The handful of values an administrator can pin in `app-config.yaml`.
+ *
+ * Everything that used to live here — the platform, the organisation, provider
+ * base URLs and proxy paths — moved to the backend. The catalog decides which
+ * repositories exist and the host application's `integrations` block supplies
+ * the credentials, so there is nothing left for a browser to be told.
  */
 export interface CodeHealthConfig {
-  readonly platform: Platform | null;
-  readonly organization: string | null;
+  /** Auto-refresh interval in milliseconds, or null for the built-in default. */
   readonly refreshIntervalMs: number | null;
-  readonly sonarType: SonarType | null;
-  readonly sonarBaseUrl: string | null;
-  readonly sonarOrganization: string | null;
-  /** Targets reachable through a Backstage proxy endpoint, so no browser-side token is needed. */
-  readonly proxied: Readonly<Record<IntegrationTarget, boolean>>;
+  readonly defaultRange: TimeRangeId;
 }
 
-export const EMPTY_CODE_HEALTH_CONFIG: CodeHealthConfig = {
-  platform: null,
-  organization: null,
+export const DEFAULT_CODE_HEALTH_CONFIG: CodeHealthConfig = {
   refreshIntervalMs: null,
-  sonarType: null,
-  sonarBaseUrl: null,
-  sonarOrganization: null,
-  proxied: {
-    github: false,
-    "azure-devops": false,
-    sonar: false,
-    wakatime: false,
-  },
+  defaultRange: DEFAULT_RANGE_ID,
 };
-
-/** A target needs a user supplied token only when it is not fronted by a proxy. */
-export const requiresToken = (config: CodeHealthConfig, target: IntegrationTarget): boolean =>
-  !config.proxied[target];

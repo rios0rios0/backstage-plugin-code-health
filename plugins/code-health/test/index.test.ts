@@ -20,25 +20,24 @@ describe("public API", () => {
 
   it("should re-export the same route refs the routes module defines", () => {
     // given / when
-    const { contributorsRouteRef, rootRouteRef, settingsRouteRef } = publicApi;
+    const { contributorsRouteRef, rootRouteRef } = publicApi;
 
     // then
     expect(rootRouteRef).toBe(routes.rootRouteRef);
     expect(contributorsRouteRef).toBe(routes.contributorsRouteRef);
-    expect(settingsRouteRef).toBe(routes.settingsRouteRef);
   });
 
   it("should re-export every API ref so consumers can override an implementation", () => {
     // given / when
     const {
-      codeHealthAuthApiRef,
+      codeHealthCoverageApiRef,
       codeHealthConfigApiRef,
       codeHealthContributorsApiRef,
       codeHealthRepositoriesApiRef,
     } = publicApi;
 
     // then
-    expect(codeHealthAuthApiRef).toBe(apiRefs.codeHealthAuthApiRef);
+    expect(codeHealthCoverageApiRef).toBe(apiRefs.codeHealthCoverageApiRef);
     expect(codeHealthConfigApiRef).toBe(apiRefs.codeHealthConfigApiRef);
     expect(codeHealthContributorsApiRef).toBe(apiRefs.codeHealthContributorsApiRef);
     expect(codeHealthRepositoriesApiRef).toBe(apiRefs.codeHealthRepositoriesApiRef);
@@ -48,14 +47,13 @@ describe("public API", () => {
     // given
     const expected = [
       "CodeHealthPage",
-      "codeHealthAuthApiRef",
       "codeHealthConfigApiRef",
       "codeHealthContributorsApiRef",
+      "codeHealthCoverageApiRef",
       "codeHealthPlugin",
       "codeHealthRepositoriesApiRef",
       "contributorsRouteRef",
       "rootRouteRef",
-      "settingsRouteRef",
     ];
 
     // when

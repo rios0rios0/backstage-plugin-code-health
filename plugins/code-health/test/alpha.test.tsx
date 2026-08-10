@@ -1,5 +1,5 @@
 import codeHealthFrontendPlugin, {
-  codeHealthAuthApi,
+  codeHealthCoverageApi,
   codeHealthConfigApi,
   codeHealthContributorsApi,
   codeHealthPage,
@@ -24,10 +24,10 @@ describe("alpha entry point", () => {
   it("should attach every API extension to the app's API surface", () => {
     // given
     const apiExtensions = [
-      codeHealthAuthApi,
       codeHealthConfigApi,
       codeHealthRepositoriesApi,
       codeHealthContributorsApi,
+      codeHealthCoverageApi,
     ];
 
     // when
@@ -35,10 +35,10 @@ describe("alpha entry point", () => {
 
     // then
     expect(descriptions).toEqual([
-      "ExtensionDefinition{kind=api,name=auth,attachTo=root@apis}",
       "ExtensionDefinition{kind=api,name=config,attachTo=root@apis}",
       "ExtensionDefinition{kind=api,name=repositories,attachTo=root@apis}",
       "ExtensionDefinition{kind=api,name=contributors,attachTo=root@apis}",
+      "ExtensionDefinition{kind=api,name=coverage,attachTo=root@apis}",
     ]);
   });
 
@@ -53,10 +53,10 @@ describe("alpha entry point", () => {
   it("should register every API extension plus the page on the plugin", () => {
     // given
     const ids = [
-      "api:code-health/auth",
       "api:code-health/config",
       "api:code-health/repositories",
       "api:code-health/contributors",
+      "api:code-health/coverage",
       "page:code-health",
     ] as const;
 

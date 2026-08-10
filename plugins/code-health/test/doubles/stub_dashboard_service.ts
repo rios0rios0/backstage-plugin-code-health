@@ -1,13 +1,19 @@
-import type { Repository } from "../../src/domain/entities/repository";
+import type {
+  RepositorySummary,
+  TimeWindow,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import type { DashboardService } from "../../src/domain/services/dashboard_service";
 
 export class StubDashboardService implements DashboardService {
-  private result: Repository[] = [];
+  private result: RepositorySummary[] = [];
   private error: Error | null = null;
-  callCount = 0;
 
-  withRepositories(repos: Repository[]): this {
-    this.result = repos;
+  callCount = 0;
+  /** Windows each call was made with, so a range change is observable. */
+  readonly windows: TimeWindow[] = [];
+
+  withRepositories(repositories: RepositorySummary[]): this {
+    this.result = repositories;
     return this;
   }
 
@@ -16,8 +22,9 @@ export class StubDashboardService implements DashboardService {
     return this;
   }
 
-  async listRepositories(): Promise<Repository[]> {
-    this.callCount++;
+  async listRepositories(window: TimeWindow): Promise<RepositorySummary[]> {
+    this.callCount += 1;
+    this.windows.push(window);
     if (this.error) throw this.error;
     return this.result;
   }

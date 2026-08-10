@@ -1,100 +1,91 @@
 import {
   Content,
   Header,
-  HeaderLabel,
   Page,
   Progress,
   TabbedLayout,
+  WarningPanel,
 } from "@backstage/core-components";
 import { useApi } from "@backstage/core-plugin-api";
-import { AuthGate } from "../presentation/components/auth_gate";
+import Box from "@material-ui/core/Box";
 import { ThemeToggleButton } from "../presentation/components/theme_toggle_button";
-import { useAuthentication } from "../presentation/hooks/use_authentication";
+import { useCoverage } from "../presentation/hooks/use_coverage";
 import { ContributorsPage } from "../presentation/pages/contributors_page";
 import { DashboardPage } from "../presentation/pages/dashboard_page";
-import { SettingsPage } from "../presentation/pages/settings_page";
 import {
-  codeHealthAuthApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
+  codeHealthCoverageApiRef,
   codeHealthRepositoriesApiRef,
 } from "./api_refs";
 
-const PLATFORM_LABELS = {
-  github: "GitHub",
-  "azure-devops": "Azure DevOps",
-} as const;
-
 /**
- * Routable entry point of the plugin. It wires the Backstage utility APIs into
- * the presentation layer and hosts the three tabs of the dashboard.
+ * Routable entry point of the plugin.
+ *
+ * The credential gate this used to open with is gone. There is nothing for a
+ * user to configure: the backend discovers repositories from the catalog and
+ * authenticates through the host application's `integrations` block, so the
+ * only thing worth checking before rendering is whether that backend is
+ * reachable.
  */
 export const Router = () => {
-  const authApi = useApi(codeHealthAuthApiRef);
   const config = useApi(codeHealthConfigApiRef);
   const dashboardService = useApi(codeHealthRepositoriesApiRef);
   const contributorService = useApi(codeHealthContributorsApiRef);
-  const auth = useAuthentication(authApi, config);
-
-  if (!auth.isReady) {
-    return (
-      <Page themeId="tool">
-        <Header title="Code Health" />
-        <Content>
-          <Progress />
-        </Content>
-      </Page>
-    );
-  }
-
-  if (!auth.isConfigured) {
-    return (
-      <Page themeId="tool">
-        <Header title="Code Health" subtitle="Not configured yet">
-          <ThemeToggleButton />
-        </Header>
-        <Content>
-          <AuthGate onLogin={auth.login} error={null} />
-        </Content>
-      </Page>
-    );
-  }
-
-  const platform = auth.effectivePlatform ?? "github";
+  const coverageService = useApi(codeHealthCoverageApiRef);
+  const coverage = useCoverage(coverageService);
 
   return (
     <Page themeId="tool">
-      <Header title="Code Health" subtitle={auth.effectiveOrganization ?? undefined}>
-        <HeaderLabel label="Platform" value={PLATFORM_LABELS[platform]} />
+      <Header title="Code Health" subtitle="Repository health across your catalog">
         <ThemeToggleButton />
       </Header>
 
-      <TabbedLayout>
-        <TabbedLayout.Route path="/" title="Repositories">
-          <DashboardPage dashboardService={dashboardService} />
-        </TabbedLayout.Route>
+      {coverage.isLoading && !coverage.coverage ? (
+        <Content>
+          <Progress />
+        </Content>
+      ) : (
+        <TabbedLayout>
+          <TabbedLayout.Route path="/" title="Repositories">
+            {coverage.error ? (
+              <Box mb={2}>
+                <WarningPanel
+                  severity="error"
+                  title="The Code Health backend is not reachable"
+                  message={`${coverage.error}. Install @rios0rios0/backstage-plugin-code-health-backend in your Backstage backend.`}
+                  defaultExpanded
+                />
+              </Box>
+            ) : (
+              <DashboardPage
+                dashboardService={dashboardService}
+                coverage={coverage}
+                config={config}
+              />
+            )}
+          </TabbedLayout.Route>
 
-        <TabbedLayout.Route path="/contributors" title="Contributors">
-          <ContributorsPage contributorService={contributorService} />
-        </TabbedLayout.Route>
-
-        <TabbedLayout.Route path="/settings" title="Settings">
-          <SettingsPage
-            token={auth.token ?? ""}
-            username={auth.effectiveOrganization ?? ""}
-            platform={platform}
-            sonarToken={auth.sonarToken}
-            sonarType={auth.sonarType}
-            sonarUrl={auth.sonarUrl}
-            wakaTimeToken={auth.wakaTimeToken}
-            config={config}
-            onUpdateVcs={auth.updateVcsCredentials}
-            onUpdateSonar={auth.updateSonarConfig}
-            onUpdateWakaTime={auth.updateWakaTimeToken}
-            onForgetCredentials={auth.logout}
-          />
-        </TabbedLayout.Route>
-      </TabbedLayout>
+          <TabbedLayout.Route path="/contributors" title="Contributors">
+            {coverage.error ? (
+              <Box mb={2}>
+                <WarningPanel
+                  severity="error"
+                  title="The Code Health backend is not reachable"
+                  message={coverage.error}
+                  defaultExpanded
+                />
+              </Box>
+            ) : (
+              <ContributorsPage
+                contributorService={contributorService}
+                coverage={coverage}
+                config={config}
+              />
+            )}
+          </TabbedLayout.Route>
+        </TabbedLayout>
+      )}
     </Page>
   );
 };

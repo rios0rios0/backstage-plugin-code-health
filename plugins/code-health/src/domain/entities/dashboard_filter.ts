@@ -1,4 +1,4 @@
-import type { Repository } from "./repository";
+import type { RepositorySummary } from "@rios0rios0/backstage-plugin-code-health-common";
 
 export type CIFilter = "all" | "passing" | "failing" | "no-ci";
 export type ReleaseFilter = "all" | "has-release" | "no-release";
@@ -27,23 +27,23 @@ export const DEFAULT_FILTER: DashboardFilter = {
   sortDirection: "asc",
 };
 
-const matchesCIFilter = (repo: Repository, filter: CIFilter): boolean => {
+const matchesCIFilter = (repo: RepositorySummary, filter: CIFilter): boolean => {
   if (filter === "all") return true;
   if (filter === "no-ci") return repo.ciStatus === null;
   if (filter === "passing") return repo.ciStatus?.state === "SUCCESS";
   return repo.ciStatus !== null && repo.ciStatus.state !== "SUCCESS";
 };
 
-const matchesReleaseFilter = (repo: Repository, filter: ReleaseFilter): boolean => {
+const matchesReleaseFilter = (repo: RepositorySummary, filter: ReleaseFilter): boolean => {
   if (filter === "all") return true;
   if (filter === "has-release") return repo.latestRelease !== null;
   return repo.latestRelease === null;
 };
 
 export const filterRepositories = (
-  repositories: readonly Repository[],
+  repositories: readonly RepositorySummary[],
   filter: DashboardFilter,
-): Repository[] => {
+): RepositorySummary[] => {
   return repositories.filter((repo) => {
     if (filter.searchQuery && !repo.name.toLowerCase().includes(filter.searchQuery.toLowerCase())) {
       return false;
@@ -67,10 +67,10 @@ const CI_STATE_ORDER: Record<string, number> = {
 };
 
 export const sortRepositories = (
-  repositories: readonly Repository[],
+  repositories: readonly RepositorySummary[],
   field: SortField,
   direction: SortDirection,
-): Repository[] => {
+): RepositorySummary[] => {
   const sorted = [...repositories].sort((a, b) => {
     switch (field) {
       case "name":

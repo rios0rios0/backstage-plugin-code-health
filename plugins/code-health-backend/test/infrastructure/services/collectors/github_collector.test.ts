@@ -843,6 +843,74 @@ describe("GithubCollector", () => {
       expect(result.payload.badgeStatus).toBeNull();
     });
 
+    it("should render a snapshot when the payload omits everything optional", async () => {
+      // given
+      // A token without full scopes, or a repository with no default branch,
+      // returns almost nothing. Losing the whole day's snapshot to a
+      // `TypeError` would be worse than storing a sparse one.
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({ body: { data: { repository: {} } } }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      expect(result.payload).toMatchObject({
+        description: null,
+        primaryLanguage: null,
+        visibility: "PUBLIC",
+        isArchived: false,
+        isFork: false,
+        ciStatus: null,
+        latestRelease: null,
+        latestTag: null,
+        branches: [],
+        badgeStatus: null,
+      });
+      expect(result.events).toEqual([]);
+      expect(result.payload.complianceStatus).toMatchObject({
+        pipelineExists: false,
+        branchProtection: false,
+        color: "red",
+      });
+    });
+
+    it("should not emit a release event for a release with no publication date", async () => {
+      // given
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({
+        body: snapshotBody({ latestRelease: { tagName: "v1.0.0" } }),
+      }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      // The event stream is keyed on when things happened; an undated release
+      // has nowhere to sit in it.
+      expect(result.events).toEqual([]);
+      expect(result.payload.latestRelease).toMatchObject({ tagName: "v1.0.0" });
+    });
+
+    it("should report an unrecognised rollup state as none", async () => {
+      // given
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({
+        body: snapshotBody({
+          defaultBranchRef: {
+            name: "main",
+            target: { oid: "abc123", statusCheckRollup: { state: "SOMETHING_NEW" } },
+          },
+        }),
+      }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      expect(result.payload.ciStatus?.state).toBe("NONE");
+    });
+
     it("should fail when GitHub returns no repository", async () => {
       // given
       // Storing an empty snapshot would overwrite yesterday's real one with

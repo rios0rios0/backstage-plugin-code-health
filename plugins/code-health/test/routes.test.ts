@@ -1,8 +1,4 @@
-import {
-  contributorsRouteRef,
-  rootRouteRef,
-  settingsRouteRef,
-} from "../src/routes";
+import { contributorsRouteRef, rootRouteRef } from "../src/routes";
 
 describe("routes", () => {
   it("should expose a root route ref identified as the plugin", () => {
@@ -20,22 +16,5 @@ describe("routes", () => {
     // then
     expect(path).toBe("/contributors");
     expect(contributorsRouteRef.parent).toBe(rootRouteRef);
-  });
-
-  it("should mount the settings sub route under the root route", () => {
-    // given / when
-    const path = settingsRouteRef.path;
-
-    // then
-    expect(path).toBe("/settings");
-    expect(settingsRouteRef.parent).toBe(rootRouteRef);
-  });
-
-  it("should keep the two sub routes distinct", () => {
-    // given / when
-    const paths = [contributorsRouteRef.path, settingsRouteRef.path];
-
-    // then
-    expect(new Set(paths).size).toBe(2);
   });
 });

@@ -6,9 +6,9 @@ import {
 import { compatWrapper, convertLegacyRouteRef } from "@backstage/core-compat-api";
 import AssessmentIcon from "@material-ui/icons/Assessment";
 import {
-  codeHealthAuthApiFactory,
   codeHealthConfigApiFactory,
   codeHealthContributorsApiFactory,
+  codeHealthCoverageApiFactory,
   codeHealthRepositoriesApiFactory,
 } from "./main/apis";
 import { rootRouteRef } from "./routes";
@@ -22,9 +22,9 @@ import { rootRouteRef } from "./routes";
  * through `compatWrapper`, exactly as the community plugins do.
  */
 
-export const codeHealthAuthApi = ApiBlueprint.make({
-  name: "auth",
-  params: (defineParams) => defineParams(codeHealthAuthApiFactory),
+export const codeHealthCoverageApi = ApiBlueprint.make({
+  name: "coverage",
+  params: (defineParams) => defineParams(codeHealthCoverageApiFactory),
 });
 
 export const codeHealthConfigApi = ApiBlueprint.make({
@@ -57,10 +57,10 @@ export const codeHealthPage = PageBlueprint.make({
 export default createFrontendPlugin({
   pluginId: "code-health",
   extensions: [
-    codeHealthAuthApi,
     codeHealthConfigApi,
     codeHealthRepositoriesApi,
     codeHealthContributorsApi,
+    codeHealthCoverageApi,
     codeHealthPage,
   ],
 });

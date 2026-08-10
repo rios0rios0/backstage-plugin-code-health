@@ -1,9 +1,9 @@
-import type { Contributor } from "./contributor";
+import type { ContributorSummary } from "@rios0rios0/backstage-plugin-code-health-common";
 
 export type ContributorSortField =
-  | "username"
+  | "displayName"
   | "linesOfCode"
-  | "approvedPRs"
+  | "reviewsApproved"
   | "prApprovalRate"
   | "pipelineSuccessRate"
   | "bugs"
@@ -33,13 +33,13 @@ export const DEFAULT_CONTRIBUTOR_FILTER: ContributorFilter = {
 };
 
 export const filterContributors = (
-  contributors: readonly Contributor[],
+  contributors: readonly ContributorSummary[],
   filter: ContributorFilter,
-): Contributor[] => {
+): ContributorSummary[] => {
   return contributors.filter((contributor) => {
     if (
       filter.searchQuery &&
-      !contributor.username.toLowerCase().includes(filter.searchQuery.toLowerCase())
+      !contributor.displayName.toLowerCase().includes(filter.searchQuery.toLowerCase())
     ) {
       return false;
     }
@@ -58,7 +58,7 @@ const parseTechnicalDebt = (debt: string): number => {
   return minutes;
 };
 
-const getSonarNumericValue = (contributor: Contributor, field: ContributorSortField): number => {
+const getSonarNumericValue = (contributor: ContributorSummary, field: ContributorSortField): number => {
   if (!contributor.sonarMetrics) return 0;
   switch (field) {
     case "bugs":
@@ -81,18 +81,18 @@ const getSonarNumericValue = (contributor: Contributor, field: ContributorSortFi
 };
 
 export const sortContributors = (
-  contributors: readonly Contributor[],
+  contributors: readonly ContributorSummary[],
   field: ContributorSortField,
   direction: SortDirection,
-): Contributor[] => {
+): ContributorSummary[] => {
   const sorted = [...contributors].sort((a, b) => {
     switch (field) {
-      case "username":
-        return a.username.localeCompare(b.username);
+      case "displayName":
+        return a.displayName.localeCompare(b.displayName);
       case "linesOfCode":
         return a.linesOfCode - b.linesOfCode;
-      case "approvedPRs":
-        return a.approvedPRs - b.approvedPRs;
+      case "reviewsApproved":
+        return a.reviewsApproved - b.reviewsApproved;
       case "prApprovalRate":
         return a.prApprovalRate - b.prApprovalRate;
       case "pipelineSuccessRate":

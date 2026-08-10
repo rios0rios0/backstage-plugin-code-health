@@ -1,10 +1,6 @@
-import { CodeHealthPage, codeHealthPlugin } from "../src/plugin";
 import { codeHealthApis } from "../src/main/apis";
-import {
-  contributorsRouteRef,
-  rootRouteRef,
-  settingsRouteRef,
-} from "../src/routes";
+import { CodeHealthPage, codeHealthPlugin } from "../src/plugin";
+import { contributorsRouteRef, rootRouteRef } from "../src/routes";
 
 describe("codeHealthPlugin", () => {
   it("should be registered under the plugin id the package declares", () => {
@@ -12,6 +8,8 @@ describe("codeHealthPlugin", () => {
     const id = codeHealthPlugin.getId();
 
     // then
+    // The backend plugin claims the same id, which is what makes
+    // `discoveryApi.getBaseUrl` resolve to it.
     expect(id).toBe("code-health");
   });
 
@@ -20,23 +18,24 @@ describe("codeHealthPlugin", () => {
     const apis = [...codeHealthPlugin.getApis()];
 
     // then
+    // The credential API is gone: there is nothing left for a browser to hold
+    // now that the backend authenticates through `integrations`.
     expect(apis).toHaveLength(codeHealthApis.length);
     expect(apis.map((api) => api.api.id).sort()).toEqual([
-      "plugin.code-health.auth",
       "plugin.code-health.config",
       "plugin.code-health.contributors",
+      "plugin.code-health.coverage",
       "plugin.code-health.repositories",
     ]);
   });
 
-  it("should publish the root route and both sub routes", () => {
+  it("should publish the root route and the contributors sub route", () => {
     // given / when
     const routes = codeHealthPlugin.routes;
 
     // then
     expect(routes.root).toBe(rootRouteRef);
     expect(routes.contributors).toBe(contributorsRouteRef);
-    expect(routes.settings).toBe(settingsRouteRef);
   });
 
   it("should provide the page as a renderable routable extension", () => {

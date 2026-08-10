@@ -1,14 +1,34 @@
-import type { Repository } from "../entities/repository";
+import type {
+  ContributorSummary,
+  CoverageInfo,
+  RepositorySummary,
+  TimeWindow,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 
 /**
- * Contract consumed by the presentation layer. Credentials and the target
- * organization are resolved internally from app-config and user settings.
+ * Everything the dashboard reads.
+ *
+ * All three are answered by the Code Health backend from data it already
+ * ingested, so the browser never contacts a version control provider and a
+ * dashboard load costs the same regardless of how many repositories exist.
  */
 export interface DashboardService {
-  listRepositories(): Promise<Repository[]>;
+  listRepositories(window: TimeWindow): Promise<RepositorySummary[]>;
 }
 
-/** Contract implemented by the platform specific services (GitHub, Azure DevOps). */
-export interface PlatformDashboardService {
-  listRepositories(token: string, username: string): Promise<Repository[]>;
+export interface ContributorService {
+  listContributors(window: TimeWindow, repositoryId?: string): Promise<ContributorSummary[]>;
+}
+
+/**
+ * How much history the backend has collected.
+ *
+ * The dashboard uses this to bound its range picker: a freshly installed plugin
+ * can only answer for the last few hours, and the selectable window widens
+ * backwards from today as the backfill advances.
+ */
+export interface CoverageService {
+  getCoverage(): Promise<CoverageInfo>;
+  /** Asks the backend to run its ingestion tasks now. */
+  refresh(): Promise<void>;
 }

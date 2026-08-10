@@ -2,12 +2,17 @@ import Box from "@material-ui/core/Box";
 import Button from "@material-ui/core/Button";
 import TextField from "@material-ui/core/TextField";
 import Typography from "@material-ui/core/Typography";
+import type { TimeRange, TimeRangeId } from "../../domain/entities/time_range";
 import type { RefreshInterval } from "../hooks/use_auto_refresh";
 
 interface DashboardToolbarProps {
   lastFetchedAt: Date | null;
   refreshInterval: RefreshInterval;
   isLoading: boolean;
+  /** Only the ranges the backend has ingested enough history to answer for. */
+  ranges: readonly TimeRange[];
+  selectedRange: TimeRangeId;
+  onRangeChange: (range: TimeRangeId) => void;
   onRefresh: () => void;
   onIntervalChange: (interval: RefreshInterval) => void;
 }
@@ -26,6 +31,9 @@ export const DashboardToolbar = ({
   lastFetchedAt,
   refreshInterval,
   isLoading,
+  ranges,
+  selectedRange,
+  onRangeChange,
   onRefresh,
   onIntervalChange,
 }: DashboardToolbarProps) => (
@@ -39,8 +47,23 @@ export const DashboardToolbar = ({
     <TextField
       select
       size="small"
+      value={selectedRange}
+      onChange={(event) => onRangeChange(event.target.value as TimeRangeId)}
+      SelectProps={{ native: true }}
+      inputProps={{ "aria-label": "Time range", "data-test-subj": "timeRangeSelect" }}
+    >
+      {ranges.map((range) => (
+        <option key={range.id} value={range.id}>
+          {range.label}
+        </option>
+      ))}
+    </TextField>
+
+    <TextField
+      select
+      size="small"
       value={refreshInterval}
-      onChange={(e) => onIntervalChange(Number(e.target.value) as RefreshInterval)}
+      onChange={(event) => onIntervalChange(Number(event.target.value) as RefreshInterval)}
       SelectProps={{ native: true }}
       inputProps={{ "aria-label": "Auto refresh interval" }}
     >

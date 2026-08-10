@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
-import type { Repository } from "../../domain/entities/repository";
+import type {
+  RepositorySummary,
+  TimeWindow,
+} from "@rios0rios0/backstage-plugin-code-health-common";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { DashboardService } from "../../domain/services/dashboard_service";
 
 export interface UseRepositoriesResult {
-  repositories: Repository[];
+  repositories: RepositorySummary[];
   isLoading: boolean;
   error: string | null;
   lastFetchedAt: Date | null;
@@ -12,30 +15,38 @@ export interface UseRepositoriesResult {
 
 export const useRepositories = (
   dashboardService: DashboardService,
+  window: TimeWindow,
   enabled: boolean,
 ): UseRepositoriesResult => {
-  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [repositories, setRepositories] = useState<RepositorySummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetchedAt, setLastFetchedAt] = useState<Date | null>(null);
 
+  // Incremented per request so a slow reply for a window the user has already
+  // moved on from cannot overwrite the one they are looking at.
+  const requestId = useRef(0);
+
   const fetchRepositories = useCallback(async () => {
     if (!enabled) return;
 
+    const current = requestId.current + 1;
+    requestId.current = current;
     setIsLoading(true);
     setError(null);
 
     try {
-      const repos = await dashboardService.listRepositories();
-      setRepositories(repos);
+      const items = await dashboardService.listRepositories(window);
+      if (requestId.current !== current) return;
+      setRepositories(items);
       setLastFetchedAt(new Date());
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to fetch repositories";
-      setError(message);
+    } catch (caught) {
+      if (requestId.current !== current) return;
+      setError(caught instanceof Error ? caught.message : "Failed to fetch repositories");
     } finally {
-      setIsLoading(false);
+      if (requestId.current === current) setIsLoading(false);
     }
-  }, [dashboardService, enabled]);
+  }, [dashboardService, enabled, window]);
 
   useEffect(() => {
     fetchRepositories();

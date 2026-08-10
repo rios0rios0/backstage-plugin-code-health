@@ -1,18 +1,40 @@
 export { CodeHealthPage, codeHealthPlugin } from "./plugin";
-export { contributorsRouteRef, rootRouteRef, settingsRouteRef } from "./routes";
+export { contributorsRouteRef, rootRouteRef } from "./routes";
 export {
-  codeHealthAuthApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
+  codeHealthCoverageApiRef,
   codeHealthRepositoriesApiRef,
 } from "./main/api_refs";
 
-export type { BadgeCheck, BadgeColor, BadgeStatus, CIState, ComplianceColor, ComplianceStatus, Platform, QualityGateStatus, Release, SonarMetrics, Tag, WakaTimeMetrics, WorkflowStatus } from "@rios0rios0/backstage-plugin-code-health-common";
-export type { Contributor } from "./domain/entities/contributor";
 export type { CodeHealthConfig } from "./domain/entities/code_health_config";
-export type { IntegrationTarget } from "./domain/entities/integration_target";
-export type { Repository } from "./domain/entities/repository";
-export type { SonarType } from "./domain/entities/sonar_type";
-export type { AuthenticationService } from "./domain/services/authentication_service";
-export type { ContributorService } from "./domain/services/contributor_service";
-export type { DashboardService } from "./domain/services/dashboard_service";
+export type { TimeRange, TimeRangeId } from "./domain/entities/time_range";
+export type {
+  ContributorService,
+  CoverageService,
+  DashboardService,
+} from "./domain/services/dashboard_service";
+
+/**
+ * The wire types are re-exported so a consumer embedding a table of their own
+ * does not have to depend on the common package directly.
+ */
+export type {
+  BadgeCheck,
+  BadgeColor,
+  BadgeStatus,
+  CIState,
+  ComplianceColor,
+  ComplianceStatus,
+  ContributorSummary,
+  CoverageInfo,
+  Platform,
+  QualityGateStatus,
+  Release,
+  RepositoryActivity,
+  RepositorySummary,
+  SonarMetrics,
+  Tag,
+  WakaTimeMetrics,
+  WorkflowStatus,
+} from "@rios0rios0/backstage-plugin-code-health-common";

@@ -96,11 +96,7 @@
       "**/*.{ts,tsx}",
       "!**/*.d.ts",
       "!setupTests.ts",
-      "!domain/entities/repository.ts",
-      "!domain/entities/contributor.ts",
-      "!domain/repositories/**",
-      "!domain/services/**",
-      "!service/mappers/*_node.ts"
+      "!domain/services/**"
     ]
   },
   "exports": {

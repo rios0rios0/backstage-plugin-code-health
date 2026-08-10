@@ -10,8 +10,8 @@ describe("filterContributors", () => {
   it("should return all contributors when no filters are active", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("alice").build(),
-      ContributorBuilder.create().withUsername("bob").build(),
+      ContributorBuilder.create().withDisplayName("alice").build(),
+      ContributorBuilder.create().withDisplayName("bob").build(),
     ];
 
     // when
@@ -21,11 +21,11 @@ describe("filterContributors", () => {
     expect(result).toHaveLength(2);
   });
 
-  it("should filter by search query matching username case-insensitively", () => {
+  it("should filter by search query matching displayName case-insensitively", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("alice").build(),
-      ContributorBuilder.create().withUsername("bob").build(),
+      ContributorBuilder.create().withDisplayName("alice").build(),
+      ContributorBuilder.create().withDisplayName("bob").build(),
     ];
 
     // when
@@ -36,13 +36,13 @@ describe("filterContributors", () => {
 
     // then
     expect(result).toHaveLength(1);
-    expect(result[0].username).toBe("alice");
+    expect(result[0].displayName).toBe("alice");
   });
 
   it("should return empty array when search query matches no contributors", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("alice").build(),
+      ContributorBuilder.create().withDisplayName("alice").build(),
     ];
 
     // when
@@ -60,80 +60,80 @@ describe("sortContributors", () => {
   it("should sort by lines of code descending", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("small").withLinesOfCode(100).build(),
-      ContributorBuilder.create().withUsername("large").withLinesOfCode(5000).build(),
-      ContributorBuilder.create().withUsername("medium").withLinesOfCode(1000).build(),
+      ContributorBuilder.create().withDisplayName("small").withLinesOfCode(100).build(),
+      ContributorBuilder.create().withDisplayName("large").withLinesOfCode(5000).build(),
+      ContributorBuilder.create().withDisplayName("medium").withLinesOfCode(1000).build(),
     ];
 
     // when
     const result = sortContributors(contributors, "linesOfCode", "desc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["large", "medium", "small"]);
+    expect(result.map((c) => c.displayName)).toEqual(["large", "medium", "small"]);
   });
 
-  it("should sort by username ascending", () => {
+  it("should sort by displayName ascending", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("charlie").build(),
-      ContributorBuilder.create().withUsername("alice").build(),
-      ContributorBuilder.create().withUsername("bob").build(),
+      ContributorBuilder.create().withDisplayName("charlie").build(),
+      ContributorBuilder.create().withDisplayName("alice").build(),
+      ContributorBuilder.create().withDisplayName("bob").build(),
     ];
 
     // when
-    const result = sortContributors(contributors, "username", "asc");
+    const result = sortContributors(contributors, "displayName", "asc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["alice", "bob", "charlie"]);
+    expect(result.map((c) => c.displayName)).toEqual(["alice", "bob", "charlie"]);
   });
 
   it("should sort by approved PRs descending", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("few").withApprovedPRs(2).build(),
-      ContributorBuilder.create().withUsername("many").withApprovedPRs(20).build(),
+      ContributorBuilder.create().withDisplayName("few").withReviewsApproved(2).build(),
+      ContributorBuilder.create().withDisplayName("many").withReviewsApproved(20).build(),
     ];
 
     // when
-    const result = sortContributors(contributors, "approvedPRs", "desc");
+    const result = sortContributors(contributors, "reviewsApproved", "desc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["many", "few"]);
+    expect(result.map((c) => c.displayName)).toEqual(["many", "few"]);
   });
 
   it("should sort by PR approval rate ascending", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("high").withPrApprovalRate(95).build(),
-      ContributorBuilder.create().withUsername("low").withPrApprovalRate(50).build(),
+      ContributorBuilder.create().withDisplayName("high").withPrApprovalRate(95).build(),
+      ContributorBuilder.create().withDisplayName("low").withPrApprovalRate(50).build(),
     ];
 
     // when
     const result = sortContributors(contributors, "prApprovalRate", "asc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["low", "high"]);
+    expect(result.map((c) => c.displayName)).toEqual(["low", "high"]);
   });
 
   it("should sort by pipeline success rate descending", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("unstable").withPipelineSuccessRate(40).build(),
-      ContributorBuilder.create().withUsername("stable").withPipelineSuccessRate(98).build(),
+      ContributorBuilder.create().withDisplayName("unstable").withPipelineSuccessRate(40).build(),
+      ContributorBuilder.create().withDisplayName("stable").withPipelineSuccessRate(98).build(),
     ];
 
     // when
     const result = sortContributors(contributors, "pipelineSuccessRate", "desc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["stable", "unstable"]);
+    expect(result.map((c) => c.displayName)).toEqual(["stable", "unstable"]);
   });
 
   it("should sort by Sonar bugs with null metrics treated as zero", () => {
     // given
     const contributors = [
       ContributorBuilder.create()
-        .withUsername("buggy")
+        .withDisplayName("buggy")
         .withSonarMetrics({
           bugs: 10,
           codeSmells: 0,
@@ -145,21 +145,21 @@ describe("sortContributors", () => {
           qualityGateStatus: "NONE",
         })
         .build(),
-      ContributorBuilder.create().withUsername("clean").build(),
+      ContributorBuilder.create().withDisplayName("clean").build(),
     ];
 
     // when
     const result = sortContributors(contributors, "bugs", "desc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["buggy", "clean"]);
+    expect(result.map((c) => c.displayName)).toEqual(["buggy", "clean"]);
   });
 });
 
 describe("sortContributors by Sonar metrics", () => {
-  const withSonar = (username: string, overrides: Partial<SonarMetrics>) =>
+  const withSonar = (displayName: string, overrides: Partial<SonarMetrics>) =>
     ContributorBuilder.create()
-      .withUsername(username)
+      .withDisplayName(displayName)
       .withSonarMetrics({
         bugs: 0,
         codeSmells: 0,
@@ -190,7 +190,7 @@ describe("sortContributors by Sonar metrics", () => {
     const result = sortContributors(contributors, field, "desc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["high", "low"]);
+    expect(result.map((c) => c.displayName)).toEqual(["high", "low"]);
   });
 
   it("should rank technical debt by its parsed duration, not its string form", () => {
@@ -205,7 +205,7 @@ describe("sortContributors by Sonar metrics", () => {
     const result = sortContributors(contributors, "technicalDebt", "asc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["oneHour", "ninetyMinutes", "twoDays"]);
+    expect(result.map((c) => c.displayName)).toEqual(["oneHour", "ninetyMinutes", "twoDays"]);
   });
 
   it("should treat an unparseable technical debt string as no debt", () => {
@@ -219,7 +219,7 @@ describe("sortContributors by Sonar metrics", () => {
     const result = sortContributors(contributors, "technicalDebt", "asc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["unknown", "someDebt"]);
+    expect(result.map((c) => c.displayName)).toEqual(["unknown", "someDebt"]);
   });
 
   it("should combine days, hours and minutes when ranking technical debt", () => {
@@ -233,14 +233,14 @@ describe("sortContributors by Sonar metrics", () => {
     const result = sortContributors(contributors, "technicalDebt", "desc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["dayPlus", "dayOnly"]);
+    expect(result.map((c) => c.displayName)).toEqual(["dayPlus", "dayOnly"]);
   });
 
   it("should keep the original order when the sort field is not recognised", () => {
     // given
     const contributors = [
-      ContributorBuilder.create().withUsername("second").build(),
-      ContributorBuilder.create().withUsername("first").build(),
+      ContributorBuilder.create().withDisplayName("second").build(),
+      ContributorBuilder.create().withDisplayName("first").build(),
     ];
 
     // when
@@ -251,20 +251,20 @@ describe("sortContributors by Sonar metrics", () => {
     );
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["second", "first"]);
+    expect(result.map((c) => c.displayName)).toEqual(["second", "first"]);
   });
 
   it("should treat a contributor without Sonar metrics as zero on every Sonar field", () => {
     // given
     const contributors = [
       withSonar("measured", { coverage: 80 }),
-      ContributorBuilder.create().withUsername("unmeasured").build(),
+      ContributorBuilder.create().withDisplayName("unmeasured").build(),
     ];
 
     // when
     const result = sortContributors(contributors, "coverage", "desc");
 
     // then
-    expect(result.map((c) => c.username)).toEqual(["measured", "unmeasured"]);
+    expect(result.map((c) => c.displayName)).toEqual(["measured", "unmeasured"]);
   });
 });

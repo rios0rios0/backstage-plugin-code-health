@@ -1,27 +1,36 @@
-import type { Contributor } from "../../src/domain/entities/contributor";
-import type { SonarMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
+import type {
+  ContributorSummary,
+  SonarMetrics,
+  WakaTimeMetrics,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 
 let counter = 0;
 
 export class ContributorBuilder {
-  private props: Contributor;
+  private props: ContributorSummary;
 
   constructor() {
     counter += 1;
     this.props = {
-      username: `user-${counter}`,
+      key: `user-${counter}`,
+      displayName: `user-${counter}`,
       avatarUrl: `https://avatars.githubusercontent.com/user-${counter}`,
       profileUrl: `https://github.com/user-${counter}`,
-      approvedPRs: 5,
-      totalPRs: 10,
-      rejectedPRs: 2,
-      linesOfCode: 1000,
+      commits: 25,
       linesAdded: 700,
       linesDeleted: 300,
-      prApprovalRate: 80,
+      linesOfCode: 400,
+      changedFiles: 40,
+      pullRequestsOpened: 10,
+      pullRequestsMerged: 8,
+      reviewsGiven: 10,
+      reviewsApproved: 5,
+      reviewsRejected: 2,
+      prApprovalRate: 50,
+      pipelineRuns: 10,
+      pipelineRunsSucceeded: 9,
       pipelineSuccessRate: 90,
-      totalPipelineRuns: 10,
-      successfulPipelineRuns: 9,
+      repositories: 3,
       sonarMetrics: null,
       wakaTimeMetrics: null,
     };
@@ -31,13 +40,20 @@ export class ContributorBuilder {
     return new ContributorBuilder();
   }
 
-  withUsername(username: string): this {
+  withDisplayName(displayName: string): this {
     this.props = {
       ...this.props,
-      username,
-      profileUrl: `https://github.com/${username}`,
-      avatarUrl: `https://avatars.githubusercontent.com/${username}`,
+      key: displayName,
+      displayName,
+      profileUrl: `https://github.com/${displayName}`,
+      avatarUrl: `https://avatars.githubusercontent.com/${displayName}`,
     };
+    return this;
+  }
+
+  /** A commit author with no linked account, which is common on Azure DevOps. */
+  withoutProfile(): this {
+    this.props = { ...this.props, avatarUrl: null, profileUrl: null };
     return this;
   }
 
@@ -46,8 +62,8 @@ export class ContributorBuilder {
     return this;
   }
 
-  withApprovedPRs(count: number): this {
-    this.props = { ...this.props, approvedPRs: count };
+  withReviewsApproved(count: number): this {
+    this.props = { ...this.props, reviewsApproved: count };
     return this;
   }
 
@@ -66,7 +82,12 @@ export class ContributorBuilder {
     return this;
   }
 
-  build(): Contributor {
+  withWakaTimeMetrics(metrics: WakaTimeMetrics): this {
+    this.props = { ...this.props, wakaTimeMetrics: metrics };
+    return this;
+  }
+
+  build(): ContributorSummary {
     return { ...this.props };
   }
 }

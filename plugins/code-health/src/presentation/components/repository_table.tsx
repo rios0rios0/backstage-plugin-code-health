@@ -14,7 +14,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import type { Repository } from "../../domain/entities/repository";
+import type { RepositorySummary } from "@rios0rios0/backstage-plugin-code-health-common";
 import { BadgeStatusCell } from "./badge_status_cell";
 import { ComplianceBadge } from "./compliance_badge";
 import { DataTable, PaginationControls } from "./data_table";
@@ -23,7 +23,7 @@ import { StateChip } from "./state_chip";
 import { StatusBadge } from "./status_badge";
 
 interface RepositoryTableProps {
-  repositories: Repository[];
+  repositories: RepositorySummary[];
   totalCount: number;
   isLoading: boolean;
 }
@@ -63,7 +63,7 @@ const BranchesCell = ({
   branches,
   defaultBranch,
 }: {
-  branches: string[];
+  branches: readonly string[];
   defaultBranch: string;
 }) => {
   const classes = useBranchStyles();
@@ -129,7 +129,7 @@ const DefaultBranchCell = ({ branch }: { branch: string }) => {
 const MetricCell = ({ value }: { value: string | number | null }) =>
   value === null ? <EmptyCell /> : <Typography variant="body2">{value}</Typography>;
 
-const columns: ColumnDef<Repository>[] = [
+const columns: ColumnDef<RepositorySummary>[] = [
   {
     accessorKey: "fullName",
     header: "Repository",
@@ -162,7 +162,7 @@ const columns: ColumnDef<Repository>[] = [
   },
   {
     id: "branches",
-    accessorFn: (row) => row.branches.filter((b) => b !== row.defaultBranch).length,
+    accessorFn: (row) => row.branches.filter((branch) => branch !== row.defaultBranch).length,
     header: "Branches",
     cell: ({ row }) => (
       <BranchesCell branches={row.original.branches} defaultBranch={row.original.defaultBranch} />
