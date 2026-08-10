@@ -135,12 +135,32 @@ AutoBump names the branch `chore/bump-x.x.x` and the commit `chore(bump): bumped
 Keep both: `delivery-release` matches on that string in the merge commit, and a squash or a rename
 that loses it means no tag and no release.
 
-A new package name needs its own npm trusted-publishing entry before it can ship; `npm trust` has no
-update verb, so this is done once, out of band, with npm 11.5.1 or newer:
+### A package name that has never been published
+
+CI cannot publish a new name until it has a trusted-publishing entry, and npm cannot create that
+entry until the name exists — `npm trust` posts to `/-/package/<name>/trust`, which returns `E404`
+for a package the registry has never seen. There is no pending-publisher concept. Break the cycle
+once, by hand, with npm 11.5.1 or newer:
 
 ```bash
+npm login   # 2FA, 2-hour session
+
+# 1. create the name with a throwaway version, off the `latest` tag
+cd plugins/code-health-backend
+npm version --no-git-tag-version 0.0.1
+npm publish --tag bootstrap --access public   # no --provenance; it only works inside CI
+git checkout -- package.json
+
+# 2. now the trust entry is accepted
 npm trust github @rios0rios0/backstage-plugin-code-health-backend \
   --file default.yaml --repo rios0rios0/backstage-plugin-code-health --allow-publish
-npm trust github @rios0rios0/backstage-plugin-code-health-common \
-  --file default.yaml --repo rios0rios0/backstage-plugin-code-health --allow-publish
+
+# 3. after CI has published the real version, retire the placeholder
+npm dist-tag rm @rios0rios0/backstage-plugin-code-health-backend bootstrap
+npm deprecate @rios0rios0/backstage-plugin-code-health-backend@0.0.1 \
+  'placeholder that created the package for trusted publishing'
 ```
+
+`--allow-publish` is not implied, and the workflow is named with `--file`, not `--workflow`. `npm
+trust` has no update verb — only `github`, `list` and `revoke --id` — so a repository rename is
+handled by adding an entry and revoking the old one.

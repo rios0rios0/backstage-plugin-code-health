@@ -10,6 +10,11 @@
 # `version_files` merges by path: the upstream `package.json` entry is left
 # alone rather than restated here, so its pattern stays upstream's to change.
 #
+# The second pattern moves the range the frontend and the backend declare on
+# `-common`. They ship as one release and a caret range does not cross a major,
+# so leaving it behind publishes two packages whose only sibling dependency
+# cannot resolve to anything that exists.
+#
 # Run the bump from outside this directory, or name the global config
 # explicitly:
 #
@@ -23,4 +28,6 @@ languages:
   typescript:
     version_files:
       - path: 'plugins/*/package.json'
-        patterns: ['(\s*"version":\s*")\d+\.\d+\.\d+(",)']
+        patterns:
+          - '(\s*"version":\s*")\d+\.\d+\.\d+(",)'
+          - '(\s*"@rios0rios0/backstage-plugin-code-health-common":\s*"\^)\d+\.\d+\.\d+(",)'

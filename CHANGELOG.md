@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- fixed the range the frontend and the backend declare on `@rios0rios0/backstage-plugin-code-health-common`, which was still `^1.0.1`. A caret range does not cross a major, and `-common` has never been published at `1.x` at all, so both packages would have shipped depending on something no registry could resolve. `.autobump.yaml` now carries that range as a version file pattern, so it moves with the release rather than being remembered
+- fixed the claim that npm accepts a trusted-publishing entry for a name it has never seen. It does not: `npm trust` posts to `/-/package/<name>/trust`, which returns `E404` for a package that does not exist, and npm has no pending-publisher concept. A new name has to be created by one hand publish before CI can ever publish it, which `1.0.1` had recorded backwards
 - fixed the `security > sca:yarn-audit` and `security > sca:trivy` jobs, both of which had been failing on `main`
 - fixed the installation guide overstating how the sidebar entry appears. The page emits a title and icon and the new frontend system derives a nav entry from those, but an app that replaces the sidebar with its own `NavContentBlueprint` places items explicitly and can drop it silently. The README now names the extension IDs (`page:code-health`, plus the four `api:code-health/*`) that such an app needs for `nav.take(...)` and `app.extensions`, and states outright that there is no `nav-item:code-health` to reference.
 

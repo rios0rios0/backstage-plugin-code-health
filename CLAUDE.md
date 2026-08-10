@@ -203,9 +203,15 @@ stored. This is not merely preferable, it is the only automated path with a futu
 classic tokens in December 2025, capped write-scoped granular tokens at 90 days, and 2FA-bypass
 tokens (the only kind usable unattended) lose the ability to publish around January 2027.
 
-**Each package name needs its own trust entry.** They are configured once, out of band. A package
-does not need to exist first: npm accepts a trust entry for a name that has never been published, and
-the first CI run creates the package.
+**Each package name needs its own trust entry, and the package has to exist before you can create
+one.** The endpoint is package-scoped — `POST /-/package/<name>/trust` — so a name npm has never seen
+returns `E404`, whatever the credentials. npm has no pending-publisher concept the way PyPI does.
+That makes the first publish of a new name a chicken-and-egg problem: CI cannot publish it without a
+trust entry, and the trust entry cannot exist without the package. It is broken by publishing once by
+hand, then creating the entry, after which every later release comes from CI.
+
+`1.0.1` recorded the opposite ("a package does not need to exist first"). That was wrong, and cost a
+release cycle when `-backend` and `-common` both returned `E404` on `2.0.0`.
 
 ```bash
 npm login                                                  # 2FA, 2-hour session
@@ -225,9 +231,12 @@ entry is created without the permission CI needs. Both `npm trust` and the OIDC 
 11.5.1 or newer — check `npm --version` before blaming the trust entry, because a version manager's
 default npm is easily older than the system one and reports `npm trust` as an unknown command.
 
-Do not try to bootstrap by hand with `npm publish --provenance` from a workstation. Provenance is
-only generated inside supported CI, so that command fails locally, and dropping the flag to force it
-through would publish an unattested tarball for no reason.
+The bootstrap publish must drop `--provenance`. Provenance is only generated inside supported CI, so
+that flag fails on a workstation; the one hand-published version is therefore unattested, and that is
+the price of creating the name. Keep it off the release: publish a throwaway version under a
+non-`latest` dist-tag, create the trust entry, let CI publish the real one with provenance, then
+deprecate the throwaway. Publishing the release itself by hand would leave the version everybody
+installs as the only unattested one there is.
 
 Publishing must be pinned to the `rios0rios0/backstage-plugin-code-health` repository and the
 `default.yaml` workflow filename. Both halves of that pin are load-bearing: renaming the workflow
