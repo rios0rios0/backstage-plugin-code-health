@@ -1,78 +1,30 @@
 {
-  "name": "@rios0rios0/backstage-plugin-code-health",
+  "name": "backstage-plugin-code-health-root",
   "version": "1.0.1",
-  "description": "Backstage frontend plugin that shows CI status, releases, tags, compliance checks and contributor metrics for every GitHub and Azure DevOps repository",
+  "description": "Monorepo root for the Code Health Backstage plugin packages",
   "license": "MIT",
+  "private": true,
   "packageManager": "yarn@4.12.0",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "sideEffects": false,
-  "files": [
-    "dist",
-    "config.d.ts",
-    "CHANGELOG.md",
-    "LICENSE",
-    "README.md"
+  "workspaces": [
+    "plugins/*"
   ],
-  "backstage": {
-    "role": "frontend-plugin",
-    "pluginId": "code-health",
-    "pluginPackages": [
-      "@rios0rios0/backstage-plugin-code-health"
-    ]
-  },
-  "configSchema": "config.d.ts",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/rios0rios0/backstage-plugin-code-health.git"
   },
   "homepage": "https://github.com/rios0rios0/backstage-plugin-code-health#readme",
   "bugs": "https://github.com/rios0rios0/backstage-plugin-code-health/issues",
-  "keywords": [
-    "backstage",
-    "backstage-plugin",
-    "code-health",
-    "github",
-    "azure-devops",
-    "sonarcloud",
-    "wakatime",
-    "ci"
-  ],
-  "publishConfig": {
-    "access": "public",
-    "main": "dist/index.esm.js",
-    "module": "dist/index.esm.js",
-    "types": "dist/index.d.ts"
-  },
   "scripts": {
-    "start": "backstage-cli package start",
-    "build": "tsc && backstage-cli package build",
+    "build": "tsc && backstage-cli repo build --all",
     "typecheck": "tsc",
-    "clean": "backstage-cli package clean && rm -rf dist-types",
-    "lint": "backstage-cli package lint --fix",
-    "lint:ci": "backstage-cli package lint",
-    "test": "backstage-cli package test --watch=false",
-    "test:ci": "backstage-cli package test --watch=false --coverage --reporters=default --reporters=jest-junit",
-    "test:watch": "backstage-cli package test",
-    "prepack": "backstage-cli package prepack",
-    "postpack": "backstage-cli package postpack"
+    "clean": "backstage-cli repo clean && rm -rf dist-types coverage",
+    "lint": "backstage-cli repo lint --fix",
+    "lint:ci": "backstage-cli repo lint",
+    "test": "backstage-cli repo test --watch=false",
+    "test:ci": "backstage-cli repo test --watch=false --coverage --reporters=default --reporters=jest-junit",
+    "test:watch": "backstage-cli repo test"
   },
-  "dependencies": {
-    "@backstage/core-compat-api": "^0.5.13",
-    "@backstage/core-components": "^0.18.12",
-    "@backstage/core-plugin-api": "^1.12.8",
-    "@backstage/frontend-plugin-api": "^0.17.3",
-    "@material-ui/core": "^4.12.4",
-    "@material-ui/icons": "^4.11.3",
-    "@tanstack/react-table": "^8.21.3"
-  },
-  "//peerDependencies": "`react-router-dom` spans both majors on purpose: the plugin never imports it, but every `@backstage/*` package it depends on peers on `^6.30.2`, so pinning `^7` alone would make a stock Backstage app report an unsatisfiable peer.",
-  "peerDependencies": {
-    "react": "^17.0.0 || ^18.0.0",
-    "react-dom": "^17.0.0 || ^18.0.0",
-    "react-router-dom": "^6.30.2 || ^7.0.0"
-  },
-  "//resolutions": "Patched versions of transitive build-tooling dependencies carrying published advisories. Every target is the version GitHub records as the first patched release for the advisory in question. Each key repeats the descriptor its dependents actually declare, so a line that stops matching becomes a no-op instead of dragging an unrelated version range along with it.",
+  "//resolutions": "Patched versions of transitive build-tooling dependencies carrying published advisories. Every target is the version GitHub records as the first patched release for the advisory in question. Each key repeats the descriptor its dependents actually declare, so a line that stops matching becomes a no-op instead of dragging an unrelated version range along with it. Yarn only honours `resolutions` declared by the workspace root, so this block cannot move into a package.",
   "resolutions": {
     "brace-expansion@npm:^1.1.7": "^1.1.18",
     "brace-expansion@npm:^2.0.1": "^2.1.4",
@@ -91,42 +43,14 @@
   "devDependencies": {
     "@backstage/cli": "^0.36.4",
     "@backstage/cli-defaults": "^0.1.4",
-    "@backstage/test-utils": "^1.7.20",
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/jest-dom": "^7.0.0",
-    "@testing-library/react": "^16.3.2",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.1.2",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
     "jest": "^30.4.2",
-    "jest-environment-jsdom": "^30.4.1",
     "jest-junit": "^17.0.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^7.18.2",
     "typescript": "~5.9.3"
   },
-  "//jest": "`collectCoverageFrom` excludes only files that compile to no executable statements — entity shapes, port interfaces and GraphQL/REST node types. Everything that runs, including the plugin definition, the DI wiring and both entry points, is measured. Jest validates the keys inside `jest`, so this note lives at the root instead.",
+  "//jest": "`backstage-cli repo test` splits this block in two: keys Jest accepts per project (`collectCoverageFrom`, `roots`, …) are forwarded to every workspace package and then overridden by that package's own `jest` block, while the rest (`coverageThreshold`, `coverageReporters`) stay global and are evaluated against the merged report. Per-package exclusions therefore live in each package's `package.json`, because their paths are relative to `<package>/src`. Jest validates the keys inside `jest`, so this note lives at the root instead.",
   "jest": {
-    "roots": [
-      "<rootDir>",
-      "<rootDir>/../test"
-    ],
-    "collectCoverageFrom": [
-      "**/*.{ts,tsx}",
-      "!**/*.d.ts",
-      "!setupTests.ts",
-      "!domain/entities/repository.ts",
-      "!domain/entities/contributor.ts",
-      "!domain/entities/release.ts",
-      "!domain/entities/tag.ts",
-      "!domain/entities/workflow_status.ts",
-      "!domain/entities/sonar_metrics.ts",
-      "!domain/repositories/**",
-      "!domain/services/**",
-      "!service/mappers/*_node.ts"
-    ],
     "coverageReporters": [
       "text",
       "json",
@@ -144,20 +68,5 @@
   },
   "jest-junit": {
     "outputName": "junit-report.xml"
-  },
-  "exports": {
-    ".": "./src/index.ts",
-    "./alpha": "./src/alpha.tsx",
-    "./package.json": "./package.json"
-  },
-  "typesVersions": {
-    "*": {
-      "alpha": [
-        "src/alpha.tsx"
-      ],
-      "package.json": [
-        "package.json"
-      ]
-    }
   }
 }

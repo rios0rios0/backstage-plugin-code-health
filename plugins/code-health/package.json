@@ -1,0 +1,122 @@
+{
+  "name": "@rios0rios0/backstage-plugin-code-health",
+  "version": "1.0.1",
+  "description": "Backstage frontend plugin that shows CI status, releases, tags, compliance checks and contributor metrics for every GitHub and Azure DevOps repository",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "config.d.ts",
+    "LICENSE",
+    "README.md"
+  ],
+  "backstage": {
+    "role": "frontend-plugin",
+    "pluginId": "code-health",
+    "pluginPackages": [
+      "@rios0rios0/backstage-plugin-code-health"
+    ]
+  },
+  "configSchema": "config.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rios0rios0/backstage-plugin-code-health.git",
+    "directory": "plugins/code-health"
+  },
+  "homepage": "https://github.com/rios0rios0/backstage-plugin-code-health#readme",
+  "bugs": "https://github.com/rios0rios0/backstage-plugin-code-health/issues",
+  "keywords": [
+    "backstage",
+    "backstage-plugin",
+    "code-health",
+    "github",
+    "azure-devops",
+    "sonarcloud",
+    "wakatime",
+    "ci"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.esm.js",
+    "module": "dist/index.esm.js",
+    "types": "dist/index.d.ts"
+  },
+  "scripts": {
+    "start": "backstage-cli package start",
+    "build": "backstage-cli package build",
+    "clean": "backstage-cli package clean",
+    "lint": "backstage-cli package lint --fix",
+    "lint:ci": "backstage-cli package lint",
+    "test": "backstage-cli package test --watch=false",
+    "test:watch": "backstage-cli package test",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack"
+  },
+  "dependencies": {
+    "@backstage/core-compat-api": "^0.5.13",
+    "@backstage/core-components": "^0.18.12",
+    "@backstage/core-plugin-api": "^1.12.8",
+    "@backstage/frontend-plugin-api": "^0.17.3",
+    "@material-ui/core": "^4.12.4",
+    "@material-ui/icons": "^4.11.3",
+    "@tanstack/react-table": "^8.21.3"
+  },
+  "//peerDependencies": "`react-router-dom` spans both majors on purpose: the plugin never imports it, but every `@backstage/*` package it depends on peers on `^6.30.2`, so pinning `^7` alone would make a stock Backstage app report an unsatisfiable peer.",
+  "peerDependencies": {
+    "react": "^17.0.0 || ^18.0.0",
+    "react-dom": "^17.0.0 || ^18.0.0",
+    "react-router-dom": "^6.30.2 || ^7.0.0"
+  },
+  "devDependencies": {
+    "@backstage/cli": "^0.36.4",
+    "@backstage/test-utils": "^1.7.20",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.2"
+  },
+  "//jest": "`roots` adds the sibling `test/` directory, because `backstage-cli` roots Jest at `<package>/src`. `collectCoverageFrom` excludes only files that compile to no executable statements — entity shapes, port interfaces and GraphQL/REST node types. Everything that runs, including the plugin definition, the DI wiring and both entry points, is measured. The thresholds themselves are global and live in the workspace root.",
+  "jest": {
+    "roots": [
+      "<rootDir>",
+      "<rootDir>/../test"
+    ],
+    "collectCoverageFrom": [
+      "**/*.{ts,tsx}",
+      "!**/*.d.ts",
+      "!setupTests.ts",
+      "!domain/entities/repository.ts",
+      "!domain/entities/contributor.ts",
+      "!domain/entities/release.ts",
+      "!domain/entities/tag.ts",
+      "!domain/entities/workflow_status.ts",
+      "!domain/entities/sonar_metrics.ts",
+      "!domain/repositories/**",
+      "!domain/services/**",
+      "!service/mappers/*_node.ts"
+    ]
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./alpha": "./src/alpha.tsx",
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "alpha": [
+        "src/alpha.tsx"
+      ],
+      "package.json": [
+        "package.json"
+      ]
+    }
+  }
+}

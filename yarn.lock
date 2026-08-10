@@ -4151,12 +4151,11 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@rios0rios0/backstage-plugin-code-health@workspace:.":
+"@rios0rios0/backstage-plugin-code-health@workspace:plugins/code-health":
   version: 0.0.0-use.local
-  resolution: "@rios0rios0/backstage-plugin-code-health@workspace:."
+  resolution: "@rios0rios0/backstage-plugin-code-health@workspace:plugins/code-health"
   dependencies:
     "@backstage/cli": "npm:^0.36.4"
-    "@backstage/cli-defaults": "npm:^0.1.4"
     "@backstage/core-compat-api": "npm:^0.5.13"
     "@backstage/core-components": "npm:^0.18.12"
     "@backstage/core-plugin-api": "npm:^1.12.8"
@@ -4168,17 +4167,13 @@ __metadata:
     "@testing-library/dom": "npm:^10.4.1"
     "@testing-library/jest-dom": "npm:^7.0.0"
     "@testing-library/react": "npm:^16.3.2"
-    "@types/jest": "npm:^30.0.0"
-    "@types/node": "npm:^26.1.2"
     "@types/react": "npm:^18.3.12"
     "@types/react-dom": "npm:^18.3.1"
     jest: "npm:^30.4.2"
     jest-environment-jsdom: "npm:^30.4.1"
-    jest-junit: "npm:^17.0.0"
     react: "npm:^18.3.1"
     react-dom: "npm:^18.3.1"
     react-router-dom: "npm:^7.18.2"
-    typescript: "npm:~5.9.3"
   peerDependencies:
     react: ^17.0.0 || ^18.0.0
     react-dom: ^17.0.0 || ^18.0.0
@@ -6747,6 +6742,20 @@ __metadata:
   checksum: 10c0/ca2623aa4d8bf82b1fd01e5724a87cea7f80ff089341cf12415e9ce4b10f74838ecc6c8a48921f421f90bcd44f7929c0ad300146082e2f400253adb97ab5eb3a
   languageName: node
   linkType: hard
+
+"backstage-plugin-code-health-root@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "backstage-plugin-code-health-root@workspace:."
+  dependencies:
+    "@backstage/cli": "npm:^0.36.4"
+    "@backstage/cli-defaults": "npm:^0.1.4"
+    "@types/jest": "npm:^30.0.0"
+    "@types/node": "npm:^26.1.2"
+    jest: "npm:^30.4.2"
+    jest-junit: "npm:^17.0.0"
+    typescript: "npm:~5.9.3"
+  languageName: unknown
+  linkType: soft
 
 "bail@npm:^2.0.0":
   version: 2.0.2
