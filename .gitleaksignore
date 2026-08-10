@@ -1,0 +1,19 @@
+# Gitleaks suppressions, by fingerprint.
+#
+# Every entry must name what it is, why it is safe, and when to revisit. Prefer
+# fixing the source over adding a line here; a fingerprint is only appropriate
+# when the match lives in history and can no longer be edited out.
+
+# curl-auth-header in `plugins/code-health-backend/dev/index.ts`, recorded 2026-08-10.
+#
+# The local development harness documented itself with a `curl` example carrying
+# `Authorization: Bearer mock-service-token`. That string is Backstage's own
+# published test credential — `mockServices.httpAuth` accepts it and nothing
+# else does — so it grants access to a backend running on a developer's laptop
+# and to nothing whatsoever beyond it.
+#
+# The comment has since been rewritten to drop the header entirely, because the
+# harness mocks auth and never needed one. This entry only covers the commit
+# that already shipped it. Drop it if the branch is ever rebased or squashed
+# past de97d02.
+de97d02e5ee3f35b0c3303e966a31a954830fd1f:plugins/code-health-backend/dev/index.ts:curl-auth-header:8

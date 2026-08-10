@@ -3,11 +3,13 @@ import { mockServices } from "@backstage/backend-test-utils";
 import { catalogServiceMock } from "@backstage/plugin-catalog-node/testUtils";
 
 /**
- * Local development harness. Start it with `yarn start` in this package, then:
+ * Local development harness. Start it with `yarn start` in this package.
+ *
+ * Auth is mocked below, so every route answers without a credential:
  *
  *   curl http://localhost:7007/api/code-health/health
- *   curl http://localhost:7007/api/code-health/v1/coverage \
- *     -H 'Authorization: Bearer mock-service-token'
+ *   curl http://localhost:7007/api/code-health/v1/coverage
+ *   curl http://localhost:7007/api/code-health/v1/repositories
  *
  * Force a discovery pass without waiting for the schedule:
  *

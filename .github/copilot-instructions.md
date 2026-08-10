@@ -1,129 +1,106 @@
-# backstage-plugin-code-health
+# Code Health — AI assistant instructions
 
-backstage-plugin-code-health is a [Backstage](https://backstage.io) frontend plugin published as `@rios0rios0/backstage-plugin-code-health`. It displays CI workflow status, releases, tags, compliance checks, and contributor metrics across repositories from GitHub (GraphQL API) and Azure DevOps (REST API). It also integrates with SonarCloud and WakaTime for additional metrics. It has no backend of its own: requests go straight from the browser to each provider, or through a Backstage `proxy` endpoint when one is configured.
+## What this repository is
 
-Always reference these instructions first and fall back to search or bash commands only when you encounter unexpected information that does not match the info here.
+A Yarn workspaces monorepo holding the three packages of the Code Health Backstage plugin:
 
-## Working Effectively
+| Package | Directory | Backstage role |
+|---|---|---|
+| `@rios0rios0/backstage-plugin-code-health` | `plugins/code-health` | `frontend-plugin` |
+| `@rios0rios0/backstage-plugin-code-health-backend` | `plugins/code-health-backend` | `backend-plugin` |
+| `@rios0rios0/backstage-plugin-code-health-common` | `plugins/code-health-common` | `common-library` |
 
-### Bootstrap and Test
+The backend discovers repositories from the Backstage catalog, authenticates through the host
+application's `integrations` configuration, ingests a year of history in a rate-limited background
+job, and stores it in the Backstage database. The browser talks only to `/api/code-health` and holds
+no credential.
 
-- Enable Yarn Berry: `corepack enable` (first time only)
-- Install dependencies: `yarn install`
-- Build the library: `yarn build` (`tsc` then `backstage-cli package build`; emits `dist/`)
-- Type-check only: `yarn typecheck`
-- Run tests: `make test` -- NEVER run `jest` directly.
-- Run linting: `make lint` -- NEVER run `eslint` directly.
-- Run security analysis: `make sast` -- NEVER run `gitleaks`, `semgrep`, `trivy`, `hadolint`, or `codeql` directly.
+All three packages share one version and are bumped together.
 
-### Linting, Testing, and SAST with Makefile
-
-This project uses the [rios0rios0/pipelines](https://github.com/rios0rios0/pipelines) repository for shared CI/CD scripts. The `Makefile` imports these scripts via `SCRIPTS_DIR`. Always use `make` targets:
+## Bootstrap
 
 ```bash
-make lint    # ESLint via pipeline scripts
-make test    # Jest via pipeline scripts
-make sast    # CodeQL, Semgrep, Trivy, Hadolint, Gitleaks
+corepack enable
+yarn install
 ```
+
+## Commands and expected timings
+
+| Command | What it does | Roughly |
+|---|---|---|
+| `yarn typecheck` | One `tsc` pass over the whole workspace | 25 s |
+| `make lint` | ESLint plus knip across all packages | 45 s |
+| `make test` | Jest across all packages (~600 tests) | 45 s |
+| `yarn build` | `tsc` then `backstage-cli repo build --all` | 45 s |
+| `make sast` | CodeQL, Semgrep, Trivy, Hadolint, Gitleaks | 2-4 min |
+
+**NEVER run `jest`, `eslint`, `gitleaks`, `semgrep`, `trivy`, `hadolint` or `codeql` directly.** Use
+the `make` targets, which load the correct configuration from the
+[rios0rios0/pipelines](https://github.com/rios0rios0/pipelines) scripts first.
+
+The root scripts use `backstage-cli repo lint | test | build` rather than the per-package commands,
+because `repo test --coverage` writes the merged `coverage/` and `junit-report.xml` at the repository
+root where the shared pipeline reads them.
 
 ## Architecture
 
-The project follows **5-Layer Frontend Clean Architecture** with dependencies always pointing inward toward the Domain layer.
-
-### Source Structure
-
-Dependencies always point inward toward Domain. Use `ls` for the full file listing.
+The backend is hexagonal: `domain/` holds entities, commands and ports, `infrastructure/` holds the
+implementations, and the dependency arrow points inward. The frontend follows the same rule across
+its five layers.
 
 ```
-src/domain/           → Entities, contracts (ports), pure filter/sort functions
-src/service/          → Business logic, platform-specific mappers (GitHub GraphQL + ADO REST)
-src/infrastructure/   → GitHub GraphQL & ADO REST clients, Web Crypto AES-GCM encrypted auth
-src/presentation/     → Material UI components, hooks, pages (dashboard, contributors, settings)
-src/main/             → Backstage utility APIs, ApiRefs, DI wiring, router
-src/plugin.ts         → createPlugin + createRoutableExtension
-src/routes.ts         → rootRouteRef and its sub-routes
-config.d.ts           → Backstage config schema for the `codeHealth` key
-test/                 → Mirrors src/ structure; builders/ for test data, doubles/ for stubs
+plugins/code-health-backend/src/
+  domain/entities|commands|repositories|services/
+  infrastructure/repositories|services|http|controllers/
+  plugin.ts
+
+plugins/code-health/src/
+  domain/ service/ infrastructure/ presentation/ main/
 ```
 
-### Layer Responsibilities
+## Things not to change without understanding why
 
-| Layer              | Directory              | Responsibility                                                                    |
-|--------------------|------------------------|-----------------------------------------------------------------------------------|
-| **Domain**         | `src/domain/`          | Entity interfaces, service/repository contracts, pure filter/sort functions       |
-| **Service**        | `src/service/`         | Business logic orchestration, platform-specific mappers                           |
-| **Infrastructure** | `src/infrastructure/`  | `fetchApi` clients, proxy-aware endpoint resolution, encrypted auth, config reader |
-| **Presentation**   | `src/presentation/`    | Material UI components, hooks, pages — services arrive through props              |
-| **Main**           | `src/main/`            | Backstage `ApiRef`s, `createApiFactory` wiring, router, factories                  |
+- **Repositories come from the catalog only.** Nothing is enumerated from a provider API. Listing an
+  organisation on every dashboard load is what caused the Azure DevOps throttling this design fixes.
+- **Every provider request goes through `ProviderGateway`.** It bounds concurrency and total
+  requests, retries with jittered backoff, and breaks the circuit on a failing host. A collector
+  that calls `fetch` directly bypasses all of it.
+- **Rate-limit headers are read on every response, not only errors.** Azure DevOps throttles by
+  adding latency to a successful `200` and sends `Retry-After` before it starts rejecting anything.
+- **Two Azure DevOps defaults are set explicitly.** Its pull request API returns only *active*
+  requests filtered on *creation* time; its build query applies the window to whichever timestamp
+  `queryOrder` names.
+- **Branch policies are fetched once per project**, cached for the whole snapshot pass.
+- **The latest Azure DevOps tag is chosen by version comparison**, because its refs API returns tags
+  alphabetically with no dates.
+- **Line churn is null on Azure DevOps**, which reports changed files rather than lines.
+- **A day is recorded as fetched only when a window covers it end to end.**
+- **Cursors move only after the window is committed.**
+- **Sonar, compliance and badge history cannot be backfilled**; those series start at installation.
 
-### Key Design Decisions
+## Conventions
 
-- **Multi-platform**: Supports GitHub (GraphQL) and Azure DevOps (REST) via Adapter pattern. DI factories create platform-specific repositories and services at runtime.
-- **GraphQL over REST (GitHub)**: A single GraphQL query fetches CI status + latest release + latest tag for up to 100 repos.
-- **Two credential modes**: a Backstage `proxy` endpoint (the backend attaches the credential, nothing reaches the browser) or per-user PATs entered at runtime and encrypted with Web Crypto AES-GCM before storage in `localStorage`. `src/service/settings_resolver.ts` decides which applies.
-- **Config over user settings**: values pinned under `codeHealth` in `app-config.yaml` always win and render read-only.
-- **Utility APIs**: the plugin exposes four `ApiRef`s so an integrator can replace any of them; the data APIs rebuild their object graph per call so settings changes take effect immediately.
-- **No external state management**: State is managed locally in React hooks (`useState`, `useEffect`). No Redux, Zustand, or similar libraries.
-- **snake_case file names**: All source files use `snake_case`.
-
-### External APIs
-
-- **GitHub GraphQL**: Core query fetches repository data with CI status via `statusCheckRollup`, latest release via `latestRelease`, and latest tag via `refs(refPrefix: "refs/tags/")`. Cursor-based pagination via `pageInfo`.
-- **Azure DevOps REST**: Batched parallel fetching for repositories, CI status, tags, and contributors.
-- **SonarCloud / WakaTime**: Optional integrations for code quality metrics and development activity.
+- `snake_case` file names throughout
+- No `any` — use `unknown` with narrowing
+- BDD tests: `// given`, `// when`, `// then`
+- No mock libraries; hand-rolled doubles in `test/doubles/`, builders in `test/builders/`
+- Material UI v4 and React 18 in the frontend, matching the Backstage peer ranges
 
 ## Testing
 
-### Standards
+Coverage is enforced repo-wide at 95% lines/statements, 92% functions, 88% branches. Write the test
+rather than adding an exclusion.
 
-- All tests follow **BDD** structure with `// given`, `// when`, `// then` comment blocks.
-- Test descriptions use `"should ... when ..."` format.
-- Tests use **Stubs** and **In-memory doubles** over Mocks.
-- Test data is constructed via **Builders** (`test/builders/repository_builder.ts`).
+- The store is tested against a real database (`TestDatabases`) with the real migrations applied.
+- Collectors and the HTTP gateway are tested against a real `http.createServer`.
+- The plugin is tested through `startTestBackend` with `supertest`.
+- Ingestion is held to a manual trigger in the plugin tests, so they never reach the network.
 
-### Running Tests
+## Validation checklist before proposing a change
 
-```bash
-make test             # Full test suite via pipeline scripts (ALWAYS use this)
-yarn test             # Quick test check during development (acceptable)
-yarn test:watch       # Watch mode for TDD
-```
-
-## Validation
-
-### After Making Changes
-
-1. `yarn build` -- must type-check and emit `dist/` with zero errors
-2. `make lint` -- must report 0 issues
-3. `make test` -- all tests must pass
-4. `make sast` -- should report no new findings
-
-### Pre-commit
-
-- Always run `make lint` before committing (CI will fail otherwise).
-- Always run `make test` to ensure no regressions.
-- Always run `make sast` to catch security issues.
-
-## Build and Test Timing Expectations
-
-- **Type check** (`tsc`): ~20 seconds.
-- **Tests** (`backstage-cli package test`): ~1 minute (413 tests).
-- **Build** (`tsc && backstage-cli package build`): ~30 seconds.
-- **Lint** (`backstage-cli package lint`): ~30 seconds.
-- **SAST**: ~1-3 minutes.
-
-## Common Development Commands
-
-```bash
-# Full validation cycle
-yarn build && make lint && make test
-
-# Quick test cycle during development
-yarn test
-
-# Full security + quality gate
-make lint && make test && make sast
-
-# Try the plugin in a real Backstage app
-yarn build && yarn link
-```
+1. `yarn typecheck`
+2. `make lint`
+3. `make test`
+4. `make sast` when dependencies or configuration changed
+5. Update `CHANGELOG.md` under `[Unreleased]`
+6. Update `README.md` when behaviour, configuration or setup changed

@@ -10,244 +10,259 @@
         <img src="https://img.shields.io/npm/v/@rios0rios0/backstage-plugin-code-health?style=for-the-badge&logo=npm" alt="npm"/></a>
 </p>
 
-A [Backstage](https://backstage.io) frontend plugin that shows CI status, releases, tags, compliance
-checks and contributor metrics for every repository in a GitHub user or Azure DevOps organization,
-enriched with SonarCloud/SonarQube and WakaTime data.
+A [Backstage](https://backstage.io) plugin that shows CI status, releases, tags, compliance checks
+and contributor metrics for the repositories in your Backstage catalog, with a year of history you
+can scrub through.
+
+Repositories come from the catalog. Credentials come from your existing `integrations`
+configuration. A background actor collects the history once for the whole organisation and stores it
+in the Backstage database, so opening the dashboard costs one request no matter how many
+repositories exist or how many people are looking.
+
+## Packages
+
+| Package | Role |
+|---|---|
+| [`@rios0rios0/backstage-plugin-code-health`](https://www.npmjs.com/package/@rios0rios0/backstage-plugin-code-health) | Frontend plugin — the dashboard |
+| [`@rios0rios0/backstage-plugin-code-health-backend`](https://www.npmjs.com/package/@rios0rios0/backstage-plugin-code-health-backend) | Backend plugin — discovery, ingestion and the read API |
+| [`@rios0rios0/backstage-plugin-code-health-common`](https://www.npmjs.com/package/@rios0rios0/backstage-plugin-code-health-common) | The wire contract shared by both |
+
+Both plugins are required. The frontend renders nothing useful without the backend, and says so
+rather than showing an empty dashboard.
 
 ## Features
 
-- **CI status**: aggregated status of each repository's default branch, rendered as a Backstage-themed chip
+- **CI status**: the latest pipeline or workflow outcome on each repository's default branch
 - **Releases & tags**: latest release with relative date, or the latest tag when no release exists
-- **Compliance checks**: pipeline present, build policy on PRs, build policy expiration and branch protection
+- **Compliance checks**: pipeline present, build policy on pull requests, build policy expiration and branch protection
 - **README badge audit**: which of the six standard shields are present in each repository's README
-- **Contributor metrics**: approved/total/rejected PRs, lines changed, PR approval rate and pipeline success rate
-- **Sonar integration**: bugs, code smells, vulnerabilities, hotspots, coverage, duplications, technical debt and quality gate
+- **Contributor metrics**: commits, churn, pull requests opened and merged, review approval rate and pipeline success rate
+- **Sonar integration** through the community `sonarqube` backend plugin, so its token stays where that plugin already keeps it
 - **WakaTime integration**: 30-day coding time and daily average per contributor
-- **Two platforms**: GitHub (GraphQL) and Azure DevOps (REST), selected per instance
+- **A year of history**: pick any window from the last hour to the last 365 days
+- **Two platforms**: GitHub (GraphQL) and Azure DevOps (REST), per repository rather than per instance
 - **Filtering, sorting, pagination** on every column, plus archived/fork toggles
-- **Auto-refresh**: 1 min, 5 min, 15 min or off
-- **Two credential modes**: a Backstage `proxy` endpoint (no token in the browser) or per-user tokens
-  encrypted with Web Crypto AES-GCM
 
 ## Installation
 
 ```bash
+yarn --cwd packages/backend add @rios0rios0/backstage-plugin-code-health-backend
 yarn --cwd packages/app add @rios0rios0/backstage-plugin-code-health
 ```
 
-The plugin ships two entry points. Use the one that matches your app.
+### Backend
 
-### New frontend system (`@backstage/frontend-defaults`)
+```ts
+// packages/backend/src/index.ts
+backend.add(import('@rios0rios0/backstage-plugin-code-health-backend'));
+```
 
-Import the default export from `/alpha` and add it to `features` in
-`packages/app/src/App.tsx`:
+That is the whole backend setup. The plugin creates its own tables on first start and registers
+three scheduled tasks.
 
-```tsx
-import { createApp } from '@backstage/frontend-defaults';
+### Frontend — new system (`@backstage/frontend-defaults`)
+
+```ts
+// packages/app/src/App.tsx
 import codeHealthPlugin from '@rios0rios0/backstage-plugin-code-health/alpha';
 
-export default createApp({
-  features: [
-    /* ...your other plugins... */
-    codeHealthPlugin,
-  ],
+export const app = createApp({
+  features: [codeHealthPlugin],
 });
 ```
 
-The page mounts at `/code-health` and emits a title and icon, which is what the new frontend
-system derives a nav entry from, so it appears in the sidebar automatically — no `Sidebar.tsx`
-change needed.
+The page mounts at `/code-health`. It emits a title and an icon, from which the app derives a
+sidebar entry; an app that places nav items explicitly needs these extension IDs:
 
-Apps that replace the sidebar with their own `NavContentBlueprint` are the exception: those
-place items explicitly and must not filter this one out. The extension IDs to reference are
+| Extension ID | What it is |
+|---|---|
+| `page:code-health` | The dashboard page |
+| `api:code-health/config` | Presentation preferences from `app-config.yaml` |
+| `api:code-health/repositories` | The repositories view's data source |
+| `api:code-health/contributors` | The contributors view's data source |
+| `api:code-health/coverage` | How much history the backend holds |
 
-| Extension | ID |
-|-----------|-----|
-| Page | `page:code-health` |
-| APIs | `api:code-health/auth`, `api:code-health/config`, `api:code-health/repositories`, `api:code-health/contributors` |
+There is no `nav-item:code-health` to reference.
 
-so `nav.take('page:code-health')` places it by hand and `app.extensions` can override it by
-the same ID. There is no `nav-item:code-health` — `NavItemBlueprint` no longer exists in
-`@backstage/frontend-plugin-api`.
-
-### Legacy frontend system (`createApp` from `@backstage/app-defaults`)
-
-Add the page to your routes in `packages/app/src/App.tsx`:
+### Frontend — legacy system (`createApp` from `@backstage/app-defaults`)
 
 ```tsx
+// packages/app/src/App.tsx
 import { CodeHealthPage } from '@rios0rios0/backstage-plugin-code-health';
 
-const routes = (
-  <FlatRoutes>
-    {/* ...your other routes... */}
-    <Route path="/code-health" element={<CodeHealthPage />} />
-  </FlatRoutes>
-);
+<Route path="/code-health" element={<CodeHealthPage />} />
 ```
 
-And a sidebar item in `packages/app/src/components/Root/Root.tsx`:
-
 ```tsx
+// packages/app/src/components/Root/Root.tsx
 import AssessmentIcon from '@material-ui/icons/Assessment';
 
-<SidebarItem icon={AssessmentIcon} to="code-health" text="Code Health" />;
+<SidebarItem icon={AssessmentIcon} to="code-health" text="Code Health" />
 ```
 
 ## Configuration
 
-Everything is optional. With no configuration at all, the plugin renders a setup form where each user
-supplies their own organization and tokens.
+### Credentials
+
+**There is nothing to configure.** The backend authenticates to each provider through the host
+application's existing `integrations` block, per repository URL, so a GitHub App's installation
+tokens and an Azure DevOps organisation-scoped credential both work without a second copy.
+
+```yaml
+# app-config.yaml — you almost certainly have this already
+integrations:
+  github:
+    - host: 'github.com'
+      token: ${GITHUB_TOKEN}
+  azure:
+    - host: 'dev.azure.com'
+      credentials:
+        - personalAccessToken: ${AZURE_TOKEN}
+```
+
+Required scopes: GitHub `repo` (or `public_repo`) and `read:org`; Azure DevOps **Code (Read)**,
+**Build (Read)** and **Project and Team (Read)**.
+
+### Which repositories are tracked
+
+Repositories come from the Backstage catalog. An entity is tracked when it resolves to a supported
+repository, in this order:
+
+1. `github.com/project-slug`, as `owner/repo`
+2. `dev.azure.com/project-repo` together with `dev.azure.com/host-org`
+3. `backstage.io/source-location`, matched against your configured integrations
+
+Backstage's own GitHub and Azure DevOps discovery providers set a source location on everything they
+register, so most catalogs need no annotations at all.
 
 ```yaml
 # app-config.yaml
 codeHealth:
-  platform: 'github' # or 'azure-devops'
-  organization: 'rios0rios0' # GitHub username or Azure DevOps organization
-  refreshIntervalMs: 300000 # 60000 | 300000 | 900000 | 0 (off)
-
-  github:
-    baseUrl: 'https://api.github.com/graphql' # override for GitHub Enterprise
-    proxyPath: '/code-health-github' # a `proxy.endpoints` key, see below
-
-  azureDevOps:
-    baseUrl: 'https://dev.azure.com'
-    proxyPath: '/code-health-ado'
-
-  sonar:
-    type: 'cloud' # or 'qube'
-    baseUrl: 'https://sonarcloud.io'
-    organization: 'rios0rios0'
-    proxyPath: '/code-health-sonar'
-
-  wakaTime:
-    baseUrl: 'https://wakatime.com/api/v1'
-    proxyPath: '/code-health-wakatime'
+  catalog:
+    # Defaults to [{ kind: Component }]. Passed straight to the catalog.
+    entityFilter:
+      - kind: 'Component'
 ```
 
-Values pinned here always win over what a user sets on the Settings tab, and the corresponding fields
-are rendered read-only.
-
-### Credential modes
-
-| Mode | When to use | Where the token lives |
-|------|-------------|-----------------------|
-| **Proxy** (recommended) | One shared service account for the whole instance | `app-config.yaml` on the backend, never sent to the browser |
-| **Per-user token** | Each user sees their own repositories | Encrypted with Web Crypto AES-GCM in the user's own browser |
-
-Configure a `proxyPath` for a target and the plugin routes that target's requests through the
-Backstage backend, which attaches the credential. No token is then requested from the user.
+### Ingestion
 
 ```yaml
-# app-config.yaml
-proxy:
-  endpoints:
-    '/code-health-github':
-      target: 'https://api.github.com/graphql'
-      allowedMethods: ['POST']
-      headers:
-        Authorization: 'bearer ${GITHUB_TOKEN}'
-
-    '/code-health-ado':
-      target: 'https://dev.azure.com'
-      allowedMethods: ['GET']
-      headers:
-        Authorization: 'Basic ${AZURE_DEVOPS_BASIC_AUTH}' # base64 of ":<PAT>"
-
-    '/code-health-sonar':
-      target: 'https://sonarcloud.io'
-      allowedMethods: ['GET']
-      headers:
-        Authorization: 'Bearer ${SONAR_TOKEN}'
-
-    '/code-health-wakatime':
-      target: 'https://wakatime.com/api/v1'
-      allowedMethods: ['GET']
-      headers:
-        Authorization: 'Bearer ${WAKATIME_API_KEY}'
+codeHealth:
+  ingestion:
+    retentionDays: 365
+    # Day by day. `P7D` finishes the backfill roughly seven times sooner, at the
+    # cost of coarser resume granularity when a run is interrupted.
+    backfillChunk: 'P1D'
+    # Hard ceiling on provider requests per run, per host. When it is spent the
+    # run stops and the next one resumes from the same cursors.
+    requestBudgetPerRun: 500
+    concurrencyPerHost: 4
+    schedule:
+      frequency: { minutes: 5 }
+      timeout: { minutes: 15 }
+    discoverySchedule:
+      frequency: { minutes: 30 }
+      timeout: { minutes: 10 }
+    snapshotSchedule:
+      frequency: { cron: '0 3 * * *' }
+      timeout: { hours: 1 }
 ```
 
-Without a proxy, requests go straight from the browser to each provider. GitHub's GraphQL API sends
-permissive CORS headers, so it works; Azure DevOps, Sonar and WakaTime generally do not, which is why
-the proxy is recommended for those.
+**How long the first backfill takes.** Roughly three requests per repository per day. With the
+defaults — a 500-request budget every five minutes — 500 repositories take about four days to reach
+a full year. Raising `backfillChunk` to `P7D` brings that under a day. The dashboard is useful
+throughout: the actor collects the recent window before it starts walking backwards, so the last day
+is answerable from the first run and wider ranges unlock as the backfill advances.
 
-### Required token scopes
+### Sonar and WakaTime
 
-| Provider | Scope |
-|----------|-------|
-| GitHub | fine-grained PAT with **Metadata (read-only)**; add **Contents (read-only)** for the README badge audit and **Administration (read-only)** for branch protection |
-| Azure DevOps | PAT with **Code (read)**, **Build (read)** and **Project and team (read)** |
-| SonarCloud / SonarQube | user token with **Execute Analysis** not required; read access is enough |
-| WakaTime | API key of a user who can read the organization's dashboards |
+```yaml
+codeHealth:
+  sonar:
+    # Requires @backstage-community/plugin-sonarqube-backend and a
+    # `sonarqube.org/project-key` annotation on the entity.
+    enabled: true
+  wakaTime:
+    organization: 'my-org'
+    apiKey: ${WAKATIME_API_KEY}
+```
 
-## Exports
+Sonar measures are read from the `sonarqube` backend plugin over Backstage's internal
+service-to-service channel, so its token is not duplicated here. That plugin exposes a current
+summary per entity and no measures-history passthrough, so **Sonar history cannot be backfilled**:
+the trend starts at the first snapshot after installation. The same is true of compliance checks and
+README badges — no provider reports what they looked like last March.
 
-| Export | Description |
-|--------|-------------|
-| `codeHealthPlugin` | The plugin instance, for `bindRoutes` and API overrides (legacy system) |
-| default export of `/alpha` | The same plugin for the declarative frontend system |
-| `CodeHealthPage` | Routable extension rendering the whole dashboard |
-| `rootRouteRef`, `contributorsRouteRef`, `settingsRouteRef` | Route refs for external routing |
-| `codeHealthRepositoriesApiRef`, `codeHealthContributorsApiRef` | Data APIs, overridable with your own implementation |
-| `codeHealthAuthApiRef`, `codeHealthConfigApiRef` | Credential store and resolved app-config |
+### Presentation
 
-Every domain entity (`Repository`, `Contributor`, `ComplianceStatus`, …) is exported as a type.
+```yaml
+codeHealth:
+  # 60000, 300000, 900000 or 0. Defaults to 300000.
+  refreshIntervalMs: 300000
+  # hour | day | week | month | quarter | year. Defaults to `day`. A range wider
+  # than the backend has ingested falls back to the widest one available.
+  defaultRange: 'day'
+```
+
+## Operating it
+
+The backend registers three tasks, all `scope: 'global'` so a multi-replica backend runs each of
+them once rather than once per replica:
+
+| Task | Default cadence | What it does |
+|---|---|---|
+| `code-health.discover` | every 30 minutes | Reconciles the tracked repositories with the catalog |
+| `code-health.ingest` | every 5 minutes | Moves each forward cursor to now, then backfills with what is left of the budget |
+| `code-health.snapshot` | daily at 03:00 | Captures compliance, badges, Sonar, branches, latest release and tag |
+
+Backstage's scheduler exposes a control plane for them:
+
+```bash
+curl localhost:7007/api/code-health/.backstage/scheduler/v1/tasks
+curl -X POST localhost:7007/api/code-health/.backstage/scheduler/v1/tasks/code-health.ingest/trigger
+```
+
+`GET /api/code-health/v1/coverage` reports how far the backfill has got, which repositories are
+failing, and the instant every repository has data through.
 
 ## Architecture
 
-5-layer [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-where dependencies always point inward toward the Domain layer.
-
 ```
-src/
-├── plugin.ts         # createPlugin + createRoutableExtension
-├── routes.ts         # rootRouteRef and its sub-routes
-├── domain/           # Entities and contracts (ports); no framework imports
-│   ├── entities/     #   Repository, Contributor, ComplianceStatus, CodeHealthConfig, …
-│   ├── repositories/ #   RepositoryRepository, ComplianceRepository, SonarRepository, …
-│   └── services/     #   DashboardService, ContributorService, AuthenticationService
-├── service/          # Business logic, platform mappers, settings resolution
-│   └── mappers/      #   GraphQL/ADO payload → domain entity
-├── infrastructure/   # Backstage fetchApi clients, proxy-aware endpoint resolution, crypto
-│   ├── crypto/       #   AES-GCM key store and helpers
-│   ├── http/         #   EndpointResolver + GraphQL/ADO/Sonar/WakaTime clients
-│   ├── repositories/ #   GitHub and Azure DevOps implementations
-│   └── services/     #   Encrypted credential store, app-config reader
-├── presentation/     # Material UI components, hooks and pages
-│   ├── components/   #   DataTable, StateChip, IntegrationCard, AuthGate, …
-│   ├── hooks/        #   useRepositories, useContributors, useAutoRefresh, useTheme
-│   └── pages/        #   DashboardPage, ContributorsPage, SettingsPage
-└── main/             # Backstage utility APIs and dependency injection
-    ├── api_refs.ts   #   ApiRef tokens
-    ├── apis.ts       #   createApiFactory wiring
-    ├── router.tsx    #   Page/Header/TabbedLayout composition
-    └── factories/    #   Repository and service factories
+browser                    backstage backend                providers
+────────                   ─────────────────                ─────────
+code-health           ──▶  /api/code-health/v1/*      ┌──▶  catalog (which repositories)
+  no tokens, no crypto       ├─ router (read-only)    │
+  one request per load       ├─ store (knex)          ├──▶  Azure DevOps REST 7.1
+                             └─ ingestion actor ──────┤
+                                  discover  (30 min)  ├──▶  GitHub GraphQL + REST
+                                  ingest    ( 5 min)  │
+                                  snapshot  (daily)   └──▶  /api/sonarqube, WakaTime
+                             credentials: ScmIntegrations
 ```
 
-The two data APIs rebuild their object graph on every call, so switching platform or updating a token
-on the Settings tab takes effect immediately without reloading the page.
+Every provider request passes through one gateway that caps concurrency per host, spends a bounded
+budget per run, retries `429` and `5xx` with jittered backoff, and opens a circuit breaker on a host
+that keeps failing. It reads `Retry-After` and the `X-RateLimit-*` headers on **every** response,
+not only on errors — Azure DevOps applies throttling as latency on a successful `200` and sends
+those headers before it starts delaying.
 
 ## Development
 
 ```bash
-corepack enable        # Enable Yarn Berry via corepack (first time only)
-yarn install           # Install dependencies
-yarn build             # tsc + backstage-cli package build -> dist/
-yarn test              # Run Jest via backstage-cli
-yarn test:watch        # Watch mode for TDD
-yarn typecheck         # Type-check and emit dist-types/
+corepack enable
+yarn install
+make lint        # ESLint and knip across the workspace
+make test        # the whole suite
+make sast        # CodeQL, Semgrep, Trivy, Hadolint, Gitleaks
+yarn build       # type-check and build all three packages
 ```
 
-Quality gates (always use `make` targets — never run tools directly):
+To run the backend on its own, against a mocked catalog:
 
 ```bash
-make lint              # Run ESLint via pipeline scripts
-make test              # Run Jest with coverage via pipeline scripts
-make sast              # Run full SAST suite (CodeQL, Semgrep, Trivy, Hadolint, Gitleaks)
+yarn workspace @rios0rios0/backstage-plugin-code-health-backend start
+curl http://localhost:7007/api/code-health/health
 ```
-
-The package is built with the Backstage CLI (`backstage-cli package build`), so it produces the
-standard `dist/index.esm.js` + `dist/index.d.ts` layout every Backstage plugin ships. To try it end
-to end, `yarn link` this package into a Backstage app and follow the installation steps above.
 
 ## Contributing
 
@@ -255,4 +270,4 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 
 ## License
 
-[MIT](LICENSE)
+See [LICENSE](LICENSE) file for details.
