@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import type { ComplianceStatus } from "../../../src/domain/entities/compliance_status";
+import type { ComplianceStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import { ComplianceBadge } from "../../../src/presentation/components/compliance_badge";
 
 describe("ComplianceBadge", () => {

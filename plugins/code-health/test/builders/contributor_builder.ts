@@ -1,5 +1,5 @@
 import type { Contributor } from "../../src/domain/entities/contributor";
-import type { SonarMetrics } from "../../src/domain/entities/sonar_metrics";
+import type { SonarMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
 
 let counter = 0;
 

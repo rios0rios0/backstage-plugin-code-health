@@ -1,5 +1,5 @@
-import type { BadgeStatus } from "../../domain/entities/badge_status";
-import { parseBadgesFromReadme } from "../../domain/entities/badge_status";
+import type { BadgeStatus } from "@rios0rios0/backstage-plugin-code-health-common";
+import { parseBadgesFromReadme } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { BadgeRepository } from "../../domain/repositories/badge_repository";
 import type { GraphQLClient } from "../http/graphql_client";
 

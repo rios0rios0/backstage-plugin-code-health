@@ -1,4 +1,4 @@
-import { computeComplianceColor } from "../../../src/domain/entities/compliance_status";
+import { computeComplianceColor } from "../src/compliance_status";
 
 describe("computeComplianceColor", () => {
   it("should return green when all checks pass", () => {

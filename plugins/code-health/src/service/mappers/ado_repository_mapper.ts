@@ -1,6 +1,5 @@
 import type { Repository } from "../../domain/entities/repository";
-import type { Tag } from "../../domain/entities/tag";
-import type { CIState, WorkflowStatus } from "../../domain/entities/workflow_status";
+import type { CIState, Tag, WorkflowStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { AdoBuildNode, AdoRefNode, AdoRepositoryNode } from "./ado_repository_node";
 
 const mapBuildResult = (build: AdoBuildNode): CIState => {

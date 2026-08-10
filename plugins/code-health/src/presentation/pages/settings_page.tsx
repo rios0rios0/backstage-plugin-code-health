@@ -6,7 +6,7 @@ import Typography from "@material-ui/core/Typography";
 import { ContentHeader } from "@backstage/core-components";
 import type { CodeHealthConfig } from "../../domain/entities/code_health_config";
 import { EMPTY_CODE_HEALTH_CONFIG } from "../../domain/entities/code_health_config";
-import type { Platform } from "../../domain/entities/platform";
+import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { SonarType } from "../../domain/entities/sonar_type";
 import { IntegrationCard } from "../components/integration_card";
 import type { ToggleOption } from "../components/option_toggle";

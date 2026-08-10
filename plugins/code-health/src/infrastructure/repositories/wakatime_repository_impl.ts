@@ -1,4 +1,4 @@
-import type { WakaTimeMetrics } from "../../domain/entities/wakatime_metrics";
+import type { WakaTimeMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { WakaTimeRepository } from "../../domain/repositories/wakatime_repository";
 import type { WakaTimeClient } from "../http/wakatime_client";
 

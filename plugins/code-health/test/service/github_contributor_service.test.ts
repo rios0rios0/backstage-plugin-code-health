@@ -1,4 +1,4 @@
-import type { SonarMetrics } from "../../src/domain/entities/sonar_metrics";
+import type { SonarMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
 import { GitHubContributorService } from "../../src/service/github_contributor_service";
 import { ContributorBuilder } from "../builders/contributor_builder";
 import { StubContributorRepository } from "../doubles/stub_contributor_repository";

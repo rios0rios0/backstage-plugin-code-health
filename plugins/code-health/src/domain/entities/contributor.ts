@@ -1,5 +1,4 @@
-import type { SonarMetrics } from "./sonar_metrics";
-import type { WakaTimeMetrics } from "./wakatime_metrics";
+import type { SonarMetrics, WakaTimeMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
 
 export interface Contributor {
   readonly username: string;

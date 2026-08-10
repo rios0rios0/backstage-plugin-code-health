@@ -1,4 +1,4 @@
-import type { SonarMetrics } from "../../src/domain/entities/sonar_metrics";
+import type { SonarMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { AuthorIssues, SonarRepository } from "../../src/domain/repositories/sonar_repository";
 
 export class StubSonarRepository implements SonarRepository {

@@ -1,4 +1,4 @@
-import type { SonarMetrics } from "../entities/sonar_metrics";
+import type { SonarMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
 
 export interface AuthorIssues {
   bugs: number;

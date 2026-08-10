@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- added `@rios0rios0/backstage-plugin-code-health-common`, the package that will carry the HTTP contract between the frontend and the incoming backend plugin. It owns the types both sides exchange, plus the pure helpers that derive presentation state from them — `computeComplianceColor`, `computeBadgeColor`, `parseBadgesFromReadme` and `formatDuration` all moved there rather than being duplicated. Having one package own the contract is what stops the client and the server drifting apart, which is the failure mode a hand-synchronised copy in each package eventually reaches
 - added tests for everything the coverage config previously hid: the plugin definition, both entry points, the route and API refs, the DI wiring in `main/apis.ts`, the tab router, and the IndexedDB key store. `collectCoverageFrom` now excludes only files that compile to no executable statements (entity shapes, port interfaces, GraphQL/REST node types), so the reported number describes the whole package instead of a chosen subset
 - added a hand-rolled in-memory IndexedDB double (`test/doubles/stub_indexed_db.ts`), since jsdom ships none and the key store is the one place a lost key silently invalidates every stored credential. It keeps the real `CryptoKey` across opens, so a test can prove a token encrypted before a reload still decrypts after one
 

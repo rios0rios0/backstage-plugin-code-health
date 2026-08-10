@@ -1,4 +1,4 @@
-import type { ComplianceStatus } from "../entities/compliance_status";
+import type { ComplianceStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 
 export interface ComplianceRepository {
   getComplianceStatus(

@@ -1,4 +1,4 @@
-import type { ComplianceColor, ComplianceStatus } from "../../domain/entities/compliance_status";
+import type { ComplianceColor, ComplianceStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import { EmptyCell } from "./empty_cell";
 import type { ChipTone } from "./state_chip";
 import { StateChip } from "./state_chip";

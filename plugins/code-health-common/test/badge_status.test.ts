@@ -1,4 +1,4 @@
-import { computeBadgeColor, parseBadgesFromReadme } from "../../../src/domain/entities/badge_status";
+import { computeBadgeColor, parseBadgesFromReadme } from "../src/badge_status";
 
 describe("computeBadgeColor", () => {
   it("should return green when all checks are present", () => {

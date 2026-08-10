@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { RepositoryTable } from "../../../src/presentation/components/repository_table";
-import type { ComplianceStatus } from "../../../src/domain/entities/compliance_status";
-import type { BadgeStatus } from "../../../src/domain/entities/badge_status";
+import type { BadgeStatus, ComplianceStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { Repository } from "../../../src/domain/entities/repository";
 import { RepositoryBuilder } from "../../builders/repository_builder";
 

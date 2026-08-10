@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import Paper from "@material-ui/core/Paper";
 import Typography from "@material-ui/core/Typography";
 import { makeStyles } from "@material-ui/core/styles";
-import type { BadgeColor, BadgeStatus } from "../../domain/entities/badge_status";
+import type { BadgeColor, BadgeStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import { EmptyCell } from "./empty_cell";
 import type { ChipTone } from "./state_chip";
 import { StateChip } from "./state_chip";

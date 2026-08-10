@@ -1,4 +1,4 @@
-import type { Platform } from "../../domain/entities/platform";
+import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { BadgeRepository } from "../../domain/repositories/badge_repository";
 import type { ComplianceRepository } from "../../domain/repositories/compliance_repository";
 import type { ContributorRepository } from "../../domain/repositories/contributor_repository";

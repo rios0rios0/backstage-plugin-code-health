@@ -1,9 +1,4 @@
-import type { BadgeStatus } from "./badge_status";
-import type { ComplianceStatus } from "./compliance_status";
-import type { Release } from "./release";
-import type { SonarMetrics } from "./sonar_metrics";
-import type { Tag } from "./tag";
-import type { WorkflowStatus } from "./workflow_status";
+import type { BadgeStatus, ComplianceStatus, Release, SonarMetrics, Tag, WorkflowStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 
 export interface Repository {
   readonly id: string;

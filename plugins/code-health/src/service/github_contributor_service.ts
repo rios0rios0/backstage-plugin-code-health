@@ -1,5 +1,5 @@
 import type { Contributor } from "../domain/entities/contributor";
-import type { SonarMetrics } from "../domain/entities/sonar_metrics";
+import type { SonarMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { ContributorRepository } from "../domain/repositories/contributor_repository";
 import type { AuthorIssues, SonarRepository } from "../domain/repositories/sonar_repository";
 import type { WakaTimeRepository } from "../domain/repositories/wakatime_repository";

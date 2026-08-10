@@ -6,7 +6,7 @@ import CardContent from "@material-ui/core/CardContent";
 import TextField from "@material-ui/core/TextField";
 import Typography from "@material-ui/core/Typography";
 import { WarningPanel } from "@backstage/core-components";
-import type { Platform } from "../../domain/entities/platform";
+import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { SonarType } from "../../domain/entities/sonar_type";
 import type { LoginCredentials, SonarLoginInfo } from "../hooks/use_authentication";
 import type { ToggleOption } from "./option_toggle";

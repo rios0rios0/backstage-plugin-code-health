@@ -42,6 +42,7 @@ jobs:
       matrix:
         package:
           - 'plugins/code-health'
+          - 'plugins/code-health-common'
     # Third-party actions are pinned to a commit SHA rather than a tag: a tag can be
     # silently repointed by its owner, which is how the trivy-action and
     # kics-github-action compromises reached their consumers. Bump the SHA and the

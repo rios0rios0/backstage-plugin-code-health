@@ -1,4 +1,4 @@
-import type { BadgeStatus } from "../entities/badge_status";
+import type { BadgeStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 
 export interface BadgeRepository {
   getBadgeStatus(

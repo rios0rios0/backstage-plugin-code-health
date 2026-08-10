@@ -3,7 +3,7 @@ import type { CodeHealthConfig } from "../../domain/entities/code_health_config"
 import { EMPTY_CODE_HEALTH_CONFIG } from "../../domain/entities/code_health_config";
 import type { IntegrationTarget } from "../../domain/entities/integration_target";
 import { INTEGRATION_TARGETS } from "../../domain/entities/integration_target";
-import type { Platform } from "../../domain/entities/platform";
+import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { SonarType } from "../../domain/entities/sonar_type";
 import { isSonarType, SONARCLOUD_BASE_URL } from "../../domain/entities/sonar_type";
 import type { EndpointConfig } from "../http/endpoint_resolver";

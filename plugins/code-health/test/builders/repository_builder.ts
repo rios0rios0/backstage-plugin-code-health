@@ -1,9 +1,5 @@
-import type { BadgeStatus } from "../../src/domain/entities/badge_status";
-import type { ComplianceStatus } from "../../src/domain/entities/compliance_status";
+import type { BadgeStatus, CIState, ComplianceStatus, Release, Tag, WorkflowStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { Repository } from "../../src/domain/entities/repository";
-import type { Release } from "../../src/domain/entities/release";
-import type { Tag } from "../../src/domain/entities/tag";
-import type { CIState, WorkflowStatus } from "../../src/domain/entities/workflow_status";
 
 let counter = 0;
 

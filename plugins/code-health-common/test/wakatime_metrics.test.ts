@@ -1,4 +1,4 @@
-import { formatDuration } from "../../../src/domain/entities/wakatime_metrics";
+import { formatDuration } from "../src/wakatime_metrics";
 
 describe("formatDuration", () => {
   it("should return 0m when totalSeconds is 0", () => {

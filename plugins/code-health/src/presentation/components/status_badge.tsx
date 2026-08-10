@@ -1,4 +1,4 @@
-import type { CIState } from "../../domain/entities/workflow_status";
+import type { CIState } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { ChipTone } from "./state_chip";
 import { StateChip } from "./state_chip";
 

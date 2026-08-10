@@ -3,7 +3,7 @@ import {
   filterContributors,
   sortContributors,
 } from "../../../src/domain/entities/contributor_filter";
-import type { SonarMetrics } from "../../../src/domain/entities/sonar_metrics";
+import type { SonarMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
 import { ContributorBuilder } from "../../builders/contributor_builder";
 
 describe("filterContributors", () => {

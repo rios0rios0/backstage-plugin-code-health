@@ -1,7 +1,5 @@
 import type { Repository } from "../../domain/entities/repository";
-import type { CIState, WorkflowStatus } from "../../domain/entities/workflow_status";
-import type { Release } from "../../domain/entities/release";
-import type { Tag } from "../../domain/entities/tag";
+import type { CIState, Release, Tag, WorkflowStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { GraphQLRepositoryNode } from "./graphql_repository_node";
 
 const VALID_CI_STATES = new Set<string>(["SUCCESS", "FAILURE", "PENDING", "ERROR", "EXPECTED"]);

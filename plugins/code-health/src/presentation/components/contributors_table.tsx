@@ -15,7 +15,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import type { Contributor } from "../../domain/entities/contributor";
-import { formatDuration } from "../../domain/entities/wakatime_metrics";
+import { formatDuration } from "@rios0rios0/backstage-plugin-code-health-common";
 import { DataTable, PaginationControls } from "./data_table";
 import { EmptyCell } from "./empty_cell";
 

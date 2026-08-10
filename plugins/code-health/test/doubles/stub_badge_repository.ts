@@ -1,4 +1,4 @@
-import type { BadgeStatus } from "../../src/domain/entities/badge_status";
+import type { BadgeStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { BadgeRepository } from "../../src/domain/repositories/badge_repository";
 
 export class StubBadgeRepository implements BadgeRepository {

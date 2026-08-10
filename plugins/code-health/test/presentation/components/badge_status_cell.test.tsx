@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { BadgeStatus } from "../../../src/domain/entities/badge_status";
+import type { BadgeStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import { BadgeStatusCell } from "../../../src/presentation/components/badge_status_cell";
 
 const greenStatus: BadgeStatus = {

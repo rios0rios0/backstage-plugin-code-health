@@ -1,4 +1,4 @@
-import type { ComplianceStatus } from "../../src/domain/entities/compliance_status";
+import type { ComplianceStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { ComplianceRepository } from "../../src/domain/repositories/compliance_repository";
 
 export class StubComplianceRepository implements ComplianceRepository {

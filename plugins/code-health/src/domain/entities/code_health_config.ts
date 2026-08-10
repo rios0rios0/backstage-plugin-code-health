@@ -1,5 +1,5 @@
 import type { IntegrationTarget } from "./integration_target";
-import type { Platform } from "./platform";
+import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { SonarType } from "./sonar_type";
 
 /**

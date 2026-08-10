@@ -1,5 +1,4 @@
-import type { BadgeStatus } from "../../src/domain/entities/badge_status";
-import type { ComplianceStatus } from "../../src/domain/entities/compliance_status";
+import type { BadgeStatus, ComplianceStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import { GitHubDashboardService } from "../../src/service/github_dashboard_service";
 import { RepositoryBuilder } from "../builders/repository_builder";
 import { StubBadgeRepository } from "../doubles/stub_badge_repository";

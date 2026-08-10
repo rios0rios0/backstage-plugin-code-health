@@ -1,6 +1,6 @@
 import type { CodeHealthConfig } from "../domain/entities/code_health_config";
-import type { Platform } from "../domain/entities/platform";
-import { isPlatform } from "../domain/entities/platform";
+import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
+import { isPlatform } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { SonarType } from "../domain/entities/sonar_type";
 import { isSonarType, SONARCLOUD_BASE_URL } from "../domain/entities/sonar_type";
 import type { AuthenticationService } from "../domain/services/authentication_service";

@@ -1,4 +1,4 @@
-import type { SonarMetrics, QualityGateStatus } from "../../domain/entities/sonar_metrics";
+import type { QualityGateStatus, SonarMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { SonarType } from "../../domain/entities/sonar_type";
 import type { AuthorIssues, SonarRepository } from "../../domain/repositories/sonar_repository";
 import type { SonarClient } from "../http/sonar_client";

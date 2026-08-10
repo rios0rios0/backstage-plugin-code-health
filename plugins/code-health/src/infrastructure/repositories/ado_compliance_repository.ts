@@ -1,5 +1,5 @@
-import type { ComplianceStatus } from "../../domain/entities/compliance_status";
-import { computeComplianceColor } from "../../domain/entities/compliance_status";
+import type { ComplianceStatus } from "@rios0rios0/backstage-plugin-code-health-common";
+import { computeComplianceColor } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { ComplianceRepository } from "../../domain/repositories/compliance_repository";
 import type { AdoRestClient } from "../http/ado_rest_client";
 

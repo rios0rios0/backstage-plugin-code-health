@@ -1,0 +1,66 @@
+{
+  "name": "@rios0rios0/backstage-plugin-code-health-common",
+  "version": "1.0.1",
+  "description": "Wire contract and shared pure helpers for the Code Health Backstage plugin, used by both its frontend and its backend",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "backstage": {
+    "role": "common-library",
+    "pluginId": "code-health",
+    "pluginPackages": [
+      "@rios0rios0/backstage-plugin-code-health",
+      "@rios0rios0/backstage-plugin-code-health-backend",
+      "@rios0rios0/backstage-plugin-code-health-common"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rios0rios0/backstage-plugin-code-health.git",
+    "directory": "plugins/code-health-common"
+  },
+  "homepage": "https://github.com/rios0rios0/backstage-plugin-code-health#readme",
+  "bugs": "https://github.com/rios0rios0/backstage-plugin-code-health/issues",
+  "keywords": [
+    "backstage",
+    "backstage-plugin",
+    "code-health"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "main": "dist/index.cjs.js",
+    "module": "dist/index.esm.js",
+    "types": "dist/index.d.ts"
+  },
+  "scripts": {
+    "build": "backstage-cli package build",
+    "clean": "backstage-cli package clean",
+    "lint": "backstage-cli package lint --fix",
+    "lint:ci": "backstage-cli package lint",
+    "test": "backstage-cli package test --watch=false",
+    "test:watch": "backstage-cli package test",
+    "prepack": "backstage-cli package prepack",
+    "postpack": "backstage-cli package postpack"
+  },
+  "devDependencies": {
+    "@backstage/cli": "^0.36.4",
+    "jest": "^30.4.2"
+  },
+  "//jest": "`roots` adds the sibling `test/` directory, because `backstage-cli` roots Jest at `<package>/src`. Everything in this package is either a type (erased at runtime, so invisible to coverage) or a pure function with tests, so nothing is excluded.",
+  "jest": {
+    "roots": [
+      "<rootDir>",
+      "<rootDir>/../test"
+    ],
+    "collectCoverageFrom": [
+      "**/*.ts",
+      "!**/*.d.ts"
+    ]
+  }
+}
