@@ -1,0 +1,21 @@
+# Trivy configuration, auto-discovered from the repository root.
+#
+# The pipeline scripts invoke `trivy filesystem "$(pwd)"` and pass only
+# `--ignorefile`, so this file is what scopes the walk. Suppressing findings by
+# ID in `.trivyignore` would have been the alternative, and a worse one: the
+# only findings to suppress are Dockerfile checks, and silencing those globally
+# would also silence them for a Dockerfile this repository might add later.
+scan:
+  skip-dirs:
+    # `node_modules` holds no first-party code. It reaches the walk because a
+    # devDependency chain — `@backstage/backend-test-utils` -> `testcontainers`
+    # -> `dockerode` -> `docker-modem` -> `ssh2` -> `cpu-features` — vendors a
+    # C library whose own CI Dockerfiles then get scanned as if this repository
+    # wrote them. Those files are never built, never published and not ours to
+    # fix upstream.
+    #
+    # Dependency *vulnerabilities* are unaffected: the SCA scan resolves the
+    # package inventory from `yarn.lock` at the repository root, not by walking
+    # the installed tree, and `yarn npm audit --recursive` covers the same
+    # ground independently.
+    - 'node_modules'

@@ -1,7 +1,15 @@
 {
   "extends": "@backstage/cli/config/tsconfig.json",
-  "include": ["src", "test", "config.d.ts"],
-  "exclude": ["node_modules", "dist", "dist-types"],
+  // One type-check pass for the whole workspace, matching how Backstage monorepos
+  // are laid out: a single root `tsconfig.json` covering every package, whose
+  // `dist-types` output is what `backstage-cli package build` reads back.
+  "include": [
+    "plugins/*/src",
+    "plugins/*/test",
+    "plugins/*/dev",
+    "plugins/*/config.d.ts"
+  ],
+  "exclude": ["node_modules", "**/dist", "dist-types"],
   "compilerOptions": {
     "rootDir": ".",
     "outDir": "dist-types",

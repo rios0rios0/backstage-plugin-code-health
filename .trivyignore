@@ -1,3 +1,20 @@
+# elliptic 6.6.1 — CVE-2025-14505 (LOW), recorded 2026-08-10
+#
+# https://access.redhat.com/security/cve/CVE-2025-14505
+#
+# ECDSA signing produces a truncated `k` when an interim value has leading
+# zeros, which is cryptanalysable. There is no fixed version: 6.6.1 is the
+# latest release upstream has published, so there is nothing to bump to.
+#
+# Nothing here signs anything with it. It arrives through
+# `@backstage/cli-module-build` -> `node-stdlib-browser` -> `crypto-browserify`
+# -> `browserify-sign`, the polyfill set the Backstage CLI keeps on hand to shim
+# Node's `crypto` when a browser bundle imports it. This package is a build-time
+# dependency of the CLI, it is absent from every published `dist/`, and the
+# plugin's browser code reaches for Web Crypto rather than a polyfill. Drop this
+# entry as soon as upstream ships a patched `elliptic`.
+CVE-2025-14505
+
 # @octokit/request 6.2.8, @octokit/request-error 3.0.3,
 # @octokit/plugin-paginate-rest 6.1.2 — CVE-2025-25290, CVE-2025-25289, CVE-2025-25288
 #

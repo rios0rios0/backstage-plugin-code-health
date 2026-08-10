@@ -27,11 +27,23 @@ jobs:
   # `yarn-library.yaml` stops at cutting the release tag — publishing to a registry
   # is not part of the shared workflow for any language, so it lives here.
   delivery-publish:
-    name: 'delivery > publish:npm'
+    name: 'delivery > publish:npm (${{ matrix.package }})'
     runs-on: 'ubuntu-latest'
     permissions:
       contents: 'read'
       id-token: 'write' # delivery-publish (OIDC trusted publishing + provenance)
+    # One job per publishable workspace package. Every package carries the same
+    # version and is bumped together, so the tag guard below can compare a single
+    # tag against each package.json in turn. `fail-fast: false` keeps one package's
+    # failure from cancelling the others mid-release, which would leave the registry
+    # holding a partial set.
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - 'plugins/code-health'
+          - 'plugins/code-health-backend'
+          - 'plugins/code-health-common'
     # Third-party actions are pinned to a commit SHA rather than a tag: a tag can be
     # silently repointed by its owner, which is how the trivy-action and
     # kics-github-action compromises reached their consumers. Bump the SHA and the
@@ -78,6 +90,7 @@ jobs:
       # `package.json` to its `dist/` entry points for the tarball and restores the
       # source ones afterwards.
       - name: 'Publish to npm'
+        working-directory: '${{ matrix.package }}'
         run: |
           set -eu
 

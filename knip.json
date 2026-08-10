@@ -1,18 +1,48 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "ignoreExportsUsedInFile": true,
-  "entry": [
-    "src/index.ts",
-    "src/alpha.tsx",
-    "src/setupTests.ts",
-    "test/**/*.test.{ts,tsx}"
-  ],
-  "project": [
-    "src/**/*.{ts,tsx}",
-    "test/**/*.{ts,tsx}"
-  ],
-  "ignoreDependencies": [
-    "@backstage/cli-defaults",
-    "jest-junit"
-  ]
+  "workspaces": {
+    ".": {
+      "entry": [],
+      "project": [],
+      "ignoreDependencies": [
+        "@backstage/cli-defaults",
+        "jest-junit"
+      ]
+    },
+    "plugins/code-health": {
+      "entry": [
+        "src/index.ts",
+        "src/alpha.tsx",
+        "src/setupTests.ts",
+        "test/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "test/**/*.{ts,tsx}"
+      ]
+    },
+    "plugins/code-health-common": {
+      "entry": [
+        "src/index.ts",
+        "test/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.ts"
+      ]
+    },
+    "plugins/code-health-backend": {
+      "entry": [
+        "src/index.ts",
+        "dev/index.ts",
+        "test/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.ts",
+        "dev/**/*.ts"
+      ]
+    }
+  }
 }
