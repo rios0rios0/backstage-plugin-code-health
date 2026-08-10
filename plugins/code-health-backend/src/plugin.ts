@@ -4,8 +4,11 @@ import { catalogServiceRef } from "@backstage/plugin-catalog-node";
 import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
 import { CODE_HEALTH_PLUGIN_ID } from "@rios0rios0/backstage-plugin-code-health-common";
 import { CaptureRepositorySnapshots } from "./domain/commands/capture_repository_snapshots";
+import { GetRepositoryTimeSeries } from "./domain/commands/get_repository_time_series";
 import { DiscoverRepositories } from "./domain/commands/discover_repositories";
 import { IngestRepositoryHistory } from "./domain/commands/ingest_repository_history";
+import { ListContributorSummaries } from "./domain/commands/list_contributor_summaries";
+import { ListRepositorySummaries } from "./domain/commands/list_repository_summaries";
 import type { VcsCollector } from "./domain/services/vcs_collector";
 import { createCodeHealthRouter } from "./infrastructure/controllers/code_health_router";
 import { ProviderGateway } from "./infrastructure/http/provider_gateway";
@@ -63,7 +66,17 @@ export const codeHealthPlugin = createBackendPlugin({
         const store = await KnexCodeHealthStore.create({ database });
         const integrations = ScmIntegrations.fromConfig(config);
 
-        httpRouter.use(createCodeHealthRouter({ store, httpAuth }));
+        httpRouter.use(
+          createCodeHealthRouter({
+            store,
+            httpAuth,
+            scheduler,
+            repositories: new ListRepositorySummaries(store),
+            contributors: new ListContributorSummaries(store),
+            timeSeries: new GetRepositoryTimeSeries(store),
+            refreshableTaskIds: [DISCOVERY_TASK_ID, INGESTION_TASK_ID, SNAPSHOT_TASK_ID],
+          }),
+        );
         // The frontend probes this before it renders anything, and a probe that
         // needed a token could not distinguish "not installed" from "not
         // signed in".
