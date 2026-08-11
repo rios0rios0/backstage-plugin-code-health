@@ -48,3 +48,25 @@ export const repositoryFullName = (repository: {
   repository.project === null
     ? `${repository.owner}/${repository.name}`
     : `${repository.owner}/${repository.project}/${repository.name}`;
+
+/**
+ * Identifies the underlying repository, independently of which catalog entity
+ * named it.
+ *
+ * `id` cannot serve this purpose. It is derived from the entity reference — by
+ * design, so a row stays put across rediscovery — which means two components
+ * that name one repository produce two different ids. Anything deduplicating on
+ * `id` therefore compares entities, not repositories, and never collapses them.
+ *
+ * Case is folded because both providers treat these segments case-insensitively,
+ * so the same repository reached through an annotation and through a source
+ * location can legitimately differ only in spelling.
+ */
+export const repositoryIdentity = (repository: {
+  platform: Platform;
+  host: string;
+  owner: string;
+  project: string | null;
+  name: string;
+}): string =>
+  `${repository.platform}:${repository.host}/${repositoryFullName(repository)}`.toLowerCase();
