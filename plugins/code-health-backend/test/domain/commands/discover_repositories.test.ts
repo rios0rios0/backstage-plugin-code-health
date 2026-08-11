@@ -142,7 +142,7 @@ describe("DiscoverRepositories", () => {
     expect(await store.listTrackedRepositories()).toHaveLength(1);
   });
 
-  it("should report how many entities collapsed onto another entity's repository", async () => {
+  it("should report a single collapsed entity in the singular", async () => {
     // given
     // Without this line the only symptom is a dashboard with repeated rows and
     // nothing anywhere explaining why.
@@ -158,16 +158,35 @@ describe("DiscoverRepositories", () => {
 
     // then
     expect(logger.at("info").join(" ")).toContain(
-      "collapsed 1 entities onto repositories already named by another entity",
+      "collapsed 1 entity onto a repository already named by another entity",
+    );
+  });
+
+  it("should report several collapsed entities in the plural", async () => {
+    // given
+    const catalog = new StubCatalogReader().withEntities([
+      EntityBuilder.create().withName("api").withGithubSlug("rios0rios0/pipelines").build(),
+      EntityBuilder.create().withName("worker").withGithubSlug("rios0rios0/pipelines").build(),
+      EntityBuilder.create().withName("cli").withGithubSlug("rios0rios0/pipelines").build(),
+    ]);
+    const { command, logger } = createCommand(catalog);
+
+    // when
+    await run(command);
+
+    // then
+    expect(logger.at("info").join(" ")).toContain(
+      "collapsed 2 entities onto repositories already named by another entity",
     );
   });
 
   it("should keep the same entity when the catalog returns them in another order", async () => {
     // given
-    // `getEntities` guarantees no ordering. Because `id` is derived from the
-    // entity reference, a winner decided by arrival order would change the row's
-    // id between passes, and `syncRepositories` would reinsert it — resetting
-    // the backfill cursor and discarding every day already ingested.
+    // `CatalogReader.listEntities` guarantees no ordering. Because `id` is
+    // derived from the entity reference, a winner decided by arrival order would
+    // change the row's id between passes, and `syncRepositories` would reinsert
+    // it — resetting the backfill cursor and discarding every day already
+    // ingested.
     const api = EntityBuilder.create().withName("api").withGithubSlug("rios0rios0/pipelines");
     const worker = EntityBuilder.create().withName("worker").withGithubSlug("rios0rios0/pipelines");
     const store = new InMemoryCodeHealthStore();
@@ -184,6 +203,50 @@ describe("DiscoverRepositories", () => {
     const [second] = await store.listTrackedRepositories();
     expect(second?.repository.entityRef).toBe(first?.repository.entityRef);
     expect(result).toMatchObject({ inserted: 0, updated: 1, removed: 0 });
+  });
+
+  it("should not hand a tracked repository to an entity added later", async () => {
+    // given
+    // The winner cannot be the lowest reference alone: a component added later
+    // with a lower reference would take the repository from the one already
+    // ingesting it, changing the row's id and making `syncRepositories` reinsert
+    // it — the dashboard would lose that repository's history.
+    const worker = EntityBuilder.create().withName("worker").withGithubSlug("rios0rios0/pipelines");
+    const store = new InMemoryCodeHealthStore();
+    const catalog = new StubCatalogReader().withEntities([worker.build()]);
+    const { command } = createCommand(catalog, store);
+    await run(command);
+    const [incumbent] = await store.listTrackedRepositories();
+
+    // when
+    const api = EntityBuilder.create().withName("api").withGithubSlug("rios0rios0/pipelines");
+    catalog.withEntities([api.build(), worker.build()]);
+    const result = await run(command);
+
+    // then
+    const tracked = await store.listTrackedRepositories();
+    expect(tracked).toHaveLength(1);
+    expect(tracked[0]?.repository.entityRef).toBe(incumbent?.repository.entityRef);
+    expect(result).toMatchObject({ inserted: 0, updated: 1, removed: 0 });
+  });
+
+  it("should elect a new entity once the incumbent leaves the catalog", async () => {
+    // given
+    const worker = EntityBuilder.create().withName("worker").withGithubSlug("rios0rios0/pipelines");
+    const api = EntityBuilder.create().withName("api").withGithubSlug("rios0rios0/pipelines");
+    const store = new InMemoryCodeHealthStore();
+    const catalog = new StubCatalogReader().withEntities([worker.build()]);
+    const { command } = createCommand(catalog, store);
+    await run(command);
+
+    // when
+    catalog.withEntities([api.build()]);
+    await run(command);
+
+    // then
+    const tracked = await store.listTrackedRepositories();
+    expect(tracked).toHaveLength(1);
+    expect(tracked[0]?.repository.entityRef).toContain("api");
   });
 
   it("should stop tracking a repository whose entity left the catalog", async () => {
