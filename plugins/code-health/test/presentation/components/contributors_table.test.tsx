@@ -206,6 +206,7 @@ describe("ContributorsTable", () => {
           coverage: 87.5,
           duplications: 3.25,
           technicalDebt: "2h 15min",
+          technicalDebtMinutes: 135,
           qualityGateStatus: "OK",
         })
         .build(),

@@ -162,6 +162,7 @@ describe("CaptureRepositorySnapshots", () => {
       coverage: 87.5,
       duplications: 1.2,
       technicalDebt: "3h",
+      technicalDebtMinutes: 180,
       qualityGateStatus: "OK",
     };
     const sonar = new StubSonarEnricher(metrics);

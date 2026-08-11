@@ -7,10 +7,7 @@
  * @packageDocumentation
  */
 
-export {
-  CODE_HEALTH_API_VERSION,
-  CODE_HEALTH_PLUGIN_ID,
-} from "./api";
+export { CODE_HEALTH_API_VERSION, CODE_HEALTH_PLUGIN_ID } from "./api";
 export type {
   GetCoverageResponse,
   GetTimeSeriesResponse,
@@ -48,6 +45,7 @@ export type {
 } from "./repository_summary";
 
 export type { QualityGateStatus, SonarMetrics } from "./sonar_metrics";
+export { formatDebt } from "./sonar_metrics";
 
 export type { Tag } from "./tag";
 
