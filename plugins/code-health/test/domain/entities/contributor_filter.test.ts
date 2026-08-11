@@ -142,6 +142,7 @@ describe("sortContributors", () => {
           coverage: 0,
           duplications: 0,
           technicalDebt: "0min",
+          technicalDebtMinutes: 0,
           qualityGateStatus: "NONE",
         })
         .build(),
@@ -168,6 +169,7 @@ describe("sortContributors by Sonar metrics", () => {
         coverage: 0,
         duplications: 0,
         technicalDebt: "0min",
+        technicalDebtMinutes: 0,
         qualityGateStatus: "NONE",
         ...overrides,
       })

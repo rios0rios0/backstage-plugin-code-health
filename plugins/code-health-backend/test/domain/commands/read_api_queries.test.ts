@@ -182,6 +182,79 @@ describe("ListContributorSummaries", () => {
     expect(contributors[0]).toMatchObject({ key: "dev@example.com", commits: 2 });
   });
 
+  it("should aggregate the Sonar metrics of the repositories a contributor touched", async () => {
+    // given
+    // Sonar measures projects, not people, so a contributor row can only report
+    // the health of the code they worked on. One contributor, two repositories.
+    const { store, discovered } = await seed(2);
+    const metrics = [
+      { bugs: 3, codeSmells: 10, securityHotspots: 1, vulnerabilities: 2, coverage: 80, duplications: 2, technicalDebt: "1h", technicalDebtMinutes: 60, qualityGateStatus: "OK" as const },
+      { bugs: 4, codeSmells: 5, securityHotspots: 2, vulnerabilities: 0, coverage: 60, duplications: 4, technicalDebt: "2h", technicalDebtMinutes: 120, qualityGateStatus: "ERROR" as const },
+    ];
+    for (const [index, repository] of discovered.entries()) {
+      await store.saveSnapshot({
+        repositoryId: repository.id,
+        day: "2026-08-10",
+        capturedAt: NOW,
+        payload: aSnapshotPayload({ sonarMetrics: metrics[index] }),
+      });
+      await store.commitIngestion({
+        repositoryId: repository.id,
+        events: [commit(repository.id, "2026-08-09T10:00:00.000Z").build()],
+        chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+        status: "active",
+        now: NOW,
+      });
+    }
+
+    // when
+    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+
+    // then
+    expect(contributor?.sonarMetrics).toEqual({
+      // counts sum: someone spanning two repositories carries both
+      bugs: 7,
+      codeSmells: 15,
+      securityHotspots: 3,
+      vulnerabilities: 2,
+      // percentages average: adding two coverage figures is meaningless
+      coverage: 70,
+      duplications: 3,
+      // debt sums, which is why the raw minutes travel with the formatted string
+      technicalDebt: "3h",
+      technicalDebtMinutes: 180,
+      // worst wins, so one failing repository stays visible
+      qualityGateStatus: "ERROR",
+    });
+  });
+
+  it("should report no Sonar metrics when the contributor's repositories have none", async () => {
+    // given
+    // The annotation is optional, so most repositories have no Sonar project and
+    // a row of zeroes would read as a clean bill of health rather than no data.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.saveSnapshot({
+      repositoryId: repository.id,
+      day: "2026-08-10",
+      capturedAt: NOW,
+      payload: aSnapshotPayload({ sonarMetrics: null }),
+    });
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [commit(repository.id, "2026-08-09T10:00:00.000Z").build()],
+      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+
+    // then
+    expect(contributor?.sonarMetrics).toBeNull();
+  });
+
   it("should sort the busiest contributor first", async () => {
     // given
     const { store, discovered } = await seed();

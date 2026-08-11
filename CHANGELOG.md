@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- fixed the contributors view rendering its Sonar columns permanently empty. `ListContributorSummaries` hard-coded `sonarMetrics: null`, so `BUGS`, `SMELLS`, `HOTSPOTS`, `VULNS`, `COVERAGE`, `DUPS` and `DEBT` were shown for every contributor and could never hold a value. They now carry the Sonar health of the repositories that contributor touched inside the window
+- this is deliberately not an attribution. SonarQube measures projects, not people, and nothing here claims the bugs belong to anyone — two people working the same repository see the same figures. It answers "what does the code this person worked on look like", which is the only honest reading of a per-project measure on a per-person row
+- counts sum, because a contributor spanning three repositories carries all three. Percentages average, because adding coverage figures is meaningless. The quality gate takes the worst value present, so one failing repository stays visible instead of being averaged away. A contributor whose repositories have no Sonar project still reports `null` rather than a row of zeroes
+
+### Added
+
+- added `technicalDebtMinutes` to `SonarMetrics`, carrying `sqale_index` as SonarQube reports it alongside the formatted `technicalDebt` string. The formatting is lossy — it drops the residual minutes once there are whole days — so summing two debts cannot work backwards from the display value
+- moved `formatDebt` into `@rios0rios0/backstage-plugin-code-health-common` and exported it. The collector and the contributor aggregation now format the same value with one implementation instead of two that would drift
+
 ## [2.1.0] - 2026-08-11
 
 ### Added

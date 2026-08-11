@@ -1,3 +1,4 @@
+import { formatDebt } from "@rios0rios0/backstage-plugin-code-health-common";
 import type {
   AuthService,
   DiscoveryService,
@@ -20,7 +21,10 @@ const SONARQUBE_PLUGIN_ID = "sonarqube";
 /** Shape of the summary the `sonarqube` backend plugin returns. */
 interface SonarSummaryResponse {
   readonly findings?: {
-    readonly measures?: readonly { readonly metric?: string; readonly value?: string }[];
+    readonly measures?: readonly {
+      readonly metric?: string;
+      readonly value?: string;
+    }[];
     readonly analysisDate?: string;
   } | null;
 }
@@ -39,17 +43,6 @@ const METRIC_KEYS = {
 const numeric = (measures: Map<string, string>, key: string): number => {
   const parsed = Number(measures.get(key));
   return Number.isFinite(parsed) ? parsed : 0;
-};
-
-/** Sonar reports technical debt as a minute count; the dashboard shows a duration. */
-const formatDebt = (minutes: number): string => {
-  if (minutes <= 0) return "0min";
-  const days = Math.floor(minutes / (60 * 8));
-  const hours = Math.floor((minutes % (60 * 8)) / 60);
-  const remainder = minutes % 60;
-  if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-  if (hours > 0) return remainder > 0 ? `${hours}h ${remainder}min` : `${hours}h`;
-  return `${remainder}min`;
 };
 
 const QUALITY_GATES: ReadonlyMap<string, QualityGateStatus> = new Map([
@@ -92,7 +85,8 @@ export class SonarqubeEnricher implements SonarEnricher {
     const { kind, namespace, name } = parseEntityRef(repository.entityRef);
 
     try {
-      const baseUrl = await this.options.discovery.getBaseUrl(SONARQUBE_PLUGIN_ID);
+      const baseUrl =
+        await this.options.discovery.getBaseUrl(SONARQUBE_PLUGIN_ID);
       const { token } = await this.options.auth.getPluginRequestToken({
         onBehalfOf: await this.options.auth.getOwnServiceCredentials(),
         targetPluginId: SONARQUBE_PLUGIN_ID,
@@ -136,7 +130,9 @@ export class SonarqubeEnricher implements SonarEnricher {
       coverage: numeric(values, METRIC_KEYS.coverage),
       duplications: numeric(values, METRIC_KEYS.duplications),
       technicalDebt: formatDebt(numeric(values, METRIC_KEYS.technicalDebt)),
-      qualityGateStatus: QUALITY_GATES.get(values.get(METRIC_KEYS.qualityGate) ?? "") ?? "NONE",
+      technicalDebtMinutes: numeric(values, METRIC_KEYS.technicalDebt),
+      qualityGateStatus:
+        QUALITY_GATES.get(values.get(METRIC_KEYS.qualityGate) ?? "") ?? "NONE",
     };
   }
 }

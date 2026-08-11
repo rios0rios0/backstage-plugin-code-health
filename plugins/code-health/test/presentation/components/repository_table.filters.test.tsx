@@ -164,6 +164,7 @@ describe("RepositoryTable column filters", () => {
           coverage: 50,
           duplications: 1,
           technicalDebt: "1h",
+          technicalDebtMinutes: 60,
           qualityGateStatus: status,
         },
       };

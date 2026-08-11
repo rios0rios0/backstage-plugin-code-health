@@ -69,6 +69,9 @@ describe("SonarqubeEnricher", () => {
       coverage: 87.4,
       duplications: 1.2,
       technicalDebt: "3h 15min",
+      // the same value unformatted, so a summed debt need not be parsed back
+      // out of the display string
+      technicalDebtMinutes: 195,
       qualityGateStatus: "OK",
     });
   });
