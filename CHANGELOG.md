@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-08-11
+
+### Added
+
+- added a log line reporting how many entities collapsed onto a repository another entity already named, pluralised for the single-entity case. Without it the only symptom is a dashboard with repeated rows and nothing anywhere explaining why
+
 ### Fixed
 
 - fixed one repository being tracked once per catalog entity that names it, which rendered an identical dashboard row per entity and made every scheduled task re-fetch that repository once per row. Two shapes hit this: a monorepo declaring one component per module, and a single location file declaring many components, since all of them inherit the same `backstage.io/managed-by-location`. Discovery already intended to collapse them — the guard and its comment were there — but it deduplicated on `TrackedRepository.id`, which is a hash of the entity reference and therefore unique per entity by construction, so the check compared entities to themselves and could only ever collapse an entity duplicated within a single pass. Deduplication now keys on the repository's own coordinates via a new `repositoryIdentity()`, folding case because both providers treat those segments case-insensitively and the same repository reached through an annotation and through a source location can differ only in spelling
 - fixed the entity owning a shared repository being able to change under the tracked row, which would have taken the dashboard's history with it. `syncRepositories` keys on `id` alone and `id` derives from the entity reference, so any change of winner inserts a new row and soft-deletes the old one, resetting the backfill cursor. The entity already tracking a repository now keeps it whatever its reference, so adding a component later cannot take the repository from the one that has been ingesting it; the lowest reference decides only when no candidate is the incumbent — a first discovery, or the incumbent leaving the catalog — which keeps that choice independent of the order `CatalogReader.listEntities` happened to return
 - fixed the existing regression test passing for the wrong reason: it built both fixtures with the same `metadata.name`, so they were one entity rather than two naming one repository, and it exercised the identity collapse that `EntityBuilder`'s own documentation warns about. It is replaced by cases that fail against the previous implementation — two components on a monorepo, several components on one Azure DevOps repository, one repository reached through two different annotations, and a repository staying with its incumbent when a lower-referenced component appears later
-- added a log line reporting how many entities collapsed onto a repository another entity already named, pluralised for the single-entity case. Without it the only symptom is a dashboard with repeated rows and nothing anywhere explaining why
 
 ## [2.0.0] - 2026-08-10
 
@@ -60,10 +65,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- fixed the range the frontend and the backend declare on `@rios0rios0/backstage-plugin-code-health-common`, which was still `^1.0.1`. A caret range does not cross a major, and `-common` has never been published at `1.x` at all, so both packages would have shipped depending on something no registry could resolve. `.autobump.yaml` now carries that range as a version file pattern, so it moves with the release rather than being remembered
-- fixed the claim that npm accepts a trusted-publishing entry for a name it has never seen. It does not: `npm trust` posts to `/-/package/<name>/trust`, which returns `E404` for a package that does not exist, and npm has no pending-publisher concept. A new name has to be created by one hand publish before CI can ever publish it, which `1.0.1` had recorded backwards
 - fixed the `security > sca:yarn-audit` and `security > sca:trivy` jobs, both of which had been failing on `main`
+- fixed the claim that npm accepts a trusted-publishing entry for a name it has never seen. It does not: `npm trust` posts to `/-/package/<name>/trust`, which returns `E404` for a package that does not exist, and npm has no pending-publisher concept. A new name has to be created by one hand publish before CI can ever publish it, which `1.0.1` had recorded backwards
 - fixed the installation guide overstating how the sidebar entry appears. The page emits a title and icon and the new frontend system derives a nav entry from those, but an app that replaces the sidebar with its own `NavContentBlueprint` places items explicitly and can drop it silently. The README now names the extension IDs (`page:code-health`, plus the four `api:code-health/*`) that such an app needs for `nav.take(...)` and `app.extensions`, and states outright that there is no `nav-item:code-health` to reference.
+- fixed the range the frontend and the backend declare on `@rios0rios0/backstage-plugin-code-health-common`, which was still `^1.0.1`. A caret range does not cross a major, and `-common` has never been published at `1.x` at all, so both packages would have shipped depending on something no registry could resolve. `.autobump.yaml` now carries that range as a version file pattern, so it moves with the release rather than being remembered
 
 ### Removed
 
