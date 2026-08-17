@@ -9,6 +9,9 @@ import { Link as RouterLink } from "react-router-dom";
 import type { RankedItem } from "../../../domain/entities/insights";
 import { useChartPalette } from "./chart_palette";
 
+const BAR_HEIGHT = 10;
+const RADIUS = 4;
+
 const useStyles = makeStyles((theme) => ({
   row: {
     display: "grid",
@@ -32,7 +35,18 @@ const useStyles = makeStyles((theme) => ({
   },
   // The track is the empty remainder of the bar. Recessive by design: it is a
   // reference, not data.
-  track: { width: "100%", display: "block" },
+  //
+  // Plain elements rather than SVG: a `<rect rx>` inside a viewBox stretched to
+  // the container width scales its corner radius with the x-axis, so the 4px
+  // round end renders as a flattened ellipse several times wider than it is
+  // tall. A CSS radius is exactly 4px whatever the width.
+  track: {
+    width: "100%",
+    height: BAR_HEIGHT,
+    borderRadius: RADIUS,
+    overflow: "hidden",
+  },
+  fill: { height: "100%", borderRadius: RADIUS },
   value: {
     fontVariantNumeric: "tabular-nums",
     color: theme.palette.text.primary,
@@ -41,9 +55,6 @@ const useStyles = makeStyles((theme) => ({
   detail: { color: theme.palette.text.secondary },
   empty: { color: theme.palette.text.secondary, padding: theme.spacing(2, 0) },
 }));
-
-const BAR_HEIGHT = 10;
-const RADIUS = 4;
 
 const initialsOf = (label: string): string =>
   label
@@ -128,31 +139,15 @@ export const RankingChart = ({
             </Box>
 
             <Tooltip title={`${item.value} ${unit} · ${item.detail}`}>
-              <svg
-                className={classes.track}
-                height={BAR_HEIGHT}
-                role="img"
-                aria-hidden="true"
-                preserveAspectRatio="none"
-                viewBox="0 0 100 10"
-              >
-                <rect
-                  x={0}
-                  y={0}
-                  width={100}
-                  height={BAR_HEIGHT}
-                  rx={RADIUS}
-                  fill={palette.grid}
+              <Box className={classes.track} style={{ background: palette.grid }}>
+                <Box
+                  className={classes.fill}
+                  style={{
+                    width: `${Math.max(width, 0.5)}%`,
+                    background: palette.series[0],
+                  }}
                 />
-                <rect
-                  x={0}
-                  y={0}
-                  width={Math.max(width, 0.5)}
-                  height={BAR_HEIGHT}
-                  rx={RADIUS}
-                  fill={palette.series[0]}
-                />
-              </svg>
+              </Box>
             </Tooltip>
 
             <Box textAlign="right">

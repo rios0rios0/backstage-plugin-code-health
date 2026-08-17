@@ -8,6 +8,9 @@ import WarningIcon from "@material-ui/icons/Warning";
 import type { StatusSlice, StatusTone } from "../../../domain/entities/insights";
 import { useChartPalette } from "./chart_palette";
 
+const BAR_HEIGHT = 10;
+const RADIUS = 4;
+
 const useStyles = makeStyles((theme) => ({
   row: {
     display: "grid",
@@ -18,7 +21,15 @@ const useStyles = makeStyles((theme) => ({
   },
   icon: { fontSize: "1.1rem" },
   label: { color: theme.palette.text.primary },
-  bar: { width: "100%", display: "block" },
+  // Plain elements rather than SVG, for the same reason as the ranking chart:
+  // a stretched viewBox scales a `rect`'s corner radius with the x-axis.
+  bar: {
+    width: "100%",
+    height: BAR_HEIGHT,
+    borderRadius: RADIUS,
+    overflow: "hidden",
+  },
+  fill: { height: "100%", borderRadius: RADIUS },
   value: {
     fontVariantNumeric: "tabular-nums",
     color: theme.palette.text.primary,
@@ -33,8 +44,6 @@ const ICONS: Record<StatusTone, typeof CheckCircleIcon> = {
   critical: ErrorIcon,
   unknown: HelpIcon,
 };
-
-const BAR_HEIGHT = 10;
 
 export interface StatusBreakdownProps {
   readonly slices: readonly StatusSlice[];
@@ -72,23 +81,15 @@ export const StatusBreakdown = ({ slices }: StatusBreakdownProps) => {
             <Typography variant="body2" className={classes.label}>
               {slice.label}
             </Typography>
-            <svg
-              className={classes.bar}
-              height={BAR_HEIGHT}
-              aria-hidden="true"
-              preserveAspectRatio="none"
-              viewBox="0 0 100 10"
-            >
-              <rect x={0} y={0} width={100} height={BAR_HEIGHT} rx={4} fill={palette.grid} />
-              <rect
-                x={0}
-                y={0}
-                width={Math.max(share, slice.count > 0 ? 0.5 : 0)}
-                height={BAR_HEIGHT}
-                rx={4}
-                fill={color}
+            <Box className={classes.bar} style={{ background: palette.grid }}>
+              <Box
+                className={classes.fill}
+                style={{
+                  width: `${Math.max(share, slice.count > 0 ? 0.5 : 0)}%`,
+                  background: color,
+                }}
               />
-            </svg>
+            </Box>
             <Box textAlign="right" whiteSpace="nowrap">
               <Typography variant="body2" component="span" className={classes.value}>
                 {slice.count.toLocaleString()}
