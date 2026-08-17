@@ -288,6 +288,36 @@ describe("ListContributorSummaries", () => {
     });
   });
 
+  it("should match a catalog user seeded under a mixed-case address", async () => {
+    // given
+    // The catalog contract keys results by the lowercased address, so a user
+    // whose entity spells it differently still has to resolve. This pins the
+    // double to that contract — one that normalised only the query would
+    // silently disagree with the real adapter.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [commit(repository.id, "2026-08-09T10:00:00.000Z", "dev@example.com").build()],
+      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+    const catalog = new StubCatalogReader().withUsers({
+      "Dev@Example.COM": {
+        entityRef: "user:default/dev_example.com",
+        displayName: "Dev Eloper",
+        picture: null,
+      },
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries(store, catalog).run(WINDOW);
+
+    // then
+    expect(contributor.entityRef).toBe("user:default/dev_example.com");
+  });
+
   it("should leave a contributor unlinked when no catalog user matches", async () => {
     // given
     // Bots, service accounts and commits from a personal address have no entity.

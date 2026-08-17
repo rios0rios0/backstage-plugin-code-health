@@ -38,10 +38,17 @@ export class StubCatalogReader implements CatalogReader {
   async findUsersByEmail(emails: readonly string[]): Promise<Map<string, CatalogUser>> {
     this.emailLookups.push(emails);
     if (this.failure) throw this.failure;
+
+    // Both sides are lowercased, because `CatalogReader` documents the result
+    // as keyed by the lowercased address. Normalising only the query would let
+    // a user seeded under a mixed-case key never match, and would return keys
+    // in whatever casing the test happened to write — a double that disagrees
+    // with the adapter it stands in for turns a real bug into a passing test.
+    const wanted = new Set(emails.map((email) => email.toLowerCase()));
     return new Map(
-      [...this.users.entries()].filter(([email]) =>
-        emails.some((wanted) => wanted.toLowerCase() === email),
-      ),
+      [...this.users.entries()]
+        .map(([email, user]) => [email.toLowerCase(), user] as const)
+        .filter(([email]) => wanted.has(email)),
     );
   }
 }

@@ -8,7 +8,12 @@ export interface ParsedEntityRef {
 const DEFAULT_NAMESPACE = "default";
 
 /**
- * Splits `[<kind>:][<namespace>/]<name>` into its parts.
+ * Splits `<kind>:[<namespace>/]<name>` into its parts, defaulting the namespace
+ * to `default` when it is omitted.
+ *
+ * The kind is required. A bare name is rejected rather than guessed at, because
+ * the same name routinely exists under several kinds and a wrong guess links to
+ * an entity that is not the one on the row.
  *
  * Returns null rather than throwing: an entity reference reaches this from
  * stored data, and one row with a malformed value should degrade to plain text
