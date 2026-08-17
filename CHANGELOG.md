@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - changed the repository name in the repositories table to link to that repository's catalog entity rather than reading as plain text, which is the page a reader wants from a row on a Backstage dashboard
 - changed contributor rows to show the catalog user's picture, falling back to their initials when the entity carries no `spec.profile.picture`
 
+### Security
+
+- pinned `nanoid` to `3.3.18` to close `CVE-2026-67213`, a HIGH-severity denial of service where a custom generator loops indefinitely when the requested size is zero. It arrives transitively through `postcss`, and the advisory was published against a lockfile this repository already had — the resolution pins the patched version per line rather than suppressing the finding
+
 
 
 ### Added

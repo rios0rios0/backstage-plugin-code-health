@@ -39,7 +39,8 @@
     "adm-zip@npm:0.5.10": "^0.6.0",
     "prismjs@npm:~1.27.0": "^1.30.0",
     "undici@npm:7.28.0": "^7.29.0",
-    "nanoid@npm:^3.3.16": "^3.3.17"
+    "nanoid@npm:^3.3.16": "^3.3.18",
+    "nanoid@npm:^3.3.17": "^3.3.18"
   },
   "devDependencies": {
     "@backstage/cli": "^0.36.4",
