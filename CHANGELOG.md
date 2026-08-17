@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - pinned `nanoid` to `3.3.18` to close `CVE-2026-67213`, a HIGH-severity denial of service where a custom generator loops indefinitely when the requested size is zero. It arrives transitively through `postcss`, and the advisory was published against a lockfile this repository already had — the resolution pins the patched version per line rather than suppressing the finding
 
-
+## [2.2.0] - 2026-08-11
 
 ### Added
 
