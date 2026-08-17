@@ -1,8 +1,49 @@
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render as renderBare, screen, fireEvent, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { RepositoryTable } from "../../../src/presentation/components/repository_table";
 import { RepositoryBuilder } from "../../builders/repository_builder";
 
+// The repository name links to the catalog entity through a router `Link`, so the
+// component only mounts inside a router — which is how the app renders it.
+const render = (ui: React.ReactElement) => renderBare(<MemoryRouter>{ui}</MemoryRouter>);
+
 describe("RepositoryTable", () => {
+  it("should link the repository name to its catalog entity", async () => {
+    // given
+    // The provider URL is deliberately not the destination: the catalog entity is
+    // where the owner, docs and other tabs live, and it carries the provider URL.
+    const repos = [
+      RepositoryBuilder.create()
+        .withFullName("user/my-repo")
+        .withEntityRef("component:default/my-repo")
+        .withUrl("https://dev.azure.com/org/project/_git/my-repo")
+        .build(),
+    ];
+
+    // when
+    render(<RepositoryTable repositories={repos} totalCount={1} isLoading={false} />);
+
+    // then
+    const link = screen.getByText("user/my-repo").closest("a");
+    expect(link).toHaveAttribute("href", "/catalog/default/component/my-repo");
+  });
+
+  it("should render the name as plain text when the entity reference is unusable", async () => {
+    // given
+    // A malformed reference should cost this one row its link, not throw and take
+    // the whole table down with it.
+    const repos = [
+      RepositoryBuilder.create().withFullName("user/broken").withEntityRef("not-a-ref").build(),
+    ];
+
+    // when
+    render(<RepositoryTable repositories={repos} totalCount={1} isLoading={false} />);
+
+    // then
+    expect(screen.getByText("user/broken")).toBeInTheDocument();
+    expect(screen.getByText("user/broken").closest("a")).toBeNull();
+  });
+
   it("should render 'No repositories found.' when repositories is empty and not loading", () => {
     // given / when
     render(<RepositoryTable repositories={[]} totalCount={0} isLoading={false} />);

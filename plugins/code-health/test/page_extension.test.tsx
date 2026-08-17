@@ -9,12 +9,14 @@ import {
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthTimeSeriesApiRef,
 } from "../src/main/api_refs";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../src/domain/entities/code_health_config";
 import { StubAppThemeApi } from "./doubles/stub_app_theme_api";
 import { StubCoverageService } from "./doubles/stub_coverage_service";
 import { StubContributorService } from "./doubles/stub_contributor_service";
 import { StubDashboardService } from "./doubles/stub_dashboard_service";
+import { StubTimeSeriesService } from "./doubles/stub_time_series_service";
 
 /**
  * Mounts the extension the way a consuming app does — behind a `<Route>` bound
@@ -30,6 +32,7 @@ const renderPage = (coverageService: StubCoverageService) =>
         [codeHealthConfigApiRef, DEFAULT_CODE_HEALTH_CONFIG],
         [codeHealthRepositoriesApiRef, new StubDashboardService().withRepositories([])],
         [codeHealthContributorsApiRef, new StubContributorService().withContributors([])],
+        [codeHealthTimeSeriesApiRef, new StubTimeSeriesService()],
       ]}
     >
       <Routes>

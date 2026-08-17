@@ -9,3 +9,9 @@ export const contributorsRouteRef = createSubRouteRef({
   parent: rootRouteRef,
   path: "/contributors",
 });
+
+export const insightsRouteRef = createSubRouteRef({
+  id: "code-health:insights",
+  parent: rootRouteRef,
+  path: "/insights",
+});

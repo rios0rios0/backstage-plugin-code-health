@@ -57,3 +57,5 @@ export type { WakaTimeMetrics } from "./wakatime_metrics";
 
 export { CI_STATES, isCIState } from "./workflow_status";
 export type { CIState, WorkflowStatus } from "./workflow_status";
+export { catalogEntityPath, parseEntityRef } from "./entity_ref";
+export type { ParsedEntityRef } from "./entity_ref";

@@ -12,6 +12,7 @@ import {
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthTimeSeriesApiRef,
 } from "./api_refs";
 
 const clientDeps = { discoveryApi: discoveryApiRef, fetchApi: fetchApiRef };
@@ -21,7 +22,7 @@ const clientDeps = { discoveryApi: discoveryApiRef, fetchApi: fetchApiRef };
  * so the `/alpha` entry point can register each one as its own extension without
  * duplicating the wiring.
  *
- * All three data APIs are the same stateless client, registered three times.
+ * Every data API is the same stateless client, registered once per ref.
  * Splitting the refs keeps the views' dependencies honest — the contributors tab
  * does not depend on the repositories API — without any shared state to manage.
  */
@@ -49,9 +50,16 @@ export const codeHealthCoverageApiFactory = createApiFactory({
   factory: (deps) => new CodeHealthBackendClient(deps),
 });
 
+export const codeHealthTimeSeriesApiFactory = createApiFactory({
+  api: codeHealthTimeSeriesApiRef,
+  deps: clientDeps,
+  factory: (deps) => new CodeHealthBackendClient(deps),
+});
+
 export const codeHealthApis: AnyApiFactory[] = [
   codeHealthConfigApiFactory,
   codeHealthRepositoriesApiFactory,
   codeHealthContributorsApiFactory,
   codeHealthCoverageApiFactory,
+  codeHealthTimeSeriesApiFactory,
 ];

@@ -1,8 +1,13 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render as renderBare, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { RepositoryTable } from "../../../src/presentation/components/repository_table";
 import type { BadgeStatus, ComplianceStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { RepositorySummary } from "@rios0rios0/backstage-plugin-code-health-common";
 import { RepositoryBuilder } from "../../builders/repository_builder";
+
+// The repository name links to the catalog entity through a router `Link`, so the
+// component only mounts inside a router — which is how the app renders it.
+const render = (ui: React.ReactElement) => renderBare(<MemoryRouter>{ui}</MemoryRouter>);
 
 const daysAgo = (days: number): string =>
   new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();

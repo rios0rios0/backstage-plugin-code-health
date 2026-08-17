@@ -37,6 +37,8 @@ rather than showing an empty dashboard.
 - **Compliance checks**: pipeline present, build policy on pull requests, build policy expiration and branch protection
 - **README badge audit**: which of the six standard shields are present in each repository's README
 - **Contributor metrics**: commits, churn, pull requests opened and merged, review approval rate and pipeline success rate
+- **Insights**: a fleet-level tab of headline figures and charts — delivery cadence, top contributors, most active repositories, review load, and quality-gate and branch-policy breakdowns
+- **Catalog links**: repository rows and contributors link through to their catalog entity, and a contributor matched to a `User` shows that entity's name and picture
 - **Sonar integration** through the community `sonarqube` backend plugin, so its token stays where that plugin already keeps it
 - **WakaTime integration**: 30-day coding time and daily average per contributor
 - **A year of history**: pick any window from the last hour to the last 365 days
@@ -203,6 +205,11 @@ codeHealth:
   # than the backend has ingested falls back to the widest one available.
   defaultRange: 'day'
 ```
+
+The Insights tab has no settings of its own. Its cadence chart buckets by day, week or month
+according to the range already selected — a year of daily points is noise and a week of monthly
+ones is a single dot, so the only correct setting is implied by the range and is not offered as a
+second control.
 
 ## Operating it
 

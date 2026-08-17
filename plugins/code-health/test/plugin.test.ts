@@ -1,6 +1,6 @@
 import { codeHealthApis } from "../src/main/apis";
 import { CodeHealthPage, codeHealthPlugin } from "../src/plugin";
-import { contributorsRouteRef, rootRouteRef } from "../src/routes";
+import { contributorsRouteRef, insightsRouteRef, rootRouteRef } from "../src/routes";
 
 describe("codeHealthPlugin", () => {
   it("should be registered under the plugin id the package declares", () => {
@@ -26,16 +26,18 @@ describe("codeHealthPlugin", () => {
       "plugin.code-health.contributors",
       "plugin.code-health.coverage",
       "plugin.code-health.repositories",
+      "plugin.code-health.time-series",
     ]);
   });
 
-  it("should publish the root route and the contributors sub route", () => {
+  it("should publish the root route and both sub routes", () => {
     // given / when
     const routes = codeHealthPlugin.routes;
 
     // then
     expect(routes.root).toBe(rootRouteRef);
     expect(routes.contributors).toBe(contributorsRouteRef);
+    expect(routes.insights).toBe(insightsRouteRef);
   });
 
   it("should provide the page as a renderable routable extension", () => {

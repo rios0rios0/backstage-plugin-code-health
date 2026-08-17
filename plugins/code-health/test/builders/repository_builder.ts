@@ -1,7 +1,9 @@
 import type {
   BadgeStatus,
   CIState,
+  ComplianceColor,
   ComplianceStatus,
+  QualityGateStatus,
   Release,
   RepositoryActivity,
   RepositorySummary,
@@ -45,6 +47,59 @@ export class RepositoryBuilder {
 
   static create(): RepositoryBuilder {
     return new RepositoryBuilder();
+  }
+
+  withId(id: string): this {
+    this.props = { ...this.props, id };
+    return this;
+  }
+
+  /** Sets only the gate; the rest of the metrics are zeroed, not invented. */
+  withQualityGate(qualityGateStatus: QualityGateStatus): this {
+    this.props = {
+      ...this.props,
+      sonarMetrics: {
+        bugs: 0,
+        codeSmells: 0,
+        securityHotspots: 0,
+        vulnerabilities: 0,
+        coverage: 0,
+        duplications: 0,
+        technicalDebt: "0min",
+        technicalDebtMinutes: 0,
+        qualityGateStatus,
+      },
+    };
+    return this;
+  }
+
+  withComplianceColor(color: ComplianceColor): this {
+    this.props = {
+      ...this.props,
+      complianceStatus: {
+        pipelineExists: color === "green",
+        buildPolicyOnPRs: color === "green",
+        buildPolicyExpiration: color === "green",
+        branchProtection: color !== "red",
+        color,
+      },
+    };
+    return this;
+  }
+
+  withEntityRef(entityRef: string): this {
+    this.props = { ...this.props, entityRef };
+    return this;
+  }
+
+  withFullName(fullName: string): this {
+    this.props = { ...this.props, fullName };
+    return this;
+  }
+
+  withUrl(url: string): this {
+    this.props = { ...this.props, url };
+    return this;
   }
 
   withName(name: string): this {
