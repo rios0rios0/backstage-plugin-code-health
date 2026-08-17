@@ -1,8 +1,79 @@
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render as renderBare, screen, fireEvent, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { ContributorsTable } from "../../../src/presentation/components/contributors_table";
 import { ContributorBuilder } from "../../builders/contributor_builder";
 
+// A contributor linked to a catalog user renders a router `Link`, so these mount
+// inside a router — which is how the app renders the table.
+const render = (ui: React.ReactElement) => renderBare(<MemoryRouter>{ui}</MemoryRouter>);
+
 describe("ContributorsTable", () => {
+  it("should link a contributor to their catalog user", async () => {
+    // given
+    // The catalog page is the destination rather than the provider profile: it
+    // carries ownership, group membership and the rest of the person's entity.
+    const contributors = [
+      ContributorBuilder.create()
+        .withDisplayName("Dev Eloper")
+        .withEntityRef("user:default/dev_example.com")
+        .build(),
+    ];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    const link = screen.getByText("Dev Eloper").closest("a");
+    expect(link).toHaveAttribute("href", "/catalog/default/user/dev_example.com");
+  });
+
+  it("should fall back to the provider profile when no catalog user matched", async () => {
+    // given
+    // Bots and commits from a personal address resolve to no entity, and linking
+    // them into the catalog would point at a page that does not exist.
+    const contributors = [
+      ContributorBuilder.create()
+        .withDisplayName("ci-bot")
+        .withEntityRef(null)
+        .withProfileUrl("https://github.com/ci-bot")
+        .build(),
+    ];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(screen.getByText("ci-bot").closest("a")).toHaveAttribute(
+      "href",
+      "https://github.com/ci-bot",
+    );
+  });
+
+  it("should show initials when the catalog user has no picture", async () => {
+    // given
+    // Most directories populate a photo for only some of their people; a generic
+    // silhouette would make every unphotographed contributor look identical.
+    const contributors = [
+      ContributorBuilder.create()
+        .withDisplayName("Ada Lovelace")
+        .withAvatarUrl(null)
+        .withEntityRef("user:default/ada")
+        .build(),
+    ];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(screen.getByText("AL")).toBeInTheDocument();
+  });
+
   const defaultProps = {
     totalCount: 0,
     isLoading: false,

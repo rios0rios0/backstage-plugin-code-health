@@ -7,6 +7,7 @@ import {
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthTimeSeriesApiRef,
 } from "../../src/main/api_refs";
 import { Router } from "../../src/main/router";
 import { RepositoryBuilder } from "../builders/repository_builder";
@@ -14,17 +15,20 @@ import { StubAppThemeApi } from "../doubles/stub_app_theme_api";
 import { StubContributorService } from "../doubles/stub_contributor_service";
 import { StubCoverageService } from "../doubles/stub_coverage_service";
 import { StubDashboardService } from "../doubles/stub_dashboard_service";
+import { StubTimeSeriesService } from "../doubles/stub_time_series_service";
 
 const renderRouter = async (
   overrides: {
     dashboardService?: StubDashboardService;
     contributorService?: StubContributorService;
     coverageService?: StubCoverageService;
+    timeSeriesService?: StubTimeSeriesService;
   } = {},
 ) => {
   const dashboardService = overrides.dashboardService ?? new StubDashboardService();
   const contributorService = overrides.contributorService ?? new StubContributorService();
   const coverageService = overrides.coverageService ?? new StubCoverageService();
+  const timeSeriesService = overrides.timeSeriesService ?? new StubTimeSeriesService();
 
   await renderInTestApp(
     <TestApiProvider
@@ -34,13 +38,14 @@ const renderRouter = async (
         [codeHealthRepositoriesApiRef, dashboardService],
         [codeHealthContributorsApiRef, contributorService],
         [codeHealthCoverageApiRef, coverageService],
+        [codeHealthTimeSeriesApiRef, timeSeriesService],
       ]}
     >
       <Router />
     </TestApiProvider>,
   );
 
-  return { dashboardService, contributorService, coverageService };
+  return { dashboardService, contributorService, coverageService, timeSeriesService };
 };
 
 describe("Router", () => {
@@ -57,7 +62,7 @@ describe("Router", () => {
     expect(await screen.findByText("user/gateway")).toBeInTheDocument();
   });
 
-  it("should show both tabs", async () => {
+  it("should show every tab", async () => {
     // given / when
     await renderRouter();
 
@@ -66,6 +71,7 @@ describe("Router", () => {
     // now that credentials live in the backend's `integrations` block.
     expect(await screen.findByRole("tab", { name: "Repositories" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Contributors" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Insights" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Settings" })).not.toBeInTheDocument();
   });
 

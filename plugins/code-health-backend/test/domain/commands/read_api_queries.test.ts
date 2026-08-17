@@ -5,6 +5,7 @@ import type { RepositorySnapshotPayload } from "../../../src/domain/entities/rep
 import { DiscoveredRepositoryBuilder } from "../../builders/discovered_repository_builder";
 import { EventBuilder } from "../../builders/event_builder";
 import { InMemoryCodeHealthStore } from "../../doubles/in_memory_code_health_store";
+import { StubCatalogReader } from "../../doubles/stub_catalog_reader";
 
 const NOW = new Date("2026-08-10T12:00:00.000Z");
 const WINDOW = {
@@ -253,6 +254,120 @@ describe("ListContributorSummaries", () => {
 
     // then
     expect(contributor?.sonarMetrics).toBeNull();
+  });
+
+  it("should resolve a contributor to the catalog user with the same e-mail", async () => {
+    // given
+    // The catalog is the organisation's record of who someone is, so its display
+    // name and picture win over whatever the provider attached to the commit.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [commit(repository.id, "2026-08-09T10:00:00.000Z", "Dev@Example.com").build()],
+      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+    const catalog = new StubCatalogReader().withUsers({
+      "dev@example.com": {
+        entityRef: "user:default/dev_example.com",
+        displayName: "Dev Eloper",
+        picture: "https://example.com/dev.png",
+      },
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries(store, catalog).run(WINDOW);
+
+    // then
+    expect(contributor).toMatchObject({
+      entityRef: "user:default/dev_example.com",
+      displayName: "Dev Eloper",
+      avatarUrl: "https://example.com/dev.png",
+    });
+  });
+
+  it("should match a catalog user seeded under a mixed-case address", async () => {
+    // given
+    // The catalog contract keys results by the lowercased address, so a user
+    // whose entity spells it differently still has to resolve. This pins the
+    // double to that contract — one that normalised only the query would
+    // silently disagree with the real adapter.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [commit(repository.id, "2026-08-09T10:00:00.000Z", "dev@example.com").build()],
+      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+    const catalog = new StubCatalogReader().withUsers({
+      "Dev@Example.COM": {
+        entityRef: "user:default/dev_example.com",
+        displayName: "Dev Eloper",
+        picture: null,
+      },
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries(store, catalog).run(WINDOW);
+
+    // then
+    expect(contributor.entityRef).toBe("user:default/dev_example.com");
+  });
+
+  it("should leave a contributor unlinked when no catalog user matches", async () => {
+    // given
+    // Bots, service accounts and commits from a personal address have no entity.
+    // Guessing one by display name would silently merge two different people.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [commit(repository.id, "2026-08-09T10:00:00.000Z", "bot@ci.local").build()],
+      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+    const catalog = new StubCatalogReader().withUsers({});
+
+    // when
+    const [contributor] = await new ListContributorSummaries(store, catalog).run(WINDOW);
+
+    // then
+    expect(contributor?.entityRef).toBeNull();
+    expect(contributor?.key).toBe("bot@ci.local");
+    // The display name falls back to what the provider reported on the commit,
+    // which is the only name available for an identity the catalog does not know.
+    expect(contributor?.displayName).toBe("Dev Example");
+  });
+
+  it("should look up only the contributors present in the window", async () => {
+    // given
+    // The directory is routinely thousands of entities and this runs on every
+    // dashboard load, so the query must be bounded by who actually committed.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [
+        commit(repository.id, "2026-08-09T10:00:00.000Z", "one@example.com").build(),
+        commit(repository.id, "2026-08-09T11:00:00.000Z", "two@example.com").build(),
+      ],
+      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+    const catalog = new StubCatalogReader().withUsers({});
+
+    // when
+    await new ListContributorSummaries(store, catalog).run(WINDOW);
+
+    // then
+    expect(catalog.emailLookups).toHaveLength(1);
+    expect([...catalog.emailLookups[0]].sort()).toEqual(["one@example.com", "two@example.com"]);
   });
 
   it("should sort the busiest contributor first", async () => {
@@ -583,5 +698,66 @@ describe("GetRepositoryTimeSeries", () => {
 
     // then
     expect(points.map((point) => point.day)).toEqual(["2026-08-01"]);
+  });
+
+  it("should aggregate every repository when none is named", async () => {
+    // given
+    // The Insights tab charts the whole fleet as one series; asking per
+    // repository and adding the answers up in the browser would mean one
+    // request per repository on every range change.
+    const { store, discovered } = await seed(2);
+    for (const repository of discovered) {
+      await store.commitIngestion({
+        repositoryId: repository.id,
+        events: [commit(repository.id, "2026-08-09T10:00:00.000Z").build()],
+        chunk: {
+          repositoryId: repository.id,
+          kinds: ["commit"],
+          days: [],
+          ingestedAt: NOW,
+        },
+        status: "active",
+        now: NOW,
+      });
+    }
+
+    // when
+    const points = await new GetRepositoryTimeSeries(store).run({
+      ...WINDOW,
+      bucket: "day",
+    });
+
+    // then
+    expect(points.map((point) => point.day)).toEqual(["2026-08-09", "2026-08-10"]);
+    expect(points[0].activity.commits).toBe(2);
+  });
+
+  it("should still scope to one repository when it is named", async () => {
+    // given
+    const { store, discovered } = await seed(2);
+    for (const repository of discovered) {
+      await store.commitIngestion({
+        repositoryId: repository.id,
+        events: [commit(repository.id, "2026-08-09T10:00:00.000Z").build()],
+        chunk: {
+          repositoryId: repository.id,
+          kinds: ["commit"],
+          days: [],
+          ingestedAt: NOW,
+        },
+        status: "active",
+        now: NOW,
+      });
+    }
+
+    // when
+    const points = await new GetRepositoryTimeSeries(store).run({
+      repositoryId: discovered[0].id,
+      ...WINDOW,
+      bucket: "day",
+    });
+
+    // then
+    expect(points[0].activity.commits).toBe(1);
   });
 });

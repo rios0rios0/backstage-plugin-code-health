@@ -16,6 +16,7 @@ export class ContributorBuilder {
       displayName: `user-${counter}`,
       avatarUrl: `https://avatars.githubusercontent.com/user-${counter}`,
       profileUrl: `https://github.com/user-${counter}`,
+      entityRef: null,
       commits: 25,
       linesAdded: 700,
       linesDeleted: 300,
@@ -38,6 +39,36 @@ export class ContributorBuilder {
 
   static create(): ContributorBuilder {
     return new ContributorBuilder();
+  }
+
+  withKey(key: string): this {
+    this.props = { ...this.props, key };
+    return this;
+  }
+
+  withCommits(commits: number): this {
+    this.props = { ...this.props, commits };
+    return this;
+  }
+
+  withReviewsGiven(reviewsGiven: number): this {
+    this.props = { ...this.props, reviewsGiven };
+    return this;
+  }
+
+  withEntityRef(entityRef: string | null): this {
+    this.props = { ...this.props, entityRef };
+    return this;
+  }
+
+  withAvatarUrl(avatarUrl: string | null): this {
+    this.props = { ...this.props, avatarUrl };
+    return this;
+  }
+
+  withProfileUrl(profileUrl: string | null): this {
+    this.props = { ...this.props, profileUrl };
+    return this;
   }
 
   withDisplayName(displayName: string): this {

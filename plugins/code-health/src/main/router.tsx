@@ -12,11 +12,13 @@ import { ThemeToggleButton } from "../presentation/components/theme_toggle_butto
 import { useCoverage } from "../presentation/hooks/use_coverage";
 import { ContributorsPage } from "../presentation/pages/contributors_page";
 import { DashboardPage } from "../presentation/pages/dashboard_page";
+import { InsightsPage } from "../presentation/pages/insights_page";
 import {
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthTimeSeriesApiRef,
 } from "./api_refs";
 
 /**
@@ -33,6 +35,7 @@ export const Router = () => {
   const dashboardService = useApi(codeHealthRepositoriesApiRef);
   const contributorService = useApi(codeHealthContributorsApiRef);
   const coverageService = useApi(codeHealthCoverageApiRef);
+  const timeSeriesService = useApi(codeHealthTimeSeriesApiRef);
   const coverage = useCoverage(coverageService);
 
   return (
@@ -79,6 +82,27 @@ export const Router = () => {
             ) : (
               <ContributorsPage
                 contributorService={contributorService}
+                coverage={coverage}
+                config={config}
+              />
+            )}
+          </TabbedLayout.Route>
+
+          <TabbedLayout.Route path="/insights" title="Insights">
+            {coverage.error ? (
+              <Box mb={2}>
+                <WarningPanel
+                  severity="error"
+                  title="The Code Health backend is not reachable"
+                  message={coverage.error}
+                  defaultExpanded
+                />
+              </Box>
+            ) : (
+              <InsightsPage
+                dashboardService={dashboardService}
+                contributorService={contributorService}
+                timeSeriesService={timeSeriesService}
                 coverage={coverage}
                 config={config}
               />

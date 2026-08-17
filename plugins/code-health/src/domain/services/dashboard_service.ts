@@ -2,6 +2,8 @@ import type {
   ContributorSummary,
   CoverageInfo,
   RepositorySummary,
+  TimeSeriesBucket,
+  TimeSeriesPoint,
   TimeWindow,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 
@@ -31,4 +33,14 @@ export interface CoverageService {
   getCoverage(): Promise<CoverageInfo>;
   /** Asks the backend to run its ingestion tasks now. */
   refresh(): Promise<void>;
+}
+
+/**
+ * Fleet-wide activity over time.
+ *
+ * Answered from the same ingested events the tables read, bucketed by the
+ * backend so the browser never receives one row per commit.
+ */
+export interface TimeSeriesService {
+  getTimeSeries(window: TimeWindow, bucket: TimeSeriesBucket): Promise<TimeSeriesPoint[]>;
 }

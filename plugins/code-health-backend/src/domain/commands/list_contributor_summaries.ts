@@ -10,6 +10,7 @@ import {
 import type { CodeHealthEvent } from "../entities/code_health_event";
 import { toDay } from "../entities/day";
 import type { CodeHealthStore } from "../repositories/code_health_store";
+import type { CatalogReader, CatalogUser } from "../services/catalog_reader";
 
 interface Accumulator {
   displayName: string;
@@ -141,7 +142,10 @@ const aggregateSonar = (
 };
 
 export class ListContributorSummaries {
-  constructor(private readonly store: CodeHealthStore) {}
+  constructor(
+    private readonly store: CodeHealthStore,
+    private readonly catalog?: CatalogReader,
+  ) {}
 
   /**
    * Groups a window's events by contributor.
@@ -186,38 +190,53 @@ export class ListContributorSummaries {
       byContributor.set(event.actorKey, existing);
     }
 
+    // Only the keys that appear in this window are looked up, so the query is
+    // bounded by the number of people who committed rather than by the size of
+    // the directory — which is routinely thousands of entities.
+    const users =
+      this.catalog === undefined
+        ? new Map<string, CatalogUser>()
+        : await this.catalog.findUsersByEmail([...byContributor.keys()]);
+
     return [...byContributor.entries()]
-      .map(([key, totals]) => ({
-        key,
-        displayName: totals.displayName,
-        avatarUrl: totals.avatarUrl,
-        profileUrl: totals.profileUrl,
-        commits: totals.commits,
-        linesAdded: totals.linesAdded,
-        linesDeleted: totals.linesDeleted,
-        // Floored at zero: a window in which someone mostly deleted code is a
-        // legitimate contribution, not a negative one.
-        linesOfCode: Math.max(0, totals.linesAdded - totals.linesDeleted),
-        changedFiles: totals.changedFiles,
-        pullRequestsOpened: totals.pullRequestsOpened,
-        pullRequestsMerged: totals.pullRequestsMerged,
-        reviewsGiven: totals.reviewsGiven,
-        reviewsApproved: totals.reviewsApproved,
-        reviewsRejected: totals.reviewsRejected,
-        prApprovalRate: computeRate(
-          totals.reviewsApproved,
-          totals.reviewsGiven,
-        ),
-        pipelineRuns: totals.pipelineRuns,
-        pipelineRunsSucceeded: totals.pipelineRunsSucceeded,
-        pipelineSuccessRate: computeRate(
-          totals.pipelineRunsSucceeded,
-          totals.pipelineRuns,
-        ),
-        repositories: totals.repositories.size,
-        sonarMetrics: aggregateSonar(totals.repositories, sonarByRepository),
-        wakaTimeMetrics: wakaTime.get(key) ?? null,
-      }))
+      .map(([key, totals]) => {
+        const user = users.get(key.toLowerCase());
+        return {
+          key,
+          // The catalog is the organisation's own record of who someone is, so it
+          // wins over the display name and avatar the provider attached to a
+          // commit. Both fall back to the provider's values when no user matched.
+          displayName: user?.displayName ?? totals.displayName,
+          avatarUrl: user?.picture ?? totals.avatarUrl,
+          profileUrl: totals.profileUrl,
+          entityRef: user?.entityRef ?? null,
+          commits: totals.commits,
+          linesAdded: totals.linesAdded,
+          linesDeleted: totals.linesDeleted,
+          // Floored at zero: a window in which someone mostly deleted code is a
+          // legitimate contribution, not a negative one.
+          linesOfCode: Math.max(0, totals.linesAdded - totals.linesDeleted),
+          changedFiles: totals.changedFiles,
+          pullRequestsOpened: totals.pullRequestsOpened,
+          pullRequestsMerged: totals.pullRequestsMerged,
+          reviewsGiven: totals.reviewsGiven,
+          reviewsApproved: totals.reviewsApproved,
+          reviewsRejected: totals.reviewsRejected,
+          prApprovalRate: computeRate(
+            totals.reviewsApproved,
+            totals.reviewsGiven,
+          ),
+          pipelineRuns: totals.pipelineRuns,
+          pipelineRunsSucceeded: totals.pipelineRunsSucceeded,
+          pipelineSuccessRate: computeRate(
+            totals.pipelineRunsSucceeded,
+            totals.pipelineRuns,
+          ),
+          repositories: totals.repositories.size,
+          sonarMetrics: aggregateSonar(totals.repositories, sonarByRepository),
+          wakaTimeMetrics: wakaTime.get(key) ?? null,
+        };
+      })
       .sort((left, right) => right.commits - left.commits);
   }
 }

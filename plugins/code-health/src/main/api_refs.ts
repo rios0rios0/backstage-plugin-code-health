@@ -4,6 +4,7 @@ import type {
   ContributorService,
   CoverageService,
   DashboardService,
+  TimeSeriesService,
 } from "../domain/services/dashboard_service";
 
 /** Values pinned by an administrator in `app-config.yaml`. */
@@ -28,4 +29,9 @@ export const codeHealthContributorsApiRef = createApiRef<ContributorService>({
  */
 export const codeHealthCoverageApiRef = createApiRef<CoverageService>({
   id: "plugin.code-health.coverage",
+});
+
+/** Fleet-wide activity over time, for the Insights charts. */
+export const codeHealthTimeSeriesApiRef = createApiRef<TimeSeriesService>({
+  id: "plugin.code-health.time-series",
 });

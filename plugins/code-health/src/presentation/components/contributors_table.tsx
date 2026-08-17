@@ -4,7 +4,11 @@ import Box from "@material-ui/core/Box";
 import Link from "@material-ui/core/Link";
 import Typography from "@material-ui/core/Typography";
 import { makeStyles } from "@material-ui/core/styles";
-import type { ColumnDef, ColumnFiltersState, SortingState } from "@tanstack/react-table";
+import type {
+  ColumnDef,
+  ColumnFiltersState,
+  SortingState,
+} from "@tanstack/react-table";
 import {
   getCoreRowModel,
   getFilteredRowModel,
@@ -13,7 +17,11 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import type { ContributorSummary } from "@rios0rios0/backstage-plugin-code-health-common";
-import { formatDuration } from "@rios0rios0/backstage-plugin-code-health-common";
+import {
+  catalogEntityPath,
+  formatDuration,
+} from "@rios0rios0/backstage-plugin-code-health-common";
+import { Link as RouterLink } from "react-router-dom";
 import { DataTable, PaginationControls } from "./data_table";
 import { EmptyCell } from "./empty_cell";
 
@@ -44,16 +52,80 @@ const RateCell = ({ rate }: { rate: number }) => {
   const classes = useStyles();
   const tone = rateTone(rate);
   return (
-    <Typography variant="body2" component="span" className={classes[tone]} data-tone={tone}>
+    <Typography
+      variant="body2"
+      component="span"
+      className={classes[tone]}
+      data-tone={tone}
+    >
       {formatRate(rate)}
     </Typography>
   );
 };
 
 const MetricCell = ({ value }: { value: string | number | null }) =>
-  value === null ? <EmptyCell /> : <Typography variant="body2">{value}</Typography>;
+  value === null ? (
+    <EmptyCell />
+  ) : (
+    <Typography variant="body2">{value}</Typography>
+  );
 
-const ContributorCell = ({ contributor }: { contributor: ContributorSummary }) => {
+/** Up to two initials, from a display name or an e-mail local part. */
+const initialsOf = (displayName: string): string => {
+  const words = displayName
+    .replace(/@.*$/, "")
+    .split(/[\s._-]+/)
+    .filter((word) => word.length > 0);
+  return words
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? "")
+    .join("");
+};
+
+/**
+ * Links a contributor to their catalog user when one matched.
+ *
+ * The catalog page is the destination rather than the provider profile: it is
+ * where ownership, group membership and the rest of the person's entity live.
+ * An identity with no matching user — a bot, a service account, a commit from a
+ * personal address — stays plain text rather than linking somewhere misleading.
+ */
+const ContributorName = ({
+  contributor,
+}: {
+  contributor: ContributorSummary;
+}) => {
+  const entityPath =
+    contributor.entityRef === null
+      ? null
+      : catalogEntityPath(contributor.entityRef);
+
+  if (entityPath !== null) {
+    return (
+      <Link component={RouterLink} to={entityPath} title="Open in the catalog">
+        {contributor.displayName}
+      </Link>
+    );
+  }
+  if (contributor.profileUrl !== null) {
+    return (
+      <Link
+        href={contributor.profileUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {contributor.displayName}
+      </Link>
+    );
+  }
+  return <Typography variant="body2">{contributor.displayName}</Typography>;
+};
+
+const ContributorCell = ({
+  contributor,
+}: {
+  contributor: ContributorSummary;
+}) => {
   const classes = useStyles();
   return (
     <Box display="flex" alignItems="center" gridGap={8}>
@@ -61,27 +133,36 @@ const ContributorCell = ({ contributor }: { contributor: ContributorSummary }) =
         src={contributor.avatarUrl ?? undefined}
         alt={contributor.displayName}
         className={classes.avatar}
-      />
-      {contributor.profileUrl === null ? (
-        <Typography variant="body2">{contributor.displayName}</Typography>
-      ) : (
-        <Link href={contributor.profileUrl} target="_blank" rel="noopener noreferrer">
-          {contributor.displayName}
-        </Link>
-      )}
+      >
+        {/* Most directories populate a photo for only some of their people, so
+            the fallback is initials rather than a generic silhouette that would
+            make every unphotographed contributor look identical. */}
+        {initialsOf(contributor.displayName)}
+      </Avatar>
+      <ContributorName contributor={contributor} />
     </Box>
   );
 };
 
-const LinesOfCodeCell = ({ contributor }: { contributor: ContributorSummary }) => {
+const LinesOfCodeCell = ({
+  contributor,
+}: {
+  contributor: ContributorSummary;
+}) => {
   const classes = useStyles();
   return (
     <Box>
-      <Typography variant="body2">{contributor.linesOfCode.toLocaleString()}</Typography>
+      <Typography variant="body2">
+        {contributor.linesOfCode.toLocaleString()}
+      </Typography>
       <Typography variant="caption" color="textSecondary">
-        <span className={classes.added}>+{contributor.linesAdded.toLocaleString()}</span>
+        <span className={classes.added}>
+          +{contributor.linesAdded.toLocaleString()}
+        </span>
         {" / "}
-        <span className={classes.removed}>-{contributor.linesDeleted.toLocaleString()}</span>
+        <span className={classes.removed}>
+          -{contributor.linesDeleted.toLocaleString()}
+        </span>
       </Typography>
     </Box>
   );
@@ -196,7 +277,11 @@ const wakaTimeColumns: ColumnDef<ContributorSummary>[] = [
     header: "Total Time (30d)",
     cell: ({ row }) => {
       const metrics = row.original.wakaTimeMetrics;
-      return <MetricCell value={metrics ? formatDuration(metrics.totalSeconds) : null} />;
+      return (
+        <MetricCell
+          value={metrics ? formatDuration(metrics.totalSeconds) : null}
+        />
+      );
     },
     enableColumnFilter: false,
   },
@@ -206,7 +291,11 @@ const wakaTimeColumns: ColumnDef<ContributorSummary>[] = [
     header: "Daily Avg",
     cell: ({ row }) => {
       const metrics = row.original.wakaTimeMetrics;
-      return <MetricCell value={metrics ? formatDuration(metrics.dailyAverageSeconds) : null} />;
+      return (
+        <MetricCell
+          value={metrics ? formatDuration(metrics.dailyAverageSeconds) : null}
+        />
+      );
     },
     enableColumnFilter: false,
   },
@@ -217,7 +306,9 @@ export const ContributorsTable = ({
   totalCount,
   isLoading,
 }: ContributorsTableProps) => {
-  const [sorting, setSorting] = useState<SortingState>([{ id: "linesOfCode", desc: true }]);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: "linesOfCode", desc: true },
+  ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
   const hasWakaTime = contributors.some((c) => c.wakaTimeMetrics !== null);
@@ -259,7 +350,8 @@ export const ContributorsTable = ({
       >
         <Box display="flex" alignItems="center" gridGap={12}>
           <Typography variant="body2" color="textSecondary">
-            {table.getFilteredRowModel().rows.length} of {totalCount} contributors
+            {table.getFilteredRowModel().rows.length} of {totalCount}{" "}
+            contributors
           </Typography>
         </Box>
         <PaginationControls

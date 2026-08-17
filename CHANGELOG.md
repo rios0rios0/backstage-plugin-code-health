@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- added an **Insights** tab with the fleet-level figures a manager reads rather than the per-repository rows the other two tabs carry: six headline tiles (active repositories, active contributors, commits, merged pull requests, build success rate, review coverage), a delivery-cadence chart, top contributors and most active repositories by commits, a review-load ranking, and quality-gate and branch-policy breakdowns
+- added a review-load ranking, which answers a different question from the commit ranking. Review work concentrating on one or two people is the readable form of a bus factor problem and is invisible on a chart of who commits
+- added a fleet-wide time series: `GetRepositoryTimeSeries` now treats `repositoryId` as optional and aggregates every tracked repository when it is omitted, served from a new `GET /timeseries` route. Asking per repository and summing in the browser would mean one request per repository on every range change
+- added `catalogEntityPath` and `parseEntityRef` to `@rios0rios0/backstage-plugin-code-health-common`, so a stored entity reference resolves to its catalog page without the frontend taking a dependency on `@backstage/plugin-catalog-react`
+- added `entityRef` to `ContributorSummary`, resolved by `ListContributorSummaries` against the catalog through a new `findUsersByEmail` on `CatalogReader`. Matching is by profile e-mail and nothing else — bots, service accounts and commits authored from a personal address stay unlinked rather than being guessed at by name — and a matched catalog `User` supplies the display name and picture in preference to whatever the provider reported
+- added an `insights` sub route, so an app can deep-link to the tab the way it already can to contributors
+
+### Changed
+
+- changed the repository name in the repositories table to link to that repository's catalog entity rather than reading as plain text, which is the page a reader wants from a row on a Backstage dashboard
+- changed contributor rows to show the catalog user's picture, falling back to their initials when the entity carries no `spec.profile.picture`
+
+### Security
+
+- pinned `nanoid` to `3.3.18` to close `CVE-2026-67213`, a HIGH-severity denial of service where a custom generator loops indefinitely when the requested size is zero. It arrives transitively through `postcss`, and the advisory was published against a lockfile this repository already had — the resolution pins the patched version per line rather than suppressing the finding
+
 ## [2.2.0] - 2026-08-11
 
 ### Added

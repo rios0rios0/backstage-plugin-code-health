@@ -10,6 +10,7 @@ import {
   codeHealthContributorsApiFactory,
   codeHealthCoverageApiFactory,
   codeHealthRepositoriesApiFactory,
+  codeHealthTimeSeriesApiFactory,
 } from "./main/apis";
 import { rootRouteRef } from "./routes";
 
@@ -42,6 +43,11 @@ export const codeHealthContributorsApi = ApiBlueprint.make({
   params: (defineParams) => defineParams(codeHealthContributorsApiFactory),
 });
 
+export const codeHealthTimeSeriesApi = ApiBlueprint.make({
+  name: "time-series",
+  params: (defineParams) => defineParams(codeHealthTimeSeriesApiFactory),
+});
+
 export const codeHealthPage = PageBlueprint.make({
   params: {
     path: "/code-health",
@@ -61,6 +67,7 @@ export default createFrontendPlugin({
     codeHealthRepositoriesApi,
     codeHealthContributorsApi,
     codeHealthCoverageApi,
+    codeHealthTimeSeriesApi,
     codeHealthPage,
   ],
 });

@@ -15,6 +15,14 @@ export interface ContributorSummary {
   readonly displayName: string;
   readonly avatarUrl: string | null;
   readonly profileUrl: string | null;
+  /**
+   * The catalog `User` this contributor resolved to, or null when none matched.
+   *
+   * Matching is by profile e-mail and nothing else. Bots, service accounts and
+   * commits authored from a personal address have no entity and stay unlinked
+   * rather than being guessed at by name.
+   */
+  readonly entityRef: string | null;
   readonly commits: number;
   readonly linesAdded: number;
   readonly linesDeleted: number;

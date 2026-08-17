@@ -123,6 +123,19 @@ export const createCodeHealthRouter = (options: CodeHealthRouterOptions): expres
     });
   });
 
+  // Fleet-wide cadence. Registered before the per-repository route so the
+  // literal path is not swallowed by `:id`.
+  router.get(`/${version}/timeseries`, async (request, response) => {
+    const window = readWindow(request.query);
+    const bucket = readBucket(request.query.bucket);
+
+    response.json({
+      window: { from: window.from.toISOString(), to: window.to.toISOString() },
+      bucket,
+      points: await options.timeSeries.run({ ...window, bucket }),
+    });
+  });
+
   router.get(`/${version}/repositories/:id/timeseries`, async (request, response) => {
     const window = readWindow(request.query);
     const bucket = readBucket(request.query.bucket);

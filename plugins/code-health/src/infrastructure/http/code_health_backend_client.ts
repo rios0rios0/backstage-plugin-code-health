@@ -2,9 +2,12 @@ import type { DiscoveryApi, FetchApi } from "@backstage/core-plugin-api";
 import type {
   ContributorSummary,
   CoverageInfo,
+  GetTimeSeriesResponse,
   ListContributorsResponse,
   ListRepositoriesResponse,
   RepositorySummary,
+  TimeSeriesBucket,
+  TimeSeriesPoint,
   TimeWindow,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
@@ -15,6 +18,7 @@ import type {
   ContributorService,
   CoverageService,
   DashboardService,
+  TimeSeriesService,
 } from "../../domain/services/dashboard_service";
 
 export interface CodeHealthBackendClientOptions {
@@ -34,7 +38,7 @@ export interface CodeHealthBackendClientOptions {
  * no credential to hold and nothing to store in the browser.
  */
 export class CodeHealthBackendClient
-  implements DashboardService, ContributorService, CoverageService
+  implements DashboardService, ContributorService, CoverageService, TimeSeriesService
 {
   constructor(private readonly options: CodeHealthBackendClientOptions) {}
 
@@ -56,6 +60,18 @@ export class CodeHealthBackendClient
       ...(repositoryId === undefined ? {} : { repositoryId }),
     });
     return [...body.items];
+  }
+
+  async getTimeSeries(
+    window: TimeWindow,
+    bucket: TimeSeriesBucket,
+  ): Promise<TimeSeriesPoint[]> {
+    const body = await this.get<GetTimeSeriesResponse>("timeseries", {
+      from: window.from,
+      to: window.to,
+      bucket,
+    });
+    return [...body.points];
   }
 
   async getCoverage(): Promise<CoverageInfo> {

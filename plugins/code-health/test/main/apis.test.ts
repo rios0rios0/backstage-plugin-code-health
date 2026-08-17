@@ -4,12 +4,14 @@ import {
   codeHealthContributorsApiFactory,
   codeHealthCoverageApiFactory,
   codeHealthRepositoriesApiFactory,
+  codeHealthTimeSeriesApiFactory,
 } from "../../src/main/apis";
 import {
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthTimeSeriesApiRef,
 } from "../../src/main/api_refs";
 import { CodeHealthBackendClient } from "../../src/infrastructure/http/code_health_backend_client";
 import {
@@ -35,6 +37,7 @@ describe("codeHealthApis", () => {
       codeHealthContributorsApiRef.id,
       codeHealthCoverageApiRef.id,
       codeHealthRepositoriesApiRef.id,
+      codeHealthTimeSeriesApiRef.id,
     ].sort());
   });
 
@@ -44,10 +47,11 @@ describe("codeHealthApis", () => {
       codeHealthRepositoriesApiFactory.factory(clientDeps()),
       codeHealthContributorsApiFactory.factory(clientDeps()),
       codeHealthCoverageApiFactory.factory(clientDeps()),
+      codeHealthTimeSeriesApiFactory.factory(clientDeps()),
     ];
 
     // then
-    // One stateless client backs all three; separate refs only keep each view's
+    // One stateless client backs them all; separate refs only keep each view's
     // dependencies honest.
     expect(built.every((api) => api instanceof CodeHealthBackendClient)).toBe(true);
   });

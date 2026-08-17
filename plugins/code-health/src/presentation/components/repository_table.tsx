@@ -15,6 +15,8 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import type { RepositorySummary } from "@rios0rios0/backstage-plugin-code-health-common";
+import { catalogEntityPath } from "@rios0rios0/backstage-plugin-code-health-common";
+import { Link as RouterLink } from "react-router-dom";
 import { BadgeStatusCell } from "./badge_status_cell";
 import { ComplianceBadge } from "./compliance_badge";
 import { DataTable, PaginationControls } from "./data_table";
@@ -129,29 +131,42 @@ const DefaultBranchCell = ({ branch }: { branch: string }) => {
 const MetricCell = ({ value }: { value: string | number | null }) =>
   value === null ? <EmptyCell /> : <Typography variant="body2">{value}</Typography>;
 
+const RepositoryNameCell = ({ repository }: { repository: RepositorySummary }) => {
+  // The name goes to the catalog entity rather than to the provider: that page is
+  // where a reader can act on the repository — owner, docs, dependencies, the
+  // other entity tabs — and it carries the provider URL itself through its source
+  // location, so nothing is lost by not linking there twice.
+  const entityPath = catalogEntityPath(repository.entityRef);
+
+  return (
+    <Box>
+      <Box display="flex" alignItems="center" gridGap={8}>
+        {entityPath === null ? (
+          // A reference the catalog cannot address degrades to plain text rather
+          // than to a link that would 404.
+          <Typography variant="body2">{repository.fullName}</Typography>
+        ) : (
+          <Link component={RouterLink} to={entityPath} title="Open in the catalog">
+            {repository.fullName}
+          </Link>
+        )}
+        {repository.isArchived && <StateChip tone="warning" label="archived" />}
+        {repository.isFork && <StateChip tone="info" label="fork" />}
+      </Box>
+      {repository.description && (
+        <Typography variant="caption" color="textSecondary" noWrap component="p">
+          {repository.description}
+        </Typography>
+      )}
+    </Box>
+  );
+};
+
 const columns: ColumnDef<RepositorySummary>[] = [
   {
     accessorKey: "fullName",
     header: "Repository",
-    cell: ({ row }) => {
-      const repo = row.original;
-      return (
-        <Box>
-          <Box display="flex" alignItems="center" gridGap={8}>
-            <Link href={repo.url} target="_blank" rel="noopener noreferrer">
-              {repo.fullName}
-            </Link>
-            {repo.isArchived && <StateChip tone="warning" label="archived" />}
-            {repo.isFork && <StateChip tone="info" label="fork" />}
-          </Box>
-          {repo.description && (
-            <Typography variant="caption" color="textSecondary" noWrap component="p">
-              {repo.description}
-            </Typography>
-          )}
-        </Box>
-      );
-    },
+    cell: ({ row }) => <RepositoryNameCell repository={row.original} />,
     filterFn: "includesString",
   },
   {

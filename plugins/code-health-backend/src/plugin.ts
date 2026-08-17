@@ -65,6 +65,9 @@ export const codeHealthPlugin = createBackendPlugin({
         const settings = readCodeHealthSettings(config);
         const store = await KnexCodeHealthStore.create({ database });
         const integrations = ScmIntegrations.fromConfig(config);
+        // Shared by discovery, which reads the tracked entities, and by the
+        // contributors route, which resolves commit authors to catalog users.
+        const catalogReader = new BackstageCatalogReader(catalog, auth);
 
         httpRouter.use(
           createCodeHealthRouter({
@@ -72,7 +75,7 @@ export const codeHealthPlugin = createBackendPlugin({
             httpAuth,
             scheduler,
             repositories: new ListRepositorySummaries(store),
-            contributors: new ListContributorSummaries(store),
+            contributors: new ListContributorSummaries(store, catalogReader),
             timeSeries: new GetRepositoryTimeSeries(store),
             refreshableTaskIds: [DISCOVERY_TASK_ID, INGESTION_TASK_ID, SNAPSHOT_TASK_ID],
           }),
@@ -84,7 +87,7 @@ export const codeHealthPlugin = createBackendPlugin({
 
         const discover = new DiscoverRepositories({
           store,
-          catalog: new BackstageCatalogReader(catalog, auth),
+          catalog: catalogReader,
           resolver: new AnnotationRepositoryResolver(integrations),
           logger: logger.child({ task: DISCOVERY_TASK_ID }),
         });

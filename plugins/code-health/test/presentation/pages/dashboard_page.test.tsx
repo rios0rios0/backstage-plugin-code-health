@@ -1,10 +1,15 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render as renderBare, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
 import type { UseCoverageResult } from "../../../src/presentation/hooks/use_coverage";
 import { DashboardPage } from "../../../src/presentation/pages/dashboard_page";
 import { RepositoryBuilder } from "../../builders/repository_builder";
 import { aCoverageInfo } from "../../doubles/stub_coverage_service";
 import { StubDashboardService } from "../../doubles/stub_dashboard_service";
+
+// The repository table links names to catalog entities through a router `Link`,
+// so the page only mounts inside a router — which is how the app renders it.
+const render = (ui: React.ReactElement) => renderBare(<MemoryRouter>{ui}</MemoryRouter>);
 
 const coverageResult = (overrides: Partial<UseCoverageResult> = {}): UseCoverageResult => ({
   coverage: aCoverageInfo(),

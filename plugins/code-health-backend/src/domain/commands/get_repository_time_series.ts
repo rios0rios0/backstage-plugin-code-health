@@ -28,13 +28,15 @@ export class GetRepositoryTimeSeries {
   constructor(private readonly store: CodeHealthStore) {}
 
   /**
-   * Aggregates one repository's activity into buckets.
+   * Aggregates activity into buckets — one repository's, or the whole fleet's
+   * when no repository is named.
    *
    * Buckets with no events are still emitted, so a chart shows a gap as a zero
    * rather than closing over it and implying activity that never happened.
    */
   async run(input: {
-    repositoryId: string;
+    /** Omit to aggregate every tracked repository into one series. */
+    repositoryId?: string;
     from: Date;
     to: Date;
     bucket: TimeSeriesBucket;
@@ -42,7 +44,7 @@ export class GetRepositoryTimeSeries {
     const events = await this.store.listEvents({
       from: input.from,
       to: input.to,
-      repositoryIds: [input.repositoryId],
+      ...(input.repositoryId === undefined ? {} : { repositoryIds: [input.repositoryId] }),
     });
 
     const byBucket = new Map<Day, CodeHealthEvent[]>();
