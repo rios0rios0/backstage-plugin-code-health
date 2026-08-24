@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - changed the repository name in the repositories table to link to that repository's catalog entity rather than reading as plain text, which is the page a reader wants from a row on a Backstage dashboard
 - changed contributor rows to show the catalog user's picture, falling back to their initials when the entity carries no `spec.profile.picture`
+- refreshed `CLAUDE.md` to correct the frontend API-wiring count: the stateless client is now registered behind four data refs (repositories, contributors, coverage, time series), not three, after the time-series ref landed with the Insights tab
 
 ### Security
 
