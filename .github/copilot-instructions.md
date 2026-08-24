@@ -77,6 +77,9 @@ plugins/code-health/src/
 - **A day is recorded as fetched only when a window covers it end to end.**
 - **Cursors move only after the window is committed.**
 - **Sonar, compliance and badge history cannot be backfilled**; those series start at installation.
+- **`.github/workflows/default.yaml` passes `install_run_scripts: true`.** The shared workflow
+  installs with `--mode=skip-build`, and `better-sqlite3` is a native addon the store tests need.
+  Removing the flag fails every `KnexCodeHealthStore` test with "Could not locate the bindings file".
 
 ## Conventions
 

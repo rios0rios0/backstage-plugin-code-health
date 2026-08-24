@@ -20,6 +20,20 @@ permissions:
 jobs:
   default:
     uses: 'rios0rios0/pipelines/.github/workflows/yarn-library.yaml@main'
+    with:
+      # The shared workflow installs with `--mode=skip-build`, so no dependency's
+      # lifecycle script runs as the CI user. This repository is one of the cases that
+      # documented escape hatch exists for: the store tests run against a real database
+      # through `TestDatabases`, whose default engine is SQLite, and `better-sqlite3` is
+      # a native addon that does not exist until its install script compiles or downloads
+      # `better_sqlite3.node`. Without this the suite fails on every store test with
+      # "Could not locate the bindings file", which is what happened when the shared
+      # workflow turned the scripts off on 2026-08-18.
+      #
+      # Setting it to `true` turns the install into `--mode=skip-build` followed by
+      # `yarn rebuild`, so build scripts still never run during resolution — only
+      # afterwards, against a lockfile CI has already refused to modify.
+      install_run_scripts: true
     secrets:
       sonar_token: ${{ secrets.SONAR_TOKEN }}
 

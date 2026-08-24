@@ -147,6 +147,25 @@ Do not add a `collectCoverageFrom` exclusion to make a threshold pass; write the
 action still reads the Jest `coverage-summary.json` correctly and the job passes. Do not add a
 `vite.config.ts` to silence it — this project has no Vite in its toolchain.
 
+### `install_run_scripts: true`
+
+The shared workflow installs with `yarn install --immutable --mode=skip-build`, so no dependency's
+lifecycle script runs as the CI user. This repository has to opt back in, because the store tests
+open a real SQLite database through `TestDatabases` and `better-sqlite3` is a native addon: its
+install script is what produces `build/Release/better_sqlite3.node`. Without the flag every
+`KnexCodeHealthStore` test fails with "Could not locate the bindings file", listing the paths it
+tried — which is the signature to recognise, since nothing in the message names the install mode.
+
+The flag does not restore lifecycle scripts during resolution. It appends `yarn rebuild` after the
+install, so build scripts run only once the lockfile CI already refused to modify is in place.
+
+Reproduce it locally with `rm node_modules/better-sqlite3/build/Release/better_sqlite3.node` followed
+by `yarn install --immutable --mode=skip-build`; `yarn rebuild` puts it back.
+
+This arrived without a commit here: the shared workflow is referenced at `@main`, and the change
+landed upstream on 2026-08-18 in `rios0rios0/pipelines@fd67e75`. A green `main` can therefore go red
+with nothing in this repository having moved.
+
 ### `trivy.yaml`
 
 Trivy's misconfiguration walk skips `node_modules`. A devDependency chain
