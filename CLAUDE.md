@@ -71,7 +71,7 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | File | Purpose |
 |---|---|
 | `src/plugin.ts` / `src/alpha.tsx` | Legacy and declarative entry points |
-| `src/main/apis.ts` | `createApiFactory` wiring; one stateless client behind three refs |
+| `src/main/apis.ts` / `src/main/api_refs.ts` | `createApiFactory` wiring; one stateless client behind four data refs (repositories, contributors, coverage, time series), plus a separate config ref |
 | `src/infrastructure/http/code_health_backend_client.ts` | The only thing the browser talks to |
 | `src/main/router.tsx` | Page composition and the backend-reachability gate |
 | `src/domain/entities/time_range.ts` | Which windows are offered, bounded by coverage |
