@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-08-25
+
 ### Changed
 
 - documented why a bump leaves `yarn.lock` behind and how the release is unblocked: `.autobump.yaml` moves the caret range the frontend and the backend declare on `-common`, which is also a resolution descriptor in the lockfile, so every CI job's `yarn install --immutable` answers `YN0028`. The fix is a `refresh_commands` entry in the operator's global `~/.autobump.yaml`, which cannot live in this repository's own config — AutoBump reads that file out of the repository being released and drops executables declared there. The manual fallback is recorded alongside it for anyone on an older AutoBump
