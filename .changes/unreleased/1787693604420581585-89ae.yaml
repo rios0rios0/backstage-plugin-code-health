@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed refreshing replaying the window a rolling range was selected with rather than re-reading the clock. "Last 24 hours" kept asking for the same 24 hours however many times it was refreshed, so the numbers never moved although the toolbar said they had; a dashboard left open overnight kept reporting yesterday as **Today**, and never offered the month it had just entered. The refresh button and the auto-refresh timer now advance the clock, and the new window is what triggers the fetch'
+time: '2026-08-25T21:33:24.420532877Z'

@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the contributors table''s single **Approved PRs** column into **PRs created** and **PRs approved**. One column headed "Approved PRs" over a review count conflated two different questions: how much work somebody opened, and how much of other people''s work they reviewed'
+time: '2026-08-25T21:33:24.412964839Z'

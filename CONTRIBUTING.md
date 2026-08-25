@@ -10,6 +10,7 @@ development practices, refer to the **[Development Guide](https://github.com/rio
 - Node.js 20+
 - [Corepack](https://nodejs.org/api/corepack.html) (ships with Node.js 16.13+)
 - [Make](https://www.gnu.org/software/make/)
+- [chlog](https://github.com/luizjhonata/chlog) (`go install github.com/luizjhonata/chlog@latest`)
 - A [Backstage](https://backstage.io) app to try the plugins in (optional, but recommended)
 
 ## Repository Layout
@@ -43,7 +44,10 @@ a wire contract that only makes sense as one release.
    make test
    make sast
    ```
-6. Update `CHANGELOG.md` under `[Unreleased]`
+6. Add a changelog fragment — never edit `CHANGELOG.md`, which is generated from them:
+   ```bash
+   chlog new --kind Added --body "added the thing that was not there before"
+   ```
 7. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Git-Flow)
 8. Open a pull request against `main`
 
@@ -105,7 +109,7 @@ Provider access sits behind two ports, so a new forge is an implementation and a
    else in the ingestion path needs editing
 5. Extend `AnnotationRepositoryResolver` so catalog entities for that forge resolve
 6. Add tests following the [testing guide](https://github.com/rios0rios0/guide/wiki/Tests)
-7. Update `CHANGELOG.md` with an entry under `[Unreleased] > Added`
+7. Add a changelog fragment: `chlog new --kind Added --body "added support for <platform>"`
 
 ## Releasing
 

@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a **Today** range and a calendar-month picker to every tab''s toolbar. "Today" is the local calendar day so far, which is a different question from "the last 24 hours" and gives a different answer at nine in the morning. Choosing **By month…** in the same dropdown reveals a month and a year selector with arrows either side, so any month the backfill has reached is at most two clicks away; months outside the ingested history stay visible but unselectable, so a gap reads as "not collected yet" rather than as a list that mysteriously starts in April'
+time: '2026-08-25T21:33:24.435288534Z'
