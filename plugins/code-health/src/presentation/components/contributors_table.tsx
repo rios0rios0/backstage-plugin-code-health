@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import Avatar from "@material-ui/core/Avatar";
 import Box from "@material-ui/core/Box";
 import Link from "@material-ui/core/Link";
+import Tooltip from "@material-ui/core/Tooltip";
 import Typography from "@material-ui/core/Typography";
 import { makeStyles } from "@material-ui/core/styles";
+import HelpOutlineIcon from "@material-ui/icons/HelpOutline";
 import type {
   ColumnDef,
   ColumnFiltersState,
@@ -40,6 +42,8 @@ const useStyles = makeStyles((theme) => ({
   poor: { color: theme.palette.error.main },
   added: { color: theme.palette.success.main },
   removed: { color: theme.palette.error.main },
+  help: { fontSize: "0.85rem", opacity: 0.6 },
+  header: { display: "inline-flex", alignItems: "center", gap: 4 },
 }));
 
 const rateTone = (rate: number): "good" | "fair" | "poor" => {
@@ -60,6 +64,34 @@ const RateCell = ({ rate }: { rate: number }) => {
     >
       {formatRate(rate)}
     </Typography>
+  );
+};
+
+/**
+ * A column heading that explains itself.
+ *
+ * Every rate on this table divides two numbers that are not obvious from the
+ * heading — which pull requests, whose pipeline runs — and a reader who guesses
+ * wrong reads the column backwards. The explanation belongs next to the number
+ * rather than in documentation nobody has open.
+ */
+const HeaderWithHelp = ({ label, help }: { label: string; help: string }) => {
+  const classes = useStyles();
+
+  return (
+    <Box component="span" className={classes.header}>
+      {label}
+      <Tooltip title={help}>
+        {/* Two separate things are needed here, and neither works alone.
+            `tabIndex` gives the icon a focus event for MUI to open the tooltip
+            on — an SVG has none by default, so without it the explanation is
+            mouse-only. `titleAccess` is what carries the text to assistive
+            technology: `SvgIcon` stamps `aria-hidden` on every icon that lacks
+            one, so an `aria-label` would sit on an element screen readers are
+            told to skip. */}
+        <HelpOutlineIcon className={classes.help} titleAccess={help} tabIndex={0} />
+      </Tooltip>
+    </Box>
   );
 };
 
@@ -144,28 +176,51 @@ const ContributorCell = ({
   );
 };
 
-const LinesOfCodeCell = ({
-  contributor,
-}: {
-  contributor: ContributorSummary;
-}) => {
+/**
+ * Churn in whatever unit the provider actually reported.
+ *
+ * GitHub's commit history carries added and deleted lines. Azure DevOps carries
+ * added, edited and deleted *files* and exposes no line count anywhere in its
+ * REST API, so a lines column against an Azure DevOps fleet reads `0` on every
+ * row — which looks like nobody wrote any code rather than like the provider
+ * never said. Each row therefore prints its own unit underneath.
+ */
+const ChurnCell = ({ contributor }: { contributor: ContributorSummary }) => {
   const classes = useStyles();
-  return (
-    <Box>
-      <Typography variant="body2">
-        {contributor.linesOfCode.toLocaleString()}
-      </Typography>
-      <Typography variant="caption" color="textSecondary">
-        <span className={classes.added}>
-          +{contributor.linesAdded.toLocaleString()}
-        </span>
-        {" / "}
-        <span className={classes.removed}>
-          -{contributor.linesDeleted.toLocaleString()}
-        </span>
-      </Typography>
-    </Box>
-  );
+
+  if (contributor.churnUnit === "lines") {
+    return (
+      <Box>
+        <Typography variant="body2">
+          {contributor.linesOfCode.toLocaleString()}
+        </Typography>
+        <Typography variant="caption" color="textSecondary">
+          <span className={classes.added}>
+            +{contributor.linesAdded.toLocaleString()}
+          </span>
+          {" / "}
+          <span className={classes.removed}>
+            -{contributor.linesDeleted.toLocaleString()}
+          </span>
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (contributor.churnUnit === "files") {
+    return (
+      <Box>
+        <Typography variant="body2">
+          {contributor.changedFiles.toLocaleString()}
+        </Typography>
+        <Typography variant="caption" color="textSecondary">
+          files changed
+        </Typography>
+      </Box>
+    );
+  }
+
+  return <EmptyCell />;
 };
 
 const columns: ColumnDef<ContributorSummary>[] = [
@@ -176,33 +231,73 @@ const columns: ColumnDef<ContributorSummary>[] = [
     filterFn: "includesString",
   },
   {
-    accessorKey: "reviewsApproved",
-    header: "Approved PRs",
+    accessorKey: "pullRequestsOpened",
+    header: () => (
+      <HeaderWithHelp
+        label="PRs created"
+        help="Pull requests this person opened inside the window. The second figure is how many pull requests of theirs closed as merged in the same window — a pull request opened in one window and merged in the next is counted in each, because neither number is a subset of the other."
+      />
+    ),
     cell: ({ row }) => (
       <Typography variant="body2" component="span">
-        {row.original.reviewsApproved}{" "}
+        {row.original.pullRequestsOpened.toLocaleString()}{" "}
         <Typography variant="caption" component="span" color="textSecondary">
-          / {row.original.reviewsGiven}
+          / {row.original.pullRequestsMerged.toLocaleString()} merged
         </Typography>
       </Typography>
     ),
     enableColumnFilter: false,
   },
   {
-    accessorKey: "linesOfCode",
-    header: "Lines of Code",
-    cell: ({ row }) => <LinesOfCodeCell contributor={row.original} />,
+    accessorKey: "reviewsApproved",
+    header: () => (
+      <HeaderWithHelp
+        label="PRs approved"
+        help="Other people's pull requests this person reviewed and voted to approve, out of every pull request they reviewed. This is review work done, not their own pull requests."
+      />
+    ),
+    cell: ({ row }) => (
+      <Typography variant="body2" component="span">
+        {row.original.reviewsApproved.toLocaleString()}{" "}
+        <Typography variant="caption" component="span" color="textSecondary">
+          / {row.original.reviewsGiven.toLocaleString()} reviewed
+        </Typography>
+      </Typography>
+    ),
+    enableColumnFilter: false,
+  },
+  {
+    id: "churn",
+    accessorFn: (row) =>
+      row.churnUnit === "lines" ? row.linesOfCode : row.changedFiles,
+    header: () => (
+      <HeaderWithHelp
+        label="Code churn"
+        help="Lines added minus lines deleted, floored at zero — a window someone spent mostly deleting code is a real contribution, not a negative one. Azure DevOps reports changed files instead and exposes no line count anywhere in its API, so those rows count files. Each row prints its own unit, and the column sorts on whichever it is."
+      />
+    ),
+    cell: ({ row }) => <ChurnCell contributor={row.original} />,
     enableColumnFilter: false,
   },
   {
     accessorKey: "prApprovalRate",
-    header: "Approval Rate",
+    header: () => (
+      <HeaderWithHelp
+        label="Approval rate"
+        help="Of the pull requests this person reviewed, the share they approved. It describes how someone votes when they review — a low figure means they usually ask for changes — and says nothing about how their own pull requests fare. Nobody reviewing anything reads 0%."
+      />
+    ),
     cell: ({ getValue }) => <RateCell rate={getValue<number>()} />,
     enableColumnFilter: false,
   },
   {
     accessorKey: "pipelineSuccessRate",
-    header: "Pipeline",
+    header: () => (
+      <HeaderWithHelp
+        label="Pipeline"
+        help="Of the pipeline runs requested for this person in the window, the share that succeeded, with the counts beside it. A run is attributed to whoever it was requested for, so a build triggered by their merge counts here even if somebody else pressed the button."
+      />
+    ),
     cell: ({ row }) => (
       <Box display="flex" alignItems="baseline" gridGap={4}>
         <RateCell rate={row.original.pipelineSuccessRate} />
@@ -307,7 +402,7 @@ export const ContributorsTable = ({
   isLoading,
 }: ContributorsTableProps) => {
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "linesOfCode", desc: true },
+    { id: "churn", desc: true },
   ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 

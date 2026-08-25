@@ -31,6 +31,7 @@ const aSnapshotPayload = (
   badgeStatus: null,
   sonarMetrics: null,
   wakaTimeMetrics: null,
+  repositoryFiles: null,
   ...overrides,
 });
 
@@ -759,5 +760,265 @@ describe("GetRepositoryTimeSeries", () => {
 
     // then
     expect(points[0].activity.commits).toBe(1);
+  });
+});
+
+describe("ListRepositorySummaries documentation and API exposure", () => {
+  const snapshotWith = (
+    files: RepositorySnapshotPayload["repositoryFiles"],
+    overrides: Partial<RepositorySnapshotPayload> = {},
+  ) => aSnapshotPayload({ repositoryFiles: files, ...overrides });
+
+  const run = async (
+    facts: Parameters<
+      ReturnType<typeof DiscoveredRepositoryBuilder.create>["withCatalogFacts"]
+    >[0],
+    payload: RepositorySnapshotPayload | null,
+  ) => {
+    const store = new InMemoryCodeHealthStore();
+    const discovered = DiscoveredRepositoryBuilder.create()
+      .withEntityRef("component:default/gateway")
+      .withCatalogFacts(facts)
+      .build();
+    await store.syncRepositories({
+      discovered: [discovered],
+      retentionDays: 365,
+      now: NOW,
+    });
+    if (payload !== null) {
+      await store.saveSnapshot({
+        repositoryId: discovered.id,
+        day: "2026-08-10",
+        capturedAt: NOW,
+        payload,
+      });
+    }
+    const [summary] = await new ListRepositorySummaries(store).run(WINDOW);
+    return summary;
+  };
+
+  it("should report documentation as not measured before the first snapshot", async () => {
+    // given / when
+    const summary = await run({ techDocsRef: "dir:." }, null);
+
+    // then
+    // The catalog half of the evidence is known from discovery, but the
+    // repository half arrives with the snapshot, and grading on half of it
+    // would report a gap that is not there.
+    expect(summary.documentation).toBeNull();
+    expect(summary.apiExposure).toBeNull();
+  });
+
+  it("should report documentation as not measured on a snapshot predating the scan", async () => {
+    // given / when
+    const summary = await run({ techDocsRef: "dir:." }, snapshotWith(null));
+
+    // then
+    expect(summary.documentation).toBeNull();
+  });
+
+  it("should grade a repository with TechDocs as documented", async () => {
+    // given / when
+    const summary = await run(
+      { techDocsRef: "dir:." },
+      snapshotWith({ hasReadme: true, hasDocsSource: true, apiDefinitionPath: null }),
+    );
+
+    // then
+    expect(summary.documentation?.state).toBe("documented");
+  });
+
+  it("should grade a repository that writes docs nobody published as unpublished", async () => {
+    // given / when
+    const summary = await run(
+      {},
+      snapshotWith({ hasReadme: true, hasDocsSource: true, apiDefinitionPath: null }),
+    );
+
+    // then
+    expect(summary.documentation).toMatchObject({
+      state: "unpublished",
+      hasDocsSource: true,
+      hasTechDocs: false,
+    });
+  });
+
+  it("should grade a repository with only a README as missing", async () => {
+    // given / when
+    const summary = await run(
+      {},
+      snapshotWith({ hasReadme: true, hasDocsSource: false, apiDefinitionPath: null }),
+    );
+
+    // then
+    expect(summary.documentation?.state).toBe("missing");
+  });
+
+  it("should grade an archived repository as not expected to be documented", async () => {
+    // given / when
+    const summary = await run(
+      {},
+      snapshotWith(
+        { hasReadme: false, hasDocsSource: false, apiDefinitionPath: null },
+        { isArchived: true },
+      ),
+    );
+
+    // then
+    expect(summary.documentation?.state).toBe("not-expected");
+  });
+
+  it("should flag a repository shipping a definition it never declared", async () => {
+    // given / when
+    const summary = await run(
+      { entityType: "service" },
+      snapshotWith({
+        hasReadme: true,
+        hasDocsSource: false,
+        apiDefinitionPath: "openapi.yaml",
+      }),
+    );
+
+    // then
+    expect(summary.apiExposure).toMatchObject({
+      state: "candidate",
+      definitionPath: "openapi.yaml",
+      declaredApis: 0,
+    });
+  });
+
+  it("should leave a repository that already declares an API alone", async () => {
+    // given / when
+    const summary = await run(
+      { entityType: "service", providesApis: 1 },
+      snapshotWith({
+        hasReadme: true,
+        hasDocsSource: false,
+        apiDefinitionPath: "openapi.yaml",
+      }),
+    );
+
+    // then
+    expect(summary.apiExposure?.state).toBe("declared");
+  });
+});
+
+describe("ListContributorSummaries churn unit", () => {
+  it("should report lines when the provider reported line counts", async () => {
+    // given
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [commit(repository.id, "2026-08-10T10:00:00.000Z").build()],
+      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+
+    // then
+    expect(contributor.churnUnit).toBe("lines");
+    expect(contributor.linesOfCode).toBe(8);
+  });
+
+  it("should report files when the provider only reported file counts", async () => {
+    // given
+    // Azure DevOps carries added, edited and deleted *files* and exposes no
+    // line count anywhere in its REST API, so a lines column against an Azure
+    // DevOps fleet reads zero on every row.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [
+        EventBuilder.commit()
+          .withRepository(repository.id)
+          .withActor("dev@example.com")
+          .at("2026-08-10T10:00:00.000Z")
+          .withFileChurn(7)
+          .build(),
+      ],
+      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+
+    // then
+    expect(contributor.churnUnit).toBe("files");
+    expect(contributor.changedFiles).toBe(7);
+    expect(contributor.linesOfCode).toBe(0);
+  });
+
+  it("should report neither when the provider reported no churn at all", async () => {
+    // given
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [
+        EventBuilder.commit()
+          .withRepository(repository.id)
+          .withActor("dev@example.com")
+          .at("2026-08-10T10:00:00.000Z")
+          .build(),
+      ],
+      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+
+    // then
+    // "The provider said zero" and "the provider never said" are different
+    // facts, and a table showing 0 for the second is the bug this unit exists
+    // to prevent.
+    expect(contributor.churnUnit).toBe("none");
+  });
+
+  it("should prefer lines when a fleet spans both providers", async () => {
+    // given
+    const { store, discovered } = await seed(2);
+    const [first, second] = discovered;
+    for (const [repository, event] of [
+      [first, commit(first.id, "2026-08-10T10:00:00.000Z").build()],
+      [
+        second,
+        EventBuilder.commit()
+          .withRepository(second.id)
+          .withActor("dev@example.com")
+          .at("2026-08-10T11:00:00.000Z")
+          .withFileChurn(3)
+          .build(),
+      ],
+    ] as const) {
+      await store.commitIngestion({
+        repositoryId: repository.id,
+        events: [event],
+        chunk: {
+          repositoryId: repository.id,
+          kinds: ["commit"],
+          days: [],
+          ingestedAt: NOW,
+        },
+        status: "active",
+        now: NOW,
+      });
+    }
+
+    // when
+    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+
+    // then
+    // The more precise figure wins where it exists, rather than degrading the
+    // whole row to the coarser one.
+    expect(contributor.churnUnit).toBe("lines");
   });
 });

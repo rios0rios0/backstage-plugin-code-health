@@ -270,3 +270,59 @@ describe("RepositoryTable pagination", () => {
     expect(screen.queryByText("Next")).not.toBeInTheDocument();
   });
 });
+
+describe("RepositoryTable documentation and API columns", () => {
+  it("should keep only the repositories whose docs were never published", () => {
+    // given
+    renderTable([
+      RepositoryBuilder.create()
+        .withName("unpublished")
+        .withDocumentationState("unpublished")
+        .build(),
+      RepositoryBuilder.create()
+        .withName("published")
+        .withDocumentationState("documented")
+        .build(),
+    ]);
+
+    // when
+    selectFilter("documentation", "unpublished");
+
+    // then
+    expect(visibleRepositoryNames()).toEqual(["user/unpublished"]);
+  });
+
+  it("should keep only the repositories that ship an undeclared API", () => {
+    // given
+    // This is the flag: the definition is in the repository, so only the
+    // catalog wiring is missing.
+    renderTable([
+      RepositoryBuilder.create()
+        .withName("undeclared")
+        .withApiExposureState("candidate", "openapi.yaml")
+        .build(),
+      RepositoryBuilder.create().withName("declared").withApiExposureState("declared").build(),
+    ]);
+
+    // when
+    selectFilter("apiExposure", "candidate");
+
+    // then
+    expect(visibleRepositoryNames()).toEqual(["user/undeclared"]);
+  });
+
+  it("should show everything when neither filter is set", () => {
+    // given
+    renderTable([
+      RepositoryBuilder.create().withName("one").withDocumentationState("missing").build(),
+      RepositoryBuilder.create().withName("two").build(),
+    ]);
+
+    // when
+    selectFilter("documentation", "");
+    selectFilter("apiExposure", "");
+
+    // then
+    expect(visibleRepositoryNames()).toHaveLength(2);
+  });
+});

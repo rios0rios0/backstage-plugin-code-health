@@ -10,6 +10,25 @@ import type {
 } from "@rios0rios0/backstage-plugin-code-health-common";
 
 /**
+ * What the repository's own file tree says about documentation and APIs.
+ *
+ * Read from the provider at snapshot time rather than inferred from the catalog:
+ * the whole value of the documentation metric is telling "never wrote any" apart
+ * from "wrote some and never published it", and only the repository knows which.
+ *
+ * Detection is deliberately shallow — the root, `docs/` and `api/` — so it costs
+ * the same on both platforms and cannot be made expensive by a repository with
+ * a hundred thousand files.
+ */
+export interface RepositoryFileFacts {
+  readonly hasReadme: boolean;
+  /** A `docs/` tree with content, or an `mkdocs.yml`. */
+  readonly hasDocsSource: boolean;
+  /** Path of the first API definition found, or null when there is none. */
+  readonly apiDefinitionPath: string | null;
+}
+
+/**
  * The current state of a repository on one day.
  *
  * None of this can be backfilled: no provider exposes what a repository's
@@ -34,6 +53,11 @@ export interface RepositorySnapshotPayload {
   readonly badgeStatus: BadgeStatus | null;
   readonly sonarMetrics: SonarMetrics | null;
   readonly wakaTimeMetrics: WakaTimeMetrics | null;
+  /**
+   * Null on a snapshot written before this field existed, which is why every
+   * reader treats it as "not measured" rather than as "nothing found".
+   */
+  readonly repositoryFiles: RepositoryFileFacts | null;
 }
 
 export interface RepositorySnapshot {

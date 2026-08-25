@@ -312,3 +312,147 @@ describe("repositoryIdFor", () => {
     expect(first).not.toBe(second);
   });
 });
+
+describe("AnnotationRepositoryResolver catalog facts", () => {
+  it("should record the TechDocs annotation when the entity carries one", () => {
+    // given
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withTechDocs("dir:.")
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.techDocsRef).toBe("dir:.");
+  });
+
+  it("should leave the TechDocs reference null when the entity has none", () => {
+    // given
+    const entity = EntityBuilder.create().withGithubSlug("rios0rios0/pipelines").build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.techDocsRef).toBeNull();
+  });
+
+  it("should count the APIs the entity declares", () => {
+    // given
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withProvidesApis("api:default/orders", "api:default/payments")
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.providesApis).toBe(2);
+  });
+
+  it("should count no APIs when the entity declares none", () => {
+    // given
+    const entity = EntityBuilder.create().withGithubSlug("rios0rios0/pipelines").build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.providesApis).toBe(0);
+  });
+
+  it("should record the kind and the component type", () => {
+    // given
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withType("library")
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts).toMatchObject({
+      entityKind: "Component",
+      entityType: "library",
+    });
+  });
+
+  it("should leave the type null when the entity declares none", () => {
+    // given
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withType(undefined)
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.entityType).toBeNull();
+  });
+
+  it("should recognise a documentation link by its type", () => {
+    // given
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withLink({ url: "https://wiki.example.com/gateway", type: "docs" })
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.hasExternalDocs).toBe(true);
+  });
+
+  it("should recognise a documentation link by its title", () => {
+    // given
+    // Backstage puts no vocabulary on `metadata.links`, and most catalogs fill
+    // in one of `type` or `title` rather than both.
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withLink({ url: "https://wiki.example.com/gateway", title: "Documentation" })
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.hasExternalDocs).toBe(true);
+  });
+
+  it("should ignore a link that is not documentation", () => {
+    // given
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withLink({ url: "https://dashboards.example.com/gateway", title: "Dashboard" })
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.hasExternalDocs).toBe(false);
+  });
+
+  it("should ignore a documentation link with no URL", () => {
+    // given
+    const entity = EntityBuilder.create().withGithubSlug("rios0rios0/pipelines").build();
+    const broken = {
+      ...entity,
+      metadata: { ...entity.metadata, links: [{ title: "Docs" } as never] },
+    };
+
+    // when
+    const result = resolver().resolve(broken);
+
+    // then
+    // Links reach this from stored data, so one malformed entry should degrade
+    // the grade rather than throw the whole discovery pass.
+    expect(result?.catalogFacts.hasExternalDocs).toBe(false);
+  });
+});

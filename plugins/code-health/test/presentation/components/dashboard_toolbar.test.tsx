@@ -1,13 +1,20 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { RangeSelection } from "../../../src/domain/entities/time_range";
 import { TIME_RANGES } from "../../../src/domain/entities/time_range";
 import { DashboardToolbar } from "../../../src/presentation/components/dashboard_toolbar";
+
+const MONTHS = [
+  { year: 2026, month: 8 },
+  { year: 2026, month: 7 },
+];
 
 const defaultProps = {
   lastFetchedAt: null as Date | null,
   refreshInterval: 300000 as const,
   isLoading: false,
   ranges: TIME_RANGES,
-  selectedRange: "day" as const,
+  months: MONTHS,
+  selection: { kind: "preset", id: "day" } as RangeSelection,
   onRangeChange: jest.fn(),
   onRefresh: jest.fn(),
   onIntervalChange: jest.fn(),
@@ -113,6 +120,6 @@ describe("DashboardToolbar", () => {
     fireEvent.change(screen.getByLabelText("Time range"), { target: { value: "month" } });
 
     // then
-    expect(onRangeChange).toHaveBeenCalledWith("month");
+    expect(onRangeChange).toHaveBeenCalledWith({ kind: "preset", id: "month" });
   });
 });

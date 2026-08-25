@@ -17,8 +17,10 @@ import type {
 } from "../../../domain/services/vcs_collector";
 import type { ProviderGateway } from "../../http/provider_gateway";
 import { buildCompliance } from "./compliance";
+import { detectRepositoryFiles } from "./repository_files";
 import type {
   GithubSnapshotResponse,
+  GithubTree,
 } from "./github_snapshot_query";
 import { SNAPSHOT_QUERY } from "./github_snapshot_query";
 import type {
@@ -142,6 +144,17 @@ const authorKey = (node: {
 
 /** `YYYY-MM-DD` in UTC, which is the granularity GitHub search accepts. */
 const searchDate = (instant: Date): string => instant.toISOString().slice(0, 10);
+
+/**
+ * File paths inside one tree, prefixed with the directory it was read from.
+ *
+ * Only blobs are kept: an empty `docs/` directory is not documentation, and
+ * counting the directory itself would report one.
+ */
+const filesIn = (tree: GithubTree | null | undefined, prefix = ""): string[] =>
+  (tree?.entries ?? [])
+    .filter((entry) => entry.type === "blob" && entry.name)
+    .map((entry) => (prefix === "" ? `${entry.name}` : `${prefix}/${entry.name}`));
 
 export interface GithubCollectorOptions {
   readonly gateway: ProviderGateway;
@@ -291,6 +304,11 @@ export class GithubCollector implements VcsCollector {
         branchProtection: protectedBranch,
       }),
       badgeStatus: node.readme?.text ? parseBadgesFromReadme(node.readme.text) : null,
+      repositoryFiles: detectRepositoryFiles([
+        ...filesIn(node.root),
+        ...filesIn(node.docsTree, "docs"),
+        ...filesIn(node.apiTree, "api"),
+      ]),
     };
 
     return {

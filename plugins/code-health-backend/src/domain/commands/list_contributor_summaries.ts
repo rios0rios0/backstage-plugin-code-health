@@ -1,4 +1,5 @@
 import type {
+  ChurnUnit,
   ContributorSummary,
   QualityGateStatus,
   SonarMetrics,
@@ -20,6 +21,13 @@ interface Accumulator {
   linesAdded: number;
   linesDeleted: number;
   changedFiles: number;
+  /**
+   * Whether the provider *reported* the field at all, which is not the same
+   * question as whether the number came back above zero. A quiet week is a real
+   * measurement of zero; a provider that has no line counts is not.
+   */
+  sawLines: boolean;
+  sawFiles: boolean;
   pullRequestsOpened: number;
   pullRequestsMerged: number;
   reviewsGiven: number;
@@ -30,6 +38,18 @@ interface Accumulator {
   repositories: Set<string>;
 }
 
+/**
+ * Which unit this contributor's churn was measured in.
+ *
+ * Lines win when both are present, because a fleet spanning both providers
+ * should show the more precise figure where it exists rather than degrading
+ * everything to the coarser one.
+ */
+const churnUnitOf = (accumulator: Accumulator): ChurnUnit => {
+  if (accumulator.sawLines) return "lines";
+  return accumulator.sawFiles ? "files" : "none";
+};
+
 const empty = (key: string): Accumulator => ({
   displayName: key,
   avatarUrl: null,
@@ -38,6 +58,8 @@ const empty = (key: string): Accumulator => ({
   linesAdded: 0,
   linesDeleted: 0,
   changedFiles: 0,
+  sawLines: false,
+  sawFiles: false,
   pullRequestsOpened: 0,
   pullRequestsMerged: 0,
   reviewsGiven: 0,
@@ -59,6 +81,10 @@ const applyEvent = (accumulator: Accumulator, event: CodeHealthEvent): void => {
       accumulator.linesAdded += event.additions ?? 0;
       accumulator.linesDeleted += event.deletions ?? 0;
       accumulator.changedFiles += event.changedFiles ?? 0;
+      if (event.additions !== null || event.deletions !== null) {
+        accumulator.sawLines = true;
+      }
+      if (event.changedFiles !== null) accumulator.sawFiles = true;
       break;
     case "pull_request":
       if (event.outcome === "open") accumulator.pullRequestsOpened += 1;
@@ -217,6 +243,7 @@ export class ListContributorSummaries {
           // legitimate contribution, not a negative one.
           linesOfCode: Math.max(0, totals.linesAdded - totals.linesDeleted),
           changedFiles: totals.changedFiles,
+          churnUnit: churnUnitOf(totals),
           pullRequestsOpened: totals.pullRequestsOpened,
           pullRequestsMerged: totals.pullRequestsMerged,
           reviewsGiven: totals.reviewsGiven,

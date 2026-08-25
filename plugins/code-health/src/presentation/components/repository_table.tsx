@@ -20,6 +20,8 @@ import { Link as RouterLink } from "react-router-dom";
 import { BadgeStatusCell } from "./badge_status_cell";
 import { ComplianceBadge } from "./compliance_badge";
 import { DataTable, PaginationControls } from "./data_table";
+import { ApiExposureBadge } from "./api_exposure_badge";
+import { DocumentationBadge } from "./documentation_badge";
 import { EmptyCell } from "./empty_cell";
 import { StateChip } from "./state_chip";
 import { StatusBadge } from "./status_badge";
@@ -219,6 +221,34 @@ const columns: ColumnDef<RepositorySummary>[] = [
     filterFn: (row, _columnId, filterValue) => {
       if (!filterValue) return true;
       return (row.original.badgeStatus?.color ?? "none") === filterValue;
+    },
+  },
+  {
+    id: "documentation",
+    accessorFn: (row) => row.documentation?.state ?? "unknown",
+    header: "Docs",
+    cell: ({ row }) => <DocumentationBadge status={row.original.documentation} />,
+    meta: {
+      filterType: "select",
+      options: ["", "documented", "unpublished", "missing", "not-expected"],
+    },
+    filterFn: (row, _columnId, filterValue) => {
+      if (!filterValue) return true;
+      return (row.original.documentation?.state ?? "unknown") === filterValue;
+    },
+  },
+  {
+    id: "apiExposure",
+    accessorFn: (row) => row.apiExposure?.state ?? "unknown",
+    header: "API",
+    cell: ({ row }) => <ApiExposureBadge exposure={row.original.apiExposure} />,
+    meta: {
+      filterType: "select",
+      options: ["", "declared", "candidate", "expected", "none"],
+    },
+    filterFn: (row, _columnId, filterValue) => {
+      if (!filterValue) return true;
+      return (row.original.apiExposure?.state ?? "unknown") === filterValue;
     },
   },
   {

@@ -648,9 +648,39 @@ describe("AzureDevOpsCollector", () => {
             ],
           },
         }))
-        .on("/items", () => ({
-          body: { content: "![Build Status](https://img.shields.io/github/actions/workflow/status/x/y)" },
-        }));
+        // One endpoint serves two jobs: `path` fetches a blob for the badge
+        // scan, `scopePath` lists a directory for the documentation scan.
+        .on("/items", (request) => {
+          const scope = request.query.get("scopePath");
+          if (scope === null) {
+            return {
+              body: {
+                content:
+                  "![Build Status](https://img.shields.io/github/actions/workflow/status/x/y)",
+              },
+            };
+          }
+          if (scope === "/") {
+            return {
+              body: {
+                value: [
+                  { path: "/README.md", isFolder: false },
+                  { path: "/docs", isFolder: true },
+                  { path: "/go.mod", isFolder: false },
+                ],
+              },
+            };
+          }
+          return {
+            body: {
+              value: [
+                { path: "/docs", isFolder: true },
+                { path: "/docs/index.md", isFolder: false },
+                { path: "/docs/openapi.yaml", isFolder: false },
+              ],
+            },
+          };
+        });
 
     it("should assemble the repository's current state", async () => {
       // given
@@ -741,6 +771,77 @@ describe("AzureDevOpsCollector", () => {
 
       // then
       expect(result.payload.badgeStatus).toBeNull();
+    });
+
+    it("should scan the repository for documentation and API definitions", async () => {
+      // given
+      const { collector } = createCollector();
+      withSnapshotRoutes();
+
+      // when
+      const result = await collector.snapshot(anAzureRepository(server.baseUrl), snapshotContext());
+
+      // then
+      expect(result.payload.repositoryFiles).toEqual({
+        hasReadme: true,
+        hasDocsSource: true,
+        apiDefinitionPath: "docs/openapi.yaml",
+      });
+    });
+
+    it("should list a directory only when the root said it exists", async () => {
+      // given
+      // The common repository has neither, and paying for two extra listings
+      // per repository per day to discover that would be the whole cost of the
+      // metric.
+      const { collector } = createCollector();
+      server
+        .onPath("/repositories/gateway", () => ({ body: { id: "guid-1" } }))
+        .on("/policy/configurations", () => ({ body: { value: [] } }))
+        .on("/build/definitions", () => ({ body: { value: [] } }))
+        .on("/refs", () => ({ body: { value: [] } }))
+        .on("/build/builds", () => ({ body: { value: [] } }))
+        .on("/items", (request) =>
+          request.query.get("scopePath") === null
+            ? { status: 404, body: { message: "not found" } }
+            : { body: { value: [{ path: "/main.go", isFolder: false }] } },
+        );
+
+      // when
+      const result = await collector.snapshot(anAzureRepository(server.baseUrl), snapshotContext());
+
+      // then
+      const listings = server
+        .requestsFor("/items")
+        .filter((request) => request.query.get("scopePath") !== null);
+      expect(listings).toHaveLength(1);
+      expect(result.payload.repositoryFiles).toEqual({
+        hasReadme: false,
+        hasDocsSource: false,
+        apiDefinitionPath: null,
+      });
+    });
+
+    it("should tolerate an empty repository whose listing 404s", async () => {
+      // given
+      const { collector } = createCollector();
+      server
+        .onPath("/repositories/gateway", () => ({ body: { id: "guid-1" } }))
+        .on("/policy/configurations", () => ({ body: { value: [] } }))
+        .on("/build/definitions", () => ({ body: { value: [] } }))
+        .on("/refs", () => ({ body: { value: [] } }))
+        .on("/build/builds", () => ({ body: { value: [] } }))
+        .on("/items", () => ({ status: 404, body: { message: "not found" } }));
+
+      // when
+      const result = await collector.snapshot(anAzureRepository(server.baseUrl), snapshotContext());
+
+      // then
+      expect(result.payload.repositoryFiles).toEqual({
+        hasReadme: false,
+        hasDocsSource: false,
+        apiDefinitionPath: null,
+      });
     });
 
     it("should not invent a release, because Azure DevOps Repos has none", async () => {

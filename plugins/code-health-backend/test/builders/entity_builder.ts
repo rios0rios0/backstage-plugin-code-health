@@ -14,6 +14,9 @@ export class EntityBuilder {
   private name: string;
   private kind = "Component";
   private namespace = "default";
+  private type: string | undefined = "service";
+  private providesApis: string[] = [];
+  private links: { url: string; title?: string; type?: string }[] = [];
 
   private constructor() {
     counter += 1;
@@ -63,6 +66,25 @@ export class EntityBuilder {
     return this.withAnnotation("sonarqube.org/project-key", key);
   }
 
+  withTechDocs(ref = "dir:."): EntityBuilder {
+    return this.withAnnotation("backstage.io/techdocs-ref", ref);
+  }
+
+  withType(type: string | undefined): EntityBuilder {
+    this.type = type;
+    return this;
+  }
+
+  withProvidesApis(...apis: string[]): EntityBuilder {
+    this.providesApis = apis;
+    return this;
+  }
+
+  withLink(link: { url: string; title?: string; type?: string }): EntityBuilder {
+    this.links = [...this.links, link];
+    return this;
+  }
+
   build(): Entity {
     return {
       apiVersion: "backstage.io/v1alpha1",
@@ -73,8 +95,13 @@ export class EntityBuilder {
         ...(Object.keys(this.annotations).length > 0
           ? { annotations: this.annotations }
           : {}),
+        ...(this.links.length > 0 ? { links: this.links } : {}),
       },
-      spec: { type: "service", owner: "team-a" },
+      spec: {
+        owner: "team-a",
+        ...(this.type === undefined ? {} : { type: this.type }),
+        ...(this.providesApis.length > 0 ? { providesApis: this.providesApis } : {}),
+      },
     };
   }
 }

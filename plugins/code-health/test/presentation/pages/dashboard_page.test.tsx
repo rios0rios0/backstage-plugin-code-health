@@ -1,4 +1,4 @@
-import { render as renderBare, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render as renderBare, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
 import type { UseCoverageResult } from "../../../src/presentation/hooks/use_coverage";
@@ -73,6 +73,30 @@ describe("DashboardPage", () => {
     await waitFor(() => expect(screen.getByText("Refresh")).toBeInTheDocument());
     expect(screen.getByLabelText("Time range")).toBeInTheDocument();
     expect(screen.getByLabelText("Auto refresh interval")).toBeInTheDocument();
+  });
+
+  it("should ask for a fresh window when refresh is pressed", async () => {
+    // given
+    // A window frozen at the instant the range was selected keeps asking for
+    // the same period however many times it is refreshed, so the button says
+    // the numbers moved when nothing did.
+    const service = new StubDashboardService().withRepositories([]);
+    render(
+      <DashboardPage
+        dashboardService={service}
+        coverage={coverageResult()}
+        config={DEFAULT_CODE_HEALTH_CONFIG}
+      />,
+    );
+    await waitFor(() => expect(service.callCount).toBe(1));
+
+    // when
+    fireEvent.click(screen.getByText("Refresh"));
+
+    // then
+    await waitFor(() => expect(service.callCount).toBe(2));
+    const [first, second] = service.windows;
+    expect(Date.parse(second.to)).toBeGreaterThanOrEqual(Date.parse(first.to));
   });
 
   it("should offer only the ranges the backend has ingested", async () => {

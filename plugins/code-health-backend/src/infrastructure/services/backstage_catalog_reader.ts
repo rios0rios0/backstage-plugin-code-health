@@ -13,7 +13,14 @@ const REQUIRED_FIELDS = [
   "metadata.name",
   "metadata.namespace",
   "metadata.annotations",
+  // Read by the documentation metric: an entity linking out to a wiki counts as
+  // documented somewhere, even with no TechDocs annotation.
+  "metadata.links",
   "spec.owner",
+  // Both feed the API-exposure metric: what the component is, and whether it
+  // already tells the catalog which APIs it serves.
+  "spec.type",
+  "spec.providesApis",
 ];
 
 /** Discovery never reads a profile, so the user lookup asks for its own fields. */

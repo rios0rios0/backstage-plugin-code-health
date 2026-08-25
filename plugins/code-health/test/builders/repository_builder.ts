@@ -1,8 +1,10 @@
 import type {
+  ApiExposure,
   BadgeStatus,
   CIState,
   ComplianceColor,
   ComplianceStatus,
+  DocumentationStatus,
   QualityGateStatus,
   Release,
   RepositoryActivity,
@@ -40,6 +42,8 @@ export class RepositoryBuilder {
       sonarMetrics: null,
       complianceStatus: null,
       badgeStatus: null,
+      documentation: null,
+      apiExposure: null,
       wakaTimeMetrics: null,
       activity: EMPTY_REPOSITORY_ACTIVITY,
     };
@@ -47,6 +51,16 @@ export class RepositoryBuilder {
 
   static create(): RepositoryBuilder {
     return new RepositoryBuilder();
+  }
+
+  withDocumentation(status: DocumentationStatus | null): this {
+    this.props = { ...this.props, documentation: status };
+    return this;
+  }
+
+  withApiExposure(exposure: ApiExposure | null): this {
+    this.props = { ...this.props, apiExposure: exposure };
+    return this;
   }
 
   withId(id: string): this {
@@ -68,6 +82,53 @@ export class RepositoryBuilder {
         technicalDebt: "0min",
         technicalDebtMinutes: 0,
         qualityGateStatus,
+      },
+    };
+    return this;
+  }
+
+  /** Sets coverage, and the gate alongside it so the row stays coherent. */
+  withCoverage(coverage: number, qualityGateStatus: QualityGateStatus = "OK"): this {
+    this.props = {
+      ...this.props,
+      sonarMetrics: {
+        bugs: 0,
+        codeSmells: 0,
+        securityHotspots: 0,
+        vulnerabilities: 0,
+        coverage,
+        duplications: 0,
+        technicalDebt: "0min",
+        technicalDebtMinutes: 0,
+        qualityGateStatus,
+      },
+    };
+    return this;
+  }
+
+  withDocumentationState(state: DocumentationStatus["state"], checks: Partial<DocumentationStatus> = {}): this {
+    this.props = {
+      ...this.props,
+      documentation: {
+        hasTechDocs: state === "documented",
+        hasDocsSource: state === "unpublished",
+        hasReadme: false,
+        hasExternalDocs: false,
+        ...checks,
+        state,
+      },
+    };
+    return this;
+  }
+
+  withApiExposureState(state: ApiExposure["state"], definitionPath: string | null = null): this {
+    this.props = {
+      ...this.props,
+      apiExposure: {
+        declaredApis: state === "declared" ? 1 : 0,
+        definitionPath,
+        entityType: state === "expected" ? "service" : null,
+        state,
       },
     };
     return this;

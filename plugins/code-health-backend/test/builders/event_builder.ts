@@ -72,6 +72,17 @@ export class EventBuilder {
     return this;
   }
 
+  /** File churn only, the way Azure DevOps reports it — no line counts at all. */
+  withFileChurn(changedFiles: number): EventBuilder {
+    this.props = {
+      ...this.props,
+      additions: null,
+      deletions: null,
+      changedFiles,
+    };
+    return this;
+  }
+
   withChurn(additions: number, deletions: number, changedFiles?: number): EventBuilder {
     this.props = {
       ...this.props,

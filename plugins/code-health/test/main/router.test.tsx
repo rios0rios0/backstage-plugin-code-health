@@ -23,6 +23,8 @@ const renderRouter = async (
     contributorService?: StubContributorService;
     coverageService?: StubCoverageService;
     timeSeriesService?: StubTimeSeriesService;
+    /** Which tab to land on. Defaults to the root, which is Insights. */
+    path?: string;
   } = {},
 ) => {
   const dashboardService = overrides.dashboardService ?? new StubDashboardService();
@@ -43,13 +45,14 @@ const renderRouter = async (
     >
       <Router />
     </TestApiProvider>,
+    { routeEntries: [overrides.path ?? "/"] },
   );
 
   return { dashboardService, contributorService, coverageService, timeSeriesService };
 };
 
 describe("Router", () => {
-  it("should render the dashboard once coverage has been read", async () => {
+  it("should land on the insights tab once coverage has been read", async () => {
     // given
     const dashboardService = new StubDashboardService().withRepositories([
       RepositoryBuilder.create().withName("gateway").build(),
@@ -59,19 +62,37 @@ describe("Router", () => {
     await renderRouter({ dashboardService });
 
     // then
+    // Insights leads because it is the only tab that answers a question about
+    // the fleet rather than about one row of it.
+    expect(await screen.findByText("At a glance")).toBeInTheDocument();
+  });
+
+  it("should render the repositories table on its own tab", async () => {
+    // given
+    const dashboardService = new StubDashboardService().withRepositories([
+      RepositoryBuilder.create().withName("gateway").build(),
+    ]);
+
+    // when
+    await renderRouter({ dashboardService, path: "/repositories" });
+
+    // then
     expect(await screen.findByText("user/gateway")).toBeInTheDocument();
   });
 
-  it("should show every tab", async () => {
+  it("should show every tab, insights first", async () => {
     // given / when
     await renderRouter();
 
     // then
     // The settings tab is gone: there is nothing left for a user to configure
     // now that credentials live in the backend's `integrations` block.
-    expect(await screen.findByRole("tab", { name: "Repositories" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Contributors" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Insights" })).toBeInTheDocument();
+    const tabs = await screen.findAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Insights",
+      "Contributors",
+      "Repositories",
+    ]);
     expect(screen.queryByRole("tab", { name: "Settings" })).not.toBeInTheDocument();
   });
 

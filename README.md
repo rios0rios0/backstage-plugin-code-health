@@ -36,12 +36,15 @@ rather than showing an empty dashboard.
 - **Releases & tags**: latest release with relative date, or the latest tag when no release exists
 - **Compliance checks**: pipeline present, build policy on pull requests, build policy expiration and branch protection
 - **README badge audit**: which of the six standard shields are present in each repository's README
-- **Contributor metrics**: commits, churn, pull requests opened and merged, review approval rate and pipeline success rate
-- **Insights**: a fleet-level tab of headline figures and charts — delivery cadence, top contributors, most active repositories, review load, and quality-gate and branch-policy breakdowns
+- **Contributor metrics**: commits, code churn, pull requests created and pull requests approved as separate columns, review approval rate and pipeline success rate — every rate explains what it divides in a tooltip on its heading
+- **Honest churn units**: GitHub reports added and deleted lines; Azure DevOps reports changed files and exposes no line count anywhere in its API, so each row prints the unit its provider actually gave rather than showing zero
+- **Insights**: the landing tab, with the fleet-level figures and charts — delivery cadence, top contributors, most active repositories, review load, quality-gate and branch-policy breakdowns, test-coverage distribution, and the documentation and catalog-API gaps
 - **Catalog links**: repository rows and contributors link through to their catalog entity, and a contributor matched to a `User` shows that entity's name and picture
 - **Sonar integration** through the community `sonarqube` backend plugin, so its token stays where that plugin already keeps it
 - **WakaTime integration**: 30-day coding time and daily average per contributor
-- **A year of history**: pick any window from the last hour to the last 365 days
+- **Documentation audit**: which repositories publish TechDocs, which already write documentation nobody wired up, and which have none
+- **Catalog API audit**: repositories shipping an OpenAPI, AsyncAPI, GraphQL or protobuf definition that declare no `spec.providesApis`
+- **A year of history**: pick any rolling window from the last hour to the last 365 days, today so far, or any single calendar month
 - **Two platforms**: GitHub (GraphQL) and Azure DevOps (REST), per repository rather than per instance
 - **Filtering, sorting, pagination** on every column, plus archived/fork toggles
 
@@ -201,15 +204,43 @@ README badges — no provider reports what they looked like last March.
 codeHealth:
   # 60000, 300000, 900000 or 0. Defaults to 300000.
   refreshIntervalMs: 300000
-  # hour | day | week | month | quarter | year. Defaults to `day`. A range wider
-  # than the backend has ingested falls back to the widest one available.
+  # today | hour | day | week | month | quarter | year. Defaults to `day`. A
+  # range wider than the backend has ingested falls back to the widest one
+  # available. `today` is the local calendar day so far; `day` is the last 24
+  # hours. A specific calendar month cannot be pinned here — it would be a fixed
+  # month that goes stale the moment it passes.
   defaultRange: 'day'
 ```
+
+Every tab shares one range control. It offers the rolling ranges above and, under **By month…**, any
+single calendar month the backfill has reached: arrows step a month at a time, and the month and year
+dropdowns jump anywhere. Months outside the ingested history stay visible but unselectable, so a gap
+reads as "not collected yet" rather than as a list that mysteriously starts in April.
 
 The Insights tab has no settings of its own. Its cadence chart buckets by day, week or month
 according to the range already selected — a year of daily points is noise and a week of monthly
 ones is a single dot, so the only correct setting is implied by the range and is not offered as a
 second control.
+
+### What the documentation and API audits read
+
+Both grades combine what the catalog entity says with what the repository contains, so the daily
+snapshot has to have run at least once before either reports anything — until then they read
+"not measured" rather than "nothing found".
+
+| Signal | Where it comes from |
+|---|---|
+| Published documentation | `backstage.io/techdocs-ref` on the entity |
+| Documentation sources | a `docs/` tree or an `mkdocs.yml` in the repository |
+| External documentation | a `metadata.links` entry whose type or title names docs or a wiki |
+| Declared APIs | `spec.providesApis` on the entity |
+| API definition | `openapi`, `swagger`, `asyncapi`, `api`, a GraphQL schema or a `.proto`, at the root or under `docs/` or `api/` |
+
+The file scan is deliberately shallow — the root, `docs/` and `api/`. It costs no extra request on
+GitHub, where the trees ride along in the snapshot's existing GraphQL document, and one listing per
+repository per day on Azure DevOps, plus one more for each of those two directories that exists. A
+README on its own does not count as documentation: nearly every repository has one, so counting it
+would grade the whole fleet documented and the metric would measure nothing.
 
 ## Operating it
 

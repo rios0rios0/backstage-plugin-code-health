@@ -10,6 +10,20 @@ import type { WakaTimeMetrics } from "./wakatime_metrics";
  * committing under two addresses therefore appears twice; mapping identities is
  * the catalog's job, not this plugin's.
  */
+/**
+ * Which unit a contributor's churn is actually measured in.
+ *
+ * The two providers do not report the same thing and cannot be made to. GitHub's
+ * commit history carries added and deleted *lines*; Azure DevOps carries added,
+ * edited and deleted *files* and exposes no line count anywhere in its REST API
+ * — reconstructing one would mean diffing every blob of every commit.
+ *
+ * Carrying the unit explicitly is what lets a view render the figure it has
+ * instead of rendering a zero. The alternative, inferring the unit from which
+ * number is non-zero, misreads a real quiet week as a missing measurement.
+ */
+export type ChurnUnit = "lines" | "files" | "none";
+
 export interface ContributorSummary {
   readonly key: string;
   readonly displayName: string;
@@ -29,6 +43,12 @@ export interface ContributorSummary {
   /** Net lines contributed: `linesAdded - linesDeleted`, floored at zero. */
   readonly linesOfCode: number;
   readonly changedFiles: number;
+  /**
+   * What `linesOfCode` and `changedFiles` mean for this contributor: `lines`
+   * when the provider reported line counts, `files` when it only reported file
+   * counts, `none` when it reported neither.
+   */
+  readonly churnUnit: ChurnUnit;
   readonly pullRequestsOpened: number;
   readonly pullRequestsMerged: number;
   /** Pull requests this contributor reviewed, whatever the vote. */

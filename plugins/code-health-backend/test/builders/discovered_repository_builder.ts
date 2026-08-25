@@ -1,4 +1,7 @@
-import type { DiscoveredRepository } from "../../src/domain/entities/tracked_repository";
+import {
+  EMPTY_CATALOG_FACTS,
+  type DiscoveredRepository,
+} from "../../src/domain/entities/tracked_repository";
 import { repositoryIdFor } from "../../src/infrastructure/services/annotation_repository_resolver";
 
 let counter = 0;
@@ -21,6 +24,7 @@ export class DiscoveredRepositoryBuilder {
       defaultBranch: null,
       externalId: null,
       sonarProjectKey: null,
+      catalogFacts: EMPTY_CATALOG_FACTS,
       archived: false,
     };
   }
@@ -53,6 +57,16 @@ export class DiscoveredRepositoryBuilder {
 
   withSonarProjectKey(sonarProjectKey: string): DiscoveredRepositoryBuilder {
     this.props = { ...this.props, sonarProjectKey };
+    return this;
+  }
+
+  withCatalogFacts(
+    facts: Partial<DiscoveredRepository["catalogFacts"]>,
+  ): DiscoveredRepositoryBuilder {
+    this.props = {
+      ...this.props,
+      catalogFacts: { ...this.props.catalogFacts, ...facts },
+    };
     return this;
   }
 
