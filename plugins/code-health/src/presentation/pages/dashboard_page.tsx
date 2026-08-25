@@ -25,12 +25,15 @@ export const DashboardPage = ({
   enabled = true,
 }: DashboardPageProps) => {
   const range = useTimeRange(coverage.coverage, config.defaultRange);
-  const { repositories, isLoading, error, lastFetchedAt, refetch } = useRepositories(
+  const { repositories, isLoading, error, lastFetchedAt } = useRepositories(
     dashboardService,
     range.window,
     enabled,
   );
-  const { interval, setInterval } = useAutoRefresh(refetch, config.refreshIntervalMs);
+  // Refreshing re-reads the clock rather than replaying the stored window, so a
+  // rolling range actually moves forward instead of asking for the same period
+  // it was selected with. The new window is what triggers the refetch.
+  const { interval, setInterval } = useAutoRefresh(range.advance, config.refreshIntervalMs);
 
   return (
     <>
@@ -43,7 +46,7 @@ export const DashboardPage = ({
           months={range.months}
           selection={range.selection}
           onRangeChange={range.select}
-          onRefresh={refetch}
+          onRefresh={range.advance}
           onIntervalChange={setInterval}
         />
       </ContentHeader>

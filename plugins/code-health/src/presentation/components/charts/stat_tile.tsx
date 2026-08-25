@@ -47,7 +47,10 @@ export const StatTile = ({ label, value, caption, help }: StatTileProps) => {
         <Typography className={classes.label}>{label}</Typography>
         {help ? (
           <Tooltip title={help}>
-            <HelpOutlineIcon className={classes.help} aria-label={help} />
+            {/* Focusable and announced, for the same reasons as the table
+                headings — `SvgIcon` hides an icon with no `titleAccess` from
+                assistive technology, and an SVG has no focus event of its own. */}
+            <HelpOutlineIcon className={classes.help} titleAccess={help} tabIndex={0} />
           </Tooltip>
         ) : null}
       </Box>

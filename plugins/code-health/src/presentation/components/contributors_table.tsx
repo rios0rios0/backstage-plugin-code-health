@@ -82,7 +82,14 @@ const HeaderWithHelp = ({ label, help }: { label: string; help: string }) => {
     <Box component="span" className={classes.header}>
       {label}
       <Tooltip title={help}>
-        <HelpOutlineIcon className={classes.help} aria-label={help} />
+        {/* Two separate things are needed here, and neither works alone.
+            `tabIndex` gives the icon a focus event for MUI to open the tooltip
+            on — an SVG has none by default, so without it the explanation is
+            mouse-only. `titleAccess` is what carries the text to assistive
+            technology: `SvgIcon` stamps `aria-hidden` on every icon that lacks
+            one, so an `aria-label` would sit on an element screen readers are
+            told to skip. */}
+        <HelpOutlineIcon className={classes.help} titleAccess={help} tabIndex={0} />
       </Tooltip>
     </Box>
   );
@@ -266,7 +273,7 @@ const columns: ColumnDef<ContributorSummary>[] = [
     header: () => (
       <HeaderWithHelp
         label="Code churn"
-        help="Net lines added minus deleted, where the provider reports lines. Azure DevOps reports changed files instead and exposes no line count anywhere in its API, so those rows count files. Each row prints its own unit, and the column sorts on whichever it is."
+        help="Lines added minus lines deleted, floored at zero — a window someone spent mostly deleting code is a real contribution, not a negative one. Azure DevOps reports changed files instead and exposes no line count anywhere in its API, so those rows count files. Each row prints its own unit, and the column sorts on whichever it is."
       />
     ),
     cell: ({ row }) => <ChurnCell contributor={row.original} />,

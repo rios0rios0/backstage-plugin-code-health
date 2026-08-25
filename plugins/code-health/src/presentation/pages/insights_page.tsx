@@ -82,7 +82,7 @@ export const InsightsPage = ({
   const range = useTimeRange(coverage.coverage, config.defaultRange);
   const bucket = bucketFor(range.window.from, range.window.to);
 
-  const { repositories, contributors, cadence, isLoading, error, lastFetchedAt, refetch } =
+  const { repositories, contributors, cadence, isLoading, error, lastFetchedAt } =
     useInsights(
       dashboardService,
       contributorService,
@@ -91,7 +91,9 @@ export const InsightsPage = ({
       bucket,
       enabled,
     );
-  const { interval, setInterval } = useAutoRefresh(refetch, config.refreshIntervalMs);
+  // Refreshing re-reads the clock rather than replaying the stored window — see
+  // `useTimeRange.advance`.
+  const { interval, setInterval } = useAutoRefresh(range.advance, config.refreshIntervalMs);
 
   const kpis = useMemo(
     () => computeKpis(repositories, contributors),
@@ -140,7 +142,7 @@ export const InsightsPage = ({
           months={range.months}
           selection={range.selection}
           onRangeChange={range.select}
-          onRefresh={refetch}
+          onRefresh={range.advance}
           onIntervalChange={setInterval}
         />
       </ContentHeader>

@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - added a shallow repository file scan behind both audits — the root, `docs/` and `api/`. On GitHub the three trees ride along in the snapshot's existing GraphQL document and cost no extra request at all; on Azure DevOps it is one listing per repository per day, plus one for each of those two directories that exists
 - added the catalog facts both audits read (`backstage.io/techdocs-ref`, `spec.type`, `spec.providesApis`, documentation links) to the tracked repository row, written by discovery. They change when somebody edits a YAML file rather than on the snapshot's schedule, and re-reading them per dashboard load would put a catalog query back on the request path this design exists to keep clear
 
+### Fixed
+
+- fixed refreshing replaying the window a rolling range was selected with rather than re-reading the clock. "Last 24 hours" kept asking for the same 24 hours however many times it was refreshed, so the numbers never moved although the toolbar said they had; a dashboard left open overnight kept reporting yesterday as **Today**, and never offered the month it had just entered. The refresh button and the auto-refresh timer now advance the clock, and the new window is what triggers the fetch
+- fixed the help tooltips on the contributors table being unreachable without a pointer, and invisible to assistive technology. An SVG has no focus event for the tooltip to open on, and Material UI stamps `aria-hidden` on any icon carrying no `titleAccess`, so the explanations existed only for people using a mouse
+
 ### Changed
 
 - **BREAKING CHANGE:** moved **Insights** to the plugin root and repositories to `/repositories`. Insights leads because it is the only tab that answers a question about the fleet rather than about one row of it, and it is what someone opening the plugin cold wants first. An app deep-linking to `/insights` must link to the plugin root instead, and `codeHealthPlugin.routes.insights` is now `codeHealthPlugin.routes.repositories`

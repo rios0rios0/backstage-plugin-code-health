@@ -25,12 +25,14 @@ export const ContributorsPage = ({
   enabled = true,
 }: ContributorsPageProps) => {
   const range = useTimeRange(coverage.coverage, config.defaultRange);
-  const { contributors, isLoading, error, lastFetchedAt, refetch } = useContributors(
+  const { contributors, isLoading, error, lastFetchedAt } = useContributors(
     contributorService,
     range.window,
     enabled,
   );
-  const { interval, setInterval } = useAutoRefresh(refetch, config.refreshIntervalMs);
+  // Refreshing re-reads the clock rather than replaying the stored window — see
+  // `useTimeRange.advance`.
+  const { interval, setInterval } = useAutoRefresh(range.advance, config.refreshIntervalMs);
 
   return (
     <>
@@ -43,7 +45,7 @@ export const ContributorsPage = ({
           months={range.months}
           selection={range.selection}
           onRangeChange={range.select}
-          onRefresh={refetch}
+          onRefresh={range.advance}
           onIntervalChange={setInterval}
         />
       </ContentHeader>

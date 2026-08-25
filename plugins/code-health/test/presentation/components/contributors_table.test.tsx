@@ -424,10 +424,53 @@ describe("ContributorsTable churn and pull request columns", () => {
     // Both divide two numbers the heading does not name, and a reader who
     // guesses wrong reads the column backwards.
     expect(
-      screen.getByLabelText(/the share they approved/),
+      screen.getByRole("img", { name: /the share they approved/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByLabelText(/pipeline runs requested for this person/),
+      screen.getByRole("img", { name: /pipeline runs requested for this person/ }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("ContributorsTable header tooltips", () => {
+  it("should make every help tooltip reachable from the keyboard", () => {
+    // given
+    const contributors = [ContributorBuilder.create().build()];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    // Two separate failures are guarded here. An icon with no accessible name
+    // is stamped `aria-hidden` by `SvgIcon`, so a screen reader is told to skip
+    // it however it is labelled — `getAllByRole` would find nothing at all. And
+    // an SVG has no focus event of its own, so without a tab stop the tooltip
+    // never opens for anybody not using a pointer.
+    // Filtered to the icons: a contributor avatar is an `img` too.
+    const helps = screen
+      .getAllByRole("img")
+      .filter((element) => element.tagName.toLowerCase() === "svg");
+    expect(helps).toHaveLength(5);
+    for (const help of helps) {
+      expect(help).toHaveAttribute("tabindex", "0");
+      expect(help).not.toHaveAttribute("aria-hidden", "true");
+    }
+  });
+
+  it("should not promise a negative churn figure it cannot show", () => {
+    // given
+    const contributors = [ContributorBuilder.create().build()];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    // `linesOfCode` is floored at zero, so wording that implies a negative net
+    // is describing a value the column can never render.
+    expect(screen.getByRole("img", { name: /floored at zero/ })).toBeInTheDocument();
   });
 });

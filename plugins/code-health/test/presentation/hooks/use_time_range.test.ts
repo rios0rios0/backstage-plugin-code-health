@@ -100,6 +100,60 @@ describe("useTimeRange", () => {
     expect(result.current.ranges.map((range) => range.id)).not.toContain("year");
   });
 
+  it("should move the window forward when the clock is re-read", () => {
+    // given
+    // A rolling range frozen at the instant it was selected keeps asking for
+    // the same period however many times it is refreshed, so the numbers never
+    // move even though the button says they did.
+    jest.useFakeTimers().setSystemTime(new Date("2026-08-10T12:00:00.000Z"));
+    const { result } = renderHook(() => useTimeRange(aCoverageInfo(), "day"));
+    const before = result.current.window;
+
+    // when
+    jest.setSystemTime(new Date("2026-08-10T12:30:00.000Z"));
+    act(() => result.current.advance());
+
+    // then
+    expect(Date.parse(result.current.window.to)).toBeGreaterThan(Date.parse(before.to));
+    expect(Date.parse(result.current.window.from)).toBeGreaterThan(Date.parse(before.from));
+    jest.useRealTimers();
+  });
+
+  it("should re-anchor `today` after the clock passes midnight", () => {
+    // given
+    // A dashboard left open overnight would otherwise keep reporting yesterday
+    // as today.
+    jest.useFakeTimers().setSystemTime(new Date(2026, 7, 10, 23, 50));
+    const { result } = renderHook(() => useTimeRange(aCoverageInfo(), "today"));
+    const before = result.current.window;
+
+    // when
+    jest.setSystemTime(new Date(2026, 7, 11, 0, 10));
+    act(() => result.current.advance());
+
+    // then
+    expect(new Date(before.from).getDate()).toBe(10);
+    expect(new Date(result.current.window.from).getDate()).toBe(11);
+    jest.useRealTimers();
+  });
+
+  it("should offer a month the clock has only just entered", () => {
+    // given
+    jest.useFakeTimers().setSystemTime(new Date(2026, 7, 31, 23, 50));
+    const { result } = renderHook(() =>
+      useTimeRange(aCoverageInfo({ earliestDay: "2026-07-01" }), "day"),
+    );
+    expect(result.current.months[0]).toEqual({ year: 2026, month: 8 });
+
+    // when
+    jest.setSystemTime(new Date(2026, 8, 1, 0, 10));
+    act(() => result.current.advance());
+
+    // then
+    expect(result.current.months[0]).toEqual({ year: 2026, month: 9 });
+    jest.useRealTimers();
+  });
+
   it("should cope with coverage not having been read yet", () => {
     // given / when
     const { result } = renderHook(() => useTimeRange(null, "day"));

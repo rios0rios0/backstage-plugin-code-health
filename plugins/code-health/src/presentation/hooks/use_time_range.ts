@@ -22,6 +22,16 @@ export interface UseTimeRangeResult {
   readonly selection: RangeSelection;
   readonly window: TimeWindow;
   readonly select: (selection: RangeSelection) => void;
+  /**
+   * Re-reads the clock, producing a fresh window and refetching through it.
+   *
+   * This is what the refresh button and the auto-refresh timer call. Without it
+   * a rolling range is frozen at the instant it was selected: "the last 24
+   * hours" keeps asking for the same 24 hours however many times it is
+   * refreshed, and "today" keeps meaning yesterday once the clock passes
+   * midnight on a dashboard somebody left open.
+   */
+  readonly advance: () => void;
 }
 
 /**
@@ -59,28 +69,33 @@ export const useTimeRange = (
     id: defaultRange,
   });
 
+  // The clock, sampled rather than read per render. Every derived value hangs
+  // off this one state, so a refresh moves the whole picker forward together —
+  // the window, the ranges that are answerable, and the months on offer.
+  const [now, setNow] = useState(() => new Date());
+  const advance = useCallback(() => setNow(new Date()), []);
+
   const earliestDay = coverage?.earliestDay ?? null;
 
   const ranges = useMemo(
-    () => availableRanges(earliestDay, new Date()),
-    [earliestDay],
+    () => availableRanges(earliestDay, now),
+    [earliestDay, now],
   );
-  const months = useMemo(
-    () => availableMonths(earliestDay, new Date()),
-    [earliestDay],
-  );
+  const months = useMemo(() => availableMonths(earliestDay, now), [earliestDay, now]);
 
   const selection: RangeSelection = isOffered(requested, ranges, months)
     ? requested
     : { kind: "preset", id: ranges[ranges.length - 1]?.id ?? defaultRange };
 
   const key = selectionKey(selection);
-  // `key` is the memo dependency and `selection` is only read through it, which
-  // is exactly the intent: one window per distinct selection, not per render.
+  // `key` stands in for `selection`, which is a fresh object on any render that
+  // takes the fallback branch. One window per distinct selection per clock
+  // sample is exactly the intent — recomputing per render would hand the
+  // fetching hooks a new object every time and put them in a request loop.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const window = useMemo(() => toWindow(selection, new Date()), [key]);
+  const window = useMemo(() => toWindow(selection, now), [key, now]);
 
   const select = useCallback((next: RangeSelection) => setRequested(next), []);
 
-  return { ranges, months, selection, window, select };
+  return { ranges, months, selection, window, select, advance };
 };
