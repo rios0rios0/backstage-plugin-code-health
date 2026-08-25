@@ -17,14 +17,31 @@ export type {
   TimeWindow,
 } from "./api";
 
+export {
+  API_SERVING_TYPES,
+  buildApiExposure,
+  computeApiExposureState,
+} from "./api_exposure";
+export type { ApiExposure, ApiExposureEvidence, ApiExposureState } from "./api_exposure";
+
 export { computeBadgeColor, parseBadgesFromReadme } from "./badge_status";
 export type { BadgeCheck, BadgeColor, BadgeStatus } from "./badge_status";
 
 export { computeComplianceColor } from "./compliance_status";
 export type { ComplianceColor, ComplianceStatus } from "./compliance_status";
 
+export {
+  buildDocumentationStatus,
+  computeDocumentationState,
+} from "./documentation_status";
+export type {
+  DocumentationEvidence,
+  DocumentationState,
+  DocumentationStatus,
+} from "./documentation_status";
+
 export { computeRate } from "./contributor_summary";
-export type { ContributorSummary } from "./contributor_summary";
+export type { ChurnUnit, ContributorSummary } from "./contributor_summary";
 
 export { EMPTY_BACKFILL_PROGRESS } from "./coverage";
 export type { BackfillProgress, CoverageInfo } from "./coverage";

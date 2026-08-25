@@ -206,3 +206,262 @@ export const computeKpis = (
     reviewCoverage: merged > 0 ? Math.min(100, computeRate(reviews, merged)) : null,
   };
 };
+
+/**
+ * The share a repository has to reach before its coverage stops being a
+ * finding. Eighty percent is SonarQube's own default "coverage on new code"
+ * gate, so it is the number a team already sees on its quality gate rather
+ * than a second target invented here.
+ */
+export const COVERAGE_TARGET = 80;
+
+export interface CoverageStats {
+  /** Repositories with a Sonar coverage measure. */
+  readonly measured: number;
+  readonly tracked: number;
+  /** Unweighted mean over the measured repositories, or null with none. */
+  readonly average: number | null;
+  /** Median, which a handful of empty repositories cannot drag the way a mean can. */
+  readonly median: number | null;
+  readonly belowTarget: number;
+}
+
+const coverageValues = (repositories: readonly RepositorySummary[]): number[] =>
+  repositories.flatMap((repository) =>
+    repository.sonarMetrics === null ? [] : [repository.sonarMetrics.coverage],
+  );
+
+const round = (value: number): number => Math.round(value * 10) / 10;
+
+const medianOf = (values: readonly number[]): number | null => {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : round((sorted[middle - 1] + sorted[middle]) / 2);
+};
+
+/**
+ * How well the fleet is tested, according to Sonar.
+ *
+ * The mean is reported *unweighted* — every repository counts once, whatever its
+ * size. A weighted mean would be the more honest figure for "how much of our
+ * code is covered", but it is not the question this page asks: a hundred-line
+ * repository at 0% is a real gap somebody has to close, and weighting would hide
+ * it behind one large well-tested service. The median is shown beside it because
+ * a mean over a fleet with a long tail of untested repositories says little on
+ * its own.
+ */
+export const coverageStats = (
+  repositories: readonly RepositorySummary[],
+): CoverageStats => {
+  const values = coverageValues(repositories);
+
+  return {
+    measured: values.length,
+    tracked: repositories.length,
+    average:
+      values.length === 0 ? null : round(sum(values) / values.length),
+    median: medianOf(values),
+    belowTarget: values.filter((value) => value < COVERAGE_TARGET).length,
+  };
+};
+
+/**
+ * How coverage is distributed, rather than where its average lands.
+ *
+ * An average of 62% is the same number whether every repository sits at 62% or
+ * half sit at 95% and half at 30%, and those are completely different problems.
+ */
+export const coverageBreakdown = (
+  repositories: readonly RepositorySummary[],
+): StatusSlice[] => {
+  const values = coverageValues(repositories);
+  const between = (low: number, high: number) =>
+    values.filter((value) => value >= low && value < high).length;
+
+  return [
+    {
+      label: `At or above ${COVERAGE_TARGET}%`,
+      count: values.filter((value) => value >= COVERAGE_TARGET).length,
+      tone: "good",
+    },
+    { label: `50% to ${COVERAGE_TARGET}%`, count: between(50, COVERAGE_TARGET), tone: "warning" },
+    { label: "Below 50%", count: between(-1, 50), tone: "critical" },
+    {
+      label: "Not measured",
+      count: repositories.length - values.length,
+      tone: "unknown",
+    },
+  ];
+};
+
+/**
+ * The measured repositories with the least coverage.
+ *
+ * Ascending, and only over repositories Sonar actually measured: sorting the
+ * unmeasured ones in as zeroes would fill the chart with repositories that have
+ * no Sonar project, which is a different problem with a different fix.
+ */
+export const lowestCoverageRepositories = (
+  repositories: readonly RepositorySummary[],
+): RankedItem[] =>
+  repositories
+    .flatMap((repository) =>
+      repository.sonarMetrics === null
+        ? []
+        : [
+            {
+              id: repository.id,
+              label: repository.name,
+              value: repository.sonarMetrics.coverage,
+              detail:
+                repository.sonarMetrics.qualityGateStatus === "ERROR"
+                  ? "gate failing"
+                  : `${repository.sonarMetrics.bugs} bugs`,
+              entityRef: repository.entityRef,
+              avatarUrl: null,
+            },
+          ],
+    )
+    .sort((left, right) => left.value - right.value || left.label.localeCompare(right.label))
+    .slice(0, RANK_SIZE);
+
+/** One repository on a gap list, with the reason it is there. */
+export interface GapItem {
+  readonly id: string;
+  readonly label: string;
+  readonly entityRef: string | null;
+  /** Why the row is listed, already phrased for a reader. */
+  readonly reason: string;
+}
+
+/** How many rows a gap list shows before it stops and counts the rest. */
+export const GAP_LIST_SIZE = 8;
+
+export interface GapList {
+  readonly items: readonly GapItem[];
+  /** Rows beyond {@link GAP_LIST_SIZE}, so the list never implies it is complete. */
+  readonly remaining: number;
+}
+
+const toGapList = (items: readonly GapItem[]): GapList => ({
+  items: items.slice(0, GAP_LIST_SIZE),
+  remaining: Math.max(0, items.length - GAP_LIST_SIZE),
+});
+
+const byLabel = (left: GapItem, right: GapItem): number =>
+  left.label.localeCompare(right.label);
+
+/**
+ * How much of the fleet is documented.
+ *
+ * "Docs in the repository" is kept apart from "nothing at all" because the two
+ * cost completely different amounts to fix: the first is a `techdocs-ref`
+ * annotation, the second is somebody sitting down to write.
+ */
+export const documentationBreakdown = (
+  repositories: readonly RepositorySummary[],
+): StatusSlice[] => {
+  const count = (state: string) =>
+    repositories.filter((repository) => repository.documentation?.state === state).length;
+
+  const documented = count("documented");
+  const unpublished = count("unpublished");
+  const missing = count("missing");
+
+  return [
+    { label: "Published to TechDocs", count: documented, tone: "good" },
+    { label: "Docs in the repository, not published", count: unpublished, tone: "warning" },
+    { label: "No documentation", count: missing, tone: "critical" },
+    {
+      // The remainder rather than a fourth count: archived repositories and
+      // ones the snapshot has not reached yet are both "nobody is being asked
+      // to act on this", and keeping them as a residual means the four slices
+      // always add up to the fleet.
+      label: "Archived or not measured",
+      count: repositories.length - documented - unpublished - missing,
+      tone: "unknown",
+    },
+  ];
+};
+
+/** Repositories that already write documentation nobody wired into TechDocs. */
+export const unpublishedDocumentation = (
+  repositories: readonly RepositorySummary[],
+): GapList =>
+  toGapList(
+    repositories
+      .filter((repository) => repository.documentation?.state === "unpublished")
+      .map((repository) => ({
+        id: repository.id,
+        label: repository.name,
+        entityRef: repository.entityRef,
+        reason: repository.documentation?.hasDocsSource
+          ? "has a docs/ tree"
+          : "links out to documentation",
+      }))
+      .sort(byLabel),
+  );
+
+/** Repositories with no documentation anywhere. */
+export const undocumented = (repositories: readonly RepositorySummary[]): GapList =>
+  toGapList(
+    repositories
+      .filter((repository) => repository.documentation?.state === "missing")
+      .map((repository) => ({
+        id: repository.id,
+        label: repository.name,
+        entityRef: repository.entityRef,
+        reason: repository.documentation?.hasReadme ? "README only" : "nothing found",
+      }))
+      .sort(byLabel),
+  );
+
+/** How much of the fleet describes its APIs to the catalog. */
+export const apiExposureBreakdown = (
+  repositories: readonly RepositorySummary[],
+): StatusSlice[] => {
+  const count = (state: string) =>
+    repositories.filter((repository) => repository.apiExposure?.state === state).length;
+
+  const declared = count("declared");
+  const candidate = count("candidate");
+  const expected = count("expected");
+
+  return [
+    { label: "Declares an API", count: declared, tone: "good" },
+    { label: "Ships a definition, declares none", count: candidate, tone: "critical" },
+    { label: "Serves traffic, declares none", count: expected, tone: "warning" },
+    {
+      label: "No API, or not measured",
+      count: repositories.length - declared - candidate - expected,
+      tone: "unknown",
+    },
+  ];
+};
+
+/**
+ * Repositories that could be an API entity in the catalog and are not.
+ *
+ * Ones shipping a definition come first: the evidence is in the repository, so
+ * the finding is a fact rather than an inference from `spec.type`.
+ */
+export const apiCandidates = (repositories: readonly RepositorySummary[]): GapList => {
+  const gapsFor = (state: string, reason: (path: string | null) => string): GapItem[] =>
+    repositories
+      .filter((repository) => repository.apiExposure?.state === state)
+      .map((repository) => ({
+        id: repository.id,
+        label: repository.name,
+        entityRef: repository.entityRef,
+        reason: reason(repository.apiExposure?.definitionPath ?? null),
+      }))
+      .sort(byLabel);
+
+  return toGapList([
+    ...gapsFor("candidate", (path) => (path === null ? "ships a definition" : path)),
+    ...gapsFor("expected", () => "typed as a service"),
+  ]);
+};

@@ -70,6 +70,16 @@ export interface RankingChartProps {
   readonly unit: string;
   readonly showAvatars?: boolean;
   readonly emptyMessage: string;
+  /**
+   * Fixes the scale instead of deriving it from the largest bar.
+   *
+   * A percentage has a real ceiling, and scaling it to the top row would draw
+   * the worst-covered repository in a set as a full bar — the exact opposite of
+   * what the chart is saying.
+   */
+  readonly scaleMax?: number;
+  /** Renders the number. Defaults to a plain localised integer. */
+  readonly formatValue?: (value: number) => string;
 }
 
 /**
@@ -88,6 +98,8 @@ export const RankingChart = ({
   unit,
   showAvatars = false,
   emptyMessage,
+  scaleMax,
+  formatValue = (value) => value.toLocaleString(),
 }: RankingChartProps) => {
   const classes = useStyles();
   const palette = useChartPalette();
@@ -100,7 +112,7 @@ export const RankingChart = ({
     );
   }
 
-  const max = Math.max(...items.map((item) => item.value));
+  const max = scaleMax ?? Math.max(...items.map((item) => item.value));
 
   return (
     <Box role="list">
@@ -113,7 +125,7 @@ export const RankingChart = ({
             key={item.id}
             className={classes.row}
             role="listitem"
-            aria-label={`${item.label}: ${item.value} ${unit}, ${item.detail}`}
+            aria-label={`${item.label}: ${formatValue(item.value)} ${unit}, ${item.detail}`}
           >
             <Box className={classes.identity}>
               {showAvatars ? (
@@ -138,7 +150,7 @@ export const RankingChart = ({
               </Tooltip>
             </Box>
 
-            <Tooltip title={`${item.value} ${unit} · ${item.detail}`}>
+            <Tooltip title={`${formatValue(item.value)} ${unit} · ${item.detail}`}>
               <Box className={classes.track} style={{ background: palette.grid }}>
                 <Box
                   className={classes.fill}
@@ -152,7 +164,7 @@ export const RankingChart = ({
 
             <Box textAlign="right">
               <Typography variant="body2" className={classes.value}>
-                {item.value.toLocaleString()}
+                {formatValue(item.value)}
               </Typography>
               <Typography variant="caption" className={classes.detail}>
                 {item.detail}

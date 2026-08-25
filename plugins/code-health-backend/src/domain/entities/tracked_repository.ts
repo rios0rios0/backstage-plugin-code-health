@@ -1,6 +1,36 @@
 import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
 
 /**
+ * What the catalog entry says about the repository, as opposed to what the
+ * provider says about the repository itself.
+ *
+ * Read once per discovery pass and stored on the row, because it changes when
+ * somebody edits a YAML file rather than on the snapshot's daily schedule, and
+ * because re-reading it per dashboard load would put a catalog query back on
+ * the request path this design exists to keep clear.
+ */
+export interface RepositoryCatalogFacts {
+  /** `Component`, `System`, and so on. */
+  readonly entityKind: string;
+  /** `spec.type`, e.g. `service`. Null when the entity declares none. */
+  readonly entityType: string | null;
+  /** `backstage.io/techdocs-ref`, when the entity carries one. */
+  readonly techDocsRef: string | null;
+  /** How many entries `spec.providesApis` names. */
+  readonly providesApis: number;
+  /** The entity links out to documentation hosted somewhere else. */
+  readonly hasExternalDocs: boolean;
+}
+
+export const EMPTY_CATALOG_FACTS: RepositoryCatalogFacts = {
+  entityKind: "Component",
+  entityType: null,
+  techDocsRef: null,
+  providesApis: 0,
+  hasExternalDocs: false,
+};
+
+/**
  * A repository the plugin ingests, mirrored from a Backstage catalog entity.
  *
  * The catalog is the only source of repositories. Nothing here is enumerated
@@ -26,6 +56,7 @@ export interface TrackedRepository {
   readonly externalId: string | null;
   /** From the `sonarqube.org/project-key` annotation, when present. */
   readonly sonarProjectKey: string | null;
+  readonly catalogFacts: RepositoryCatalogFacts;
   readonly archived: boolean;
   readonly discoveredAt: Date;
   readonly lastSeenAt: Date;

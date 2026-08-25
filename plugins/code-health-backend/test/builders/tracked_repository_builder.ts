@@ -1,4 +1,7 @@
-import type { TrackedRepository } from "../../src/domain/entities/tracked_repository";
+import {
+  EMPTY_CATALOG_FACTS,
+  type TrackedRepository,
+} from "../../src/domain/entities/tracked_repository";
 
 const DISCOVERED_AT = new Date("2026-08-01T00:00:00.000Z");
 
@@ -16,6 +19,7 @@ export const aTrackedRepository = (
   defaultBranch: null,
   externalId: null,
   sonarProjectKey: null,
+  catalogFacts: EMPTY_CATALOG_FACTS,
   archived: false,
   discoveredAt: DISCOVERED_AT,
   lastSeenAt: DISCOVERED_AT,

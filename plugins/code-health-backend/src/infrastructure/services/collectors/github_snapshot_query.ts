@@ -7,6 +7,11 @@
  * download the whole README for badge detection. Asking for all of it in a
  * single query, once a day, org-wide, is the same information for a tiny
  * fraction of the traffic.
+ *
+ * The three tree objects are the documentation and API-definition scan. They add
+ * no request at all here: GitHub resolves them inside the same document, and a
+ * `Tree` returns names and types without any blob content, so a repository with
+ * a hundred thousand files costs the same as one with ten.
  */
 export const SNAPSHOT_QUERY = `
 query CodeHealthSnapshot($owner: String!, $name: String!) {
@@ -49,8 +54,21 @@ query CodeHealthSnapshot($owner: String!, $name: String!) {
     workflows: object(expression: "HEAD:.github/workflows") {
       ... on Tree { entries { name type } }
     }
+    root: object(expression: "HEAD:") {
+      ... on Tree { entries { name type } }
+    }
+    docsTree: object(expression: "HEAD:docs") {
+      ... on Tree { entries { name type } }
+    }
+    apiTree: object(expression: "HEAD:api") {
+      ... on Tree { entries { name type } }
+    }
   }
 }`;
+
+export interface GithubTree {
+  readonly entries?: readonly { readonly name?: string; readonly type?: string }[];
+}
 
 export interface GithubSnapshotResponse {
   readonly data?: {
@@ -92,9 +110,10 @@ export interface GithubSnapshotResponse {
       readonly branchProtectionRules?: { readonly totalCount?: number };
       readonly rulesets?: { readonly totalCount?: number };
       readonly readme?: { readonly text?: string } | null;
-      readonly workflows?: {
-        readonly entries?: readonly { readonly name?: string; readonly type?: string }[];
-      } | null;
+      readonly workflows?: GithubTree | null;
+      readonly root?: GithubTree | null;
+      readonly docsTree?: GithubTree | null;
+      readonly apiTree?: GithubTree | null;
     } | null;
   };
   readonly errors?: readonly { readonly message?: string }[];

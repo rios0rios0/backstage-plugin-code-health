@@ -2,8 +2,13 @@ import Box from "@material-ui/core/Box";
 import Button from "@material-ui/core/Button";
 import TextField from "@material-ui/core/TextField";
 import Typography from "@material-ui/core/Typography";
-import type { TimeRange, TimeRangeId } from "../../domain/entities/time_range";
+import type {
+  MonthSelection,
+  RangeSelection,
+  TimeRange,
+} from "../../domain/entities/time_range";
 import type { RefreshInterval } from "../hooks/use_auto_refresh";
+import { RangePicker } from "./range_picker";
 
 interface DashboardToolbarProps {
   lastFetchedAt: Date | null;
@@ -11,8 +16,10 @@ interface DashboardToolbarProps {
   isLoading: boolean;
   /** Only the ranges the backend has ingested enough history to answer for. */
   ranges: readonly TimeRange[];
-  selectedRange: TimeRangeId;
-  onRangeChange: (range: TimeRangeId) => void;
+  /** Only the calendar months with any ingested history, newest first. */
+  months: readonly MonthSelection[];
+  selection: RangeSelection;
+  onRangeChange: (selection: RangeSelection) => void;
   onRefresh: () => void;
   onIntervalChange: (interval: RefreshInterval) => void;
 }
@@ -32,7 +39,8 @@ export const DashboardToolbar = ({
   refreshInterval,
   isLoading,
   ranges,
-  selectedRange,
+  months,
+  selection,
   onRangeChange,
   onRefresh,
   onIntervalChange,
@@ -44,20 +52,12 @@ export const DashboardToolbar = ({
       </Typography>
     )}
 
-    <TextField
-      select
-      size="small"
-      value={selectedRange}
-      onChange={(event) => onRangeChange(event.target.value as TimeRangeId)}
-      SelectProps={{ native: true }}
-      inputProps={{ "aria-label": "Time range", "data-test-subj": "timeRangeSelect" }}
-    >
-      {ranges.map((range) => (
-        <option key={range.id} value={range.id}>
-          {range.label}
-        </option>
-      ))}
-    </TextField>
+    <RangePicker
+      ranges={ranges}
+      months={months}
+      selection={selection}
+      onChange={onRangeChange}
+    />
 
     <TextField
       select

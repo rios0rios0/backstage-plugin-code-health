@@ -6,7 +6,10 @@ import {
 import type { ScmIntegrationRegistry } from "@backstage/integration";
 import { createHash } from "node:crypto";
 import type { RepositoryResolver } from "../../domain/services/repository_resolver";
-import type { DiscoveredRepository } from "../../domain/entities/tracked_repository";
+import type {
+  DiscoveredRepository,
+  RepositoryCatalogFacts,
+} from "../../domain/entities/tracked_repository";
 
 /**
  * Annotation names are string literals rather than imported constants on
@@ -20,6 +23,16 @@ const AZURE_REPO_ANNOTATION = "dev.azure.com/project-repo";
 const AZURE_HOST_ORG_ANNOTATION = "dev.azure.com/host-org";
 const AZURE_PROJECT_ANNOTATION = "dev.azure.com/project";
 const SONAR_PROJECT_KEY_ANNOTATION = "sonarqube.org/project-key";
+const TECHDOCS_REF_ANNOTATION = "backstage.io/techdocs-ref";
+
+/**
+ * Link titles and types that mean "this is the documentation".
+ *
+ * Backstage puts no vocabulary on `metadata.links`, so the convention has to be
+ * matched rather than looked up. Both the `type` and the `title` are checked
+ * because most catalogs fill in one or the other, rarely both.
+ */
+const DOCUMENTATION_LINK_WORDS: readonly string[] = ["doc", "docs", "documentation", "wiki"];
 
 const DEFAULT_GITHUB_HOST = "github.com";
 const DEFAULT_AZURE_HOST = "dev.azure.com";
@@ -47,7 +60,7 @@ const sourceLocationUrl = (entity: Entity): string | undefined => {
 const fromGithubSlug = (
   entity: Entity,
   host: string,
-): Omit<DiscoveredRepository, "sonarProjectKey"> | null => {
+): Omit<DiscoveredRepository, "sonarProjectKey" | "catalogFacts"> | null => {
   const slug = annotation(entity, GITHUB_SLUG_ANNOTATION);
   if (!slug) return null;
 
@@ -73,7 +86,7 @@ const fromAzureAnnotations = (
   entity: Entity,
   host: string,
   organization: string | undefined,
-): Omit<DiscoveredRepository, "sonarProjectKey"> | null => {
+): Omit<DiscoveredRepository, "sonarProjectKey" | "catalogFacts"> | null => {
   const projectRepo = annotation(entity, AZURE_REPO_ANNOTATION);
   if (!projectRepo) return null;
 
@@ -111,7 +124,7 @@ const splitHostOrg = (value: string | undefined): { host?: string; organization?
 const fromSourceLocation = (
   entity: Entity,
   integrations: ScmIntegrationRegistry,
-): Omit<DiscoveredRepository, "sonarProjectKey"> | null => {
+): Omit<DiscoveredRepository, "sonarProjectKey" | "catalogFacts"> | null => {
   const target = sourceLocationUrl(entity);
   if (!target) return null;
 
@@ -170,6 +183,43 @@ const fromSourceLocation = (
   return null;
 };
 
+interface EntityLink {
+  readonly url?: unknown;
+  readonly title?: unknown;
+  readonly type?: unknown;
+}
+
+const mentionsDocumentation = (value: unknown): boolean =>
+  typeof value === "string" &&
+  DOCUMENTATION_LINK_WORDS.includes(value.trim().toLowerCase());
+
+const hasExternalDocs = (entity: Entity): boolean => {
+  const links = entity.metadata.links;
+  if (!Array.isArray(links)) return false;
+  return (links as readonly EntityLink[]).some(
+    (link) =>
+      typeof link?.url === "string" &&
+      (mentionsDocumentation(link.type) || mentionsDocumentation(link.title)),
+  );
+};
+
+const countProvidedApis = (entity: Entity): number => {
+  const provides = (entity.spec as { providesApis?: unknown } | undefined)?.providesApis;
+  return Array.isArray(provides) ? provides.length : 0;
+};
+
+const catalogFactsOf = (entity: Entity): RepositoryCatalogFacts => {
+  const type = (entity.spec as { type?: unknown } | undefined)?.type;
+
+  return {
+    entityKind: entity.kind,
+    entityType: typeof type === "string" && type !== "" ? type : null,
+    techDocsRef: annotation(entity, TECHDOCS_REF_ANNOTATION) ?? null,
+    providesApis: countProvidedApis(entity),
+    hasExternalDocs: hasExternalDocs(entity),
+  };
+};
+
 /**
  * Resolves a catalog entity to a repository, preferring the provider-specific
  * annotations and falling back to `backstage.io/source-location`.
@@ -194,6 +244,7 @@ export class AnnotationRepositoryResolver implements RepositoryResolver {
     return {
       ...resolved,
       sonarProjectKey: annotation(entity, SONAR_PROJECT_KEY_ANNOTATION) ?? null,
+      catalogFacts: catalogFactsOf(entity),
     };
   }
 }

@@ -105,4 +105,5 @@ export interface AdoRefNode {
 export interface AdoItemNode {
   readonly path?: string;
   readonly content?: string;
+  readonly isFolder?: boolean;
 }

@@ -1,11 +1,21 @@
 import {
+  apiCandidates,
+  apiExposureBreakdown,
   complianceBreakdown,
   computeKpis,
+  COVERAGE_TARGET,
+  coverageBreakdown,
+  coverageStats,
+  documentationBreakdown,
+  GAP_LIST_SIZE,
+  lowestCoverageRepositories,
   qualityGateBreakdown,
   toCadence,
   topContributorsByCommits,
   topRepositoriesByCommits,
   topReviewers,
+  undocumented,
+  unpublishedDocumentation,
 } from "../../../src/domain/entities/insights";
 import { ContributorBuilder } from "../../builders/contributor_builder";
 import { RepositoryBuilder } from "../../builders/repository_builder";
@@ -307,5 +317,307 @@ describe("toCadence", () => {
 
     // then
     expect(cadence).toEqual([{ day: "2026-08-01", commits: 12, pullRequestsMerged: 4 }]);
+  });
+});
+
+describe("coverageStats", () => {
+  it("should average only the repositories Sonar measured", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withCoverage(80).build(),
+      RepositoryBuilder.create().withCoverage(40).build(),
+      RepositoryBuilder.create().build(),
+    ];
+
+    // when
+    const stats = coverageStats(repositories);
+
+    // then
+    // Folding the unmeasured one in as a zero would report 40% for a fleet
+    // whose measured half averages 60%.
+    expect(stats).toMatchObject({ measured: 2, tracked: 3, average: 60 });
+  });
+
+  it("should report a median the long tail cannot drag", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withCoverage(0).build(),
+      RepositoryBuilder.create().withCoverage(0).build(),
+      RepositoryBuilder.create().withCoverage(90).build(),
+    ];
+
+    // when
+    const stats = coverageStats(repositories);
+
+    // then
+    expect(stats.median).toBe(0);
+    expect(stats.average).toBe(30);
+  });
+
+  it("should average the middle pair of an even set", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withCoverage(20).build(),
+      RepositoryBuilder.create().withCoverage(40).build(),
+      RepositoryBuilder.create().withCoverage(60).build(),
+      RepositoryBuilder.create().withCoverage(90).build(),
+    ];
+
+    // when
+    const stats = coverageStats(repositories);
+
+    // then
+    expect(stats.median).toBe(50);
+  });
+
+  it("should count the repositories under the target", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withCoverage(COVERAGE_TARGET).build(),
+      RepositoryBuilder.create().withCoverage(COVERAGE_TARGET - 0.1).build(),
+    ];
+
+    // when
+    const stats = coverageStats(repositories);
+
+    // then
+    expect(stats.belowTarget).toBe(1);
+  });
+
+  it("should report nothing rather than zero with no measures at all", () => {
+    // given
+    const repositories = [RepositoryBuilder.create().build()];
+
+    // when
+    const stats = coverageStats(repositories);
+
+    // then
+    // A fleet with no Sonar projects is not a fleet with 0% coverage.
+    expect(stats.average).toBeNull();
+    expect(stats.median).toBeNull();
+  });
+});
+
+describe("coverageBreakdown", () => {
+  it("should split the fleet into bands rather than one average", () => {
+    // given
+    // An average of 62% is the same number whether every repository sits at 62%
+    // or half sit at 95% and half at 30%.
+    const repositories = [
+      RepositoryBuilder.create().withCoverage(95).build(),
+      RepositoryBuilder.create().withCoverage(65).build(),
+      RepositoryBuilder.create().withCoverage(10).build(),
+      RepositoryBuilder.create().build(),
+    ];
+
+    // when
+    const slices = coverageBreakdown(repositories);
+
+    // then
+    expect(slices.map((slice) => slice.count)).toEqual([1, 1, 1, 1]);
+    expect(slices.map((slice) => slice.tone)).toEqual([
+      "good",
+      "warning",
+      "critical",
+      "unknown",
+    ]);
+  });
+});
+
+describe("lowestCoverageRepositories", () => {
+  it("should rank the measured repositories from the least covered up", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withName("high").withCoverage(90).build(),
+      RepositoryBuilder.create().withName("low").withCoverage(10).build(),
+      RepositoryBuilder.create().withName("mid").withCoverage(50).build(),
+    ];
+
+    // when
+    const ranked = lowestCoverageRepositories(repositories);
+
+    // then
+    expect(ranked.map((item) => item.label)).toEqual(["low", "mid", "high"]);
+  });
+
+  it("should leave out repositories Sonar never measured", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withName("measured").withCoverage(30).build(),
+      RepositoryBuilder.create().withName("unmeasured").build(),
+    ];
+
+    // when
+    const ranked = lowestCoverageRepositories(repositories);
+
+    // then
+    // Sorting them in as zeroes would fill the chart with repositories that
+    // have no Sonar project, which is a different problem with a different fix.
+    expect(ranked.map((item) => item.label)).toEqual(["measured"]);
+  });
+
+  it("should say when a repository's gate is failing rather than repeat the bugs", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withName("failing").withCoverage(20, "ERROR").build(),
+    ];
+
+    // when
+    const [ranked] = lowestCoverageRepositories(repositories);
+
+    // then
+    expect(ranked.detail).toBe("gate failing");
+  });
+});
+
+describe("documentationBreakdown", () => {
+  it("should keep unpublished docs apart from no docs at all", () => {
+    // given
+    // The two cost completely different amounts to fix: one annotation against
+    // somebody sitting down to write.
+    const repositories = [
+      RepositoryBuilder.create().withDocumentationState("documented").build(),
+      RepositoryBuilder.create().withDocumentationState("unpublished").build(),
+      RepositoryBuilder.create().withDocumentationState("missing").build(),
+      RepositoryBuilder.create().withDocumentationState("not-expected").build(),
+      RepositoryBuilder.create().build(),
+    ];
+
+    // when
+    const slices = documentationBreakdown(repositories);
+
+    // then
+    expect(slices.map((slice) => slice.count)).toEqual([1, 1, 1, 2]);
+  });
+});
+
+describe("unpublishedDocumentation", () => {
+  it("should list the repositories whose docs were never wired up", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create()
+        .withName("gateway")
+        .withDocumentationState("unpublished", { hasDocsSource: true })
+        .build(),
+      RepositoryBuilder.create().withName("other").withDocumentationState("documented").build(),
+    ];
+
+    // when
+    const gaps = unpublishedDocumentation(repositories);
+
+    // then
+    expect(gaps.items.map((item) => item.label)).toEqual(["gateway"]);
+    expect(gaps.items[0].reason).toBe("has a docs/ tree");
+  });
+
+  it("should say when the only evidence is an external link", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create()
+        .withName("gateway")
+        .withDocumentationState("unpublished", { hasDocsSource: false, hasExternalDocs: true })
+        .build(),
+    ];
+
+    // when
+    const gaps = unpublishedDocumentation(repositories);
+
+    // then
+    expect(gaps.items[0].reason).toBe("links out to documentation");
+  });
+
+  it("should count the rows it did not list", () => {
+    // given
+    const repositories = Array.from({ length: GAP_LIST_SIZE + 3 }, (_unused, index) =>
+      RepositoryBuilder.create()
+        .withName(`repo-${index}`)
+        .withDocumentationState("unpublished", { hasDocsSource: true })
+        .build(),
+    );
+
+    // when
+    const gaps = unpublishedDocumentation(repositories);
+
+    // then
+    // A truncated list that says nothing reads as a complete one.
+    expect(gaps.items).toHaveLength(GAP_LIST_SIZE);
+    expect(gaps.remaining).toBe(3);
+  });
+});
+
+describe("undocumented", () => {
+  it("should distinguish a README-only repository from an empty one", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create()
+        .withName("readme-only")
+        .withDocumentationState("missing", { hasReadme: true })
+        .build(),
+      RepositoryBuilder.create().withName("empty").withDocumentationState("missing").build(),
+    ];
+
+    // when
+    const gaps = undocumented(repositories);
+
+    // then
+    expect(gaps.items.map((item) => item.reason)).toEqual(["nothing found", "README only"]);
+  });
+});
+
+describe("apiExposureBreakdown", () => {
+  it("should separate a real finding from an inference", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withApiExposureState("declared").build(),
+      RepositoryBuilder.create().withApiExposureState("candidate", "openapi.yaml").build(),
+      RepositoryBuilder.create().withApiExposureState("expected").build(),
+      RepositoryBuilder.create().withApiExposureState("none").build(),
+    ];
+
+    // when
+    const slices = apiExposureBreakdown(repositories);
+
+    // then
+    expect(slices.map((slice) => slice.count)).toEqual([1, 1, 1, 1]);
+    expect(slices[1].tone).toBe("critical");
+    expect(slices[2].tone).toBe("warning");
+  });
+});
+
+describe("apiCandidates", () => {
+  it("should put repositories shipping a definition ahead of the inferred ones", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withName("inferred").withApiExposureState("expected").build(),
+      RepositoryBuilder.create()
+        .withName("evidenced")
+        .withApiExposureState("candidate", "api/openapi.yaml")
+        .build(),
+    ];
+
+    // when
+    const gaps = apiCandidates(repositories);
+
+    // then
+    // The evidence is in the repository, so the finding is a fact rather than
+    // an inference from `spec.type`.
+    expect(gaps.items.map((item) => item.label)).toEqual(["evidenced", "inferred"]);
+    expect(gaps.items.map((item) => item.reason)).toEqual([
+      "api/openapi.yaml",
+      "typed as a service",
+    ]);
+  });
+
+  it("should still list a candidate whose definition path went missing", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withName("gateway").withApiExposureState("candidate").build(),
+    ];
+
+    // when
+    const gaps = apiCandidates(repositories);
+
+    // then
+    expect(gaps.items[0].reason).toBe("ships a definition");
   });
 });

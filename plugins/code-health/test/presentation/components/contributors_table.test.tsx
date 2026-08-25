@@ -334,3 +334,100 @@ describe("ContributorsTable", () => {
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
   });
 });
+
+describe("ContributorsTable churn and pull request columns", () => {
+  it("should show net lines with the additions and deletions underneath", () => {
+    // given
+    const contributors = [ContributorBuilder.create().withDisplayName("Dev").build()];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(screen.getByText("+700")).toBeInTheDocument();
+    expect(screen.getByText("-300")).toBeInTheDocument();
+  });
+
+  it("should count files when the provider reported no line counts", () => {
+    // given
+    // Azure DevOps carries added, edited and deleted *files* and exposes no
+    // line count anywhere in its REST API, so a lines column against an Azure
+    // DevOps fleet reads zero on every row.
+    const contributors = [
+      ContributorBuilder.create().withDisplayName("Dev").withFileChurn(42).build(),
+    ];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(screen.getByText("42")).toBeInTheDocument();
+    expect(screen.getByText("files changed")).toBeInTheDocument();
+    expect(screen.queryByText("+0")).not.toBeInTheDocument();
+  });
+
+  it("should show nothing at all when the provider reported no churn", () => {
+    // given
+    const contributors = [
+      ContributorBuilder.create().withDisplayName("Dev").withoutChurn().build(),
+    ];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    // "The provider said zero" and "the provider never said" are different
+    // facts, and printing 0 for the second is the bug this cell prevents.
+    expect(screen.queryByText("files changed")).not.toBeInTheDocument();
+    expect(screen.queryByText("+0")).not.toBeInTheDocument();
+  });
+
+  it("should report created pull requests apart from reviewed ones", () => {
+    // given
+    const contributors = [
+      ContributorBuilder.create()
+        .withDisplayName("Dev")
+        .withPullRequests(14, 11)
+        .build(),
+    ];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    // The old single column read "Approved PRs" over a review count, which is
+    // not the person's own pull requests at all.
+    expect(screen.getByText("PRs created")).toBeInTheDocument();
+    expect(screen.getByText("PRs approved")).toBeInTheDocument();
+    expect(screen.getByText("/ 11 merged")).toBeInTheDocument();
+    expect(screen.getByText("/ 10 reviewed")).toBeInTheDocument();
+  });
+
+  it("should explain the approval rate and the pipeline column", () => {
+    // given
+    const contributors = [ContributorBuilder.create().build()];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    // Both divide two numbers the heading does not name, and a reader who
+    // guesses wrong reads the column backwards.
+    expect(
+      screen.getByLabelText(/the share they approved/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/pipeline runs requested for this person/),
+    ).toBeInTheDocument();
+  });
+});

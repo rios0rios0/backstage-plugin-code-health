@@ -1,5 +1,7 @@
+import type { ApiExposure } from "./api_exposure";
 import type { BadgeStatus } from "./badge_status";
 import type { ComplianceStatus } from "./compliance_status";
+import type { DocumentationStatus } from "./documentation_status";
 import type { Platform } from "./platform";
 import type { Release } from "./release";
 import type { SonarMetrics } from "./sonar_metrics";
@@ -84,6 +86,17 @@ export interface RepositorySummary {
   readonly branches: readonly string[];
   readonly sonarMetrics: SonarMetrics | null;
   readonly complianceStatus: ComplianceStatus | null;
+  /**
+   * Documentation and catalog-API gaps, or null before the first snapshot.
+   *
+   * Null is "not measured yet" rather than "nothing found": the catalog half of
+   * the evidence is known from discovery, but the repository half — a `docs/`
+   * tree, an API definition — is read by the daily snapshot, and grading a
+   * repository `missing` on half the evidence would report a gap that is not
+   * there.
+   */
+  readonly documentation: DocumentationStatus | null;
+  readonly apiExposure: ApiExposure | null;
   readonly badgeStatus: BadgeStatus | null;
   readonly wakaTimeMetrics: WakaTimeMetrics | null;
   readonly activity: RepositoryActivity;

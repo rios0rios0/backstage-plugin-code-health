@@ -2,6 +2,10 @@ import { act, renderHook } from "@testing-library/react";
 import { useTimeRange } from "../../../src/presentation/hooks/use_time_range";
 import { aCoverageInfo } from "../../doubles/stub_coverage_service";
 
+/** Narrows a selection to a preset id, failing loudly when it is a month. */
+const presetOf = (selection: { kind: string; id?: string }): string | undefined =>
+  selection.kind === "preset" ? selection.id : undefined;
+
 describe("useTimeRange", () => {
   it("should start on the configured default when it is available", () => {
     // given
@@ -11,7 +15,7 @@ describe("useTimeRange", () => {
     const { result } = renderHook(() => useTimeRange(coverage, "month"));
 
     // then
-    expect(result.current.selected).toBe("month");
+    expect(presetOf(result.current.selection)).toBe("month");
     expect(result.current.window.from).toBeDefined();
   });
 
@@ -25,7 +29,7 @@ describe("useTimeRange", () => {
     const { result } = renderHook(() => useTimeRange(coverage, "year"));
 
     // then
-    expect(result.current.selected).toBe("day");
+    expect(presetOf(result.current.selection)).toBe("day");
   });
 
   it("should keep the window stable across renders", () => {
@@ -50,11 +54,39 @@ describe("useTimeRange", () => {
     const before = result.current.window.from;
 
     // when
-    act(() => result.current.select("quarter"));
+    act(() => result.current.select({ kind: "preset", id: "quarter" }));
 
     // then
-    expect(result.current.selected).toBe("quarter");
+    expect(presetOf(result.current.selection)).toBe("quarter");
     expect(Date.parse(result.current.window.from)).toBeLessThan(Date.parse(before));
+  });
+
+  it("should move the window onto a selected calendar month", () => {
+    // given
+    const coverage = aCoverageInfo({ earliestDay: "2025-08-10" });
+    const { result } = renderHook(() => useTimeRange(coverage, "day"));
+    const month = result.current.months[1];
+
+    // when
+    act(() => result.current.select({ kind: "month", month }));
+
+    // then
+    expect(result.current.selection).toEqual({ kind: "month", month });
+    expect(new Date(result.current.window.from).getMonth()).toBe(month.month - 1);
+  });
+
+  it("should drop a month the coverage no longer reaches", () => {
+    // given
+    // The retention floor moves forward every day, so a month selected this
+    // morning can stop being answerable.
+    const coverage = aCoverageInfo({ earliestDay: "2026-08-01" });
+    const { result } = renderHook(() => useTimeRange(coverage, "day"));
+
+    // when
+    act(() => result.current.select({ kind: "month", month: { year: 2019, month: 4 } }));
+
+    // then
+    expect(result.current.selection.kind).toBe("preset");
   });
 
   it("should offer only the ranges the coverage reaches", () => {
@@ -73,6 +105,11 @@ describe("useTimeRange", () => {
     const { result } = renderHook(() => useTimeRange(null, "day"));
 
     // then
-    expect(result.current.ranges.map((range) => range.id)).toEqual(["hour", "day"]);
+    expect(result.current.ranges.map((range) => range.id)).toEqual([
+      "today",
+      "hour",
+      "day",
+    ]);
+    expect(result.current.months).toHaveLength(1);
   });
 });

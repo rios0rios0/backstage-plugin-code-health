@@ -13,9 +13,10 @@ import type {
   RepositorySnapshot,
   RepositorySnapshotPayload,
 } from "../../domain/entities/repository_snapshot";
-import type {
-  DiscoveredRepository,
-  TrackedRepository,
+import {
+  EMPTY_CATALOG_FACTS,
+  type DiscoveredRepository,
+  type TrackedRepository,
 } from "../../domain/entities/tracked_repository";
 import type {
   CodeHealthStore,
@@ -51,6 +52,11 @@ interface RepositoryRow {
   default_branch: string | null;
   external_id: string | null;
   sonar_project_key: string | null;
+  entity_kind: string | null;
+  entity_type: string | null;
+  techdocs_ref: string | null;
+  provides_apis: number | null;
+  has_external_docs: boolean | number | null;
   archived: boolean | number;
   discovered_at: Date | string;
   last_seen_at: Date | string;
@@ -120,6 +126,16 @@ const toRepository = (row: RepositoryRow): TrackedRepository => ({
   defaultBranch: row.default_branch,
   externalId: row.external_id,
   sonarProjectKey: row.sonar_project_key,
+  catalogFacts: {
+    // A row written before the catalog-facts migration reports null for all of
+    // these until the next discovery pass refreshes it, so each falls back to
+    // the same "nothing known" value a fresh entity without the field would get.
+    entityKind: row.entity_kind ?? EMPTY_CATALOG_FACTS.entityKind,
+    entityType: row.entity_type,
+    techDocsRef: row.techdocs_ref,
+    providesApis: row.provides_apis ?? 0,
+    hasExternalDocs: Boolean(row.has_external_docs),
+  },
   archived: Boolean(row.archived),
   discoveredAt: toDate(row.discovered_at),
   lastSeenAt: toDate(row.last_seen_at),
@@ -218,6 +234,11 @@ export class KnexCodeHealthStore implements CodeHealthStore {
           default_branch: repository.defaultBranch,
           external_id: repository.externalId,
           sonar_project_key: repository.sonarProjectKey,
+          entity_kind: repository.catalogFacts.entityKind,
+          entity_type: repository.catalogFacts.entityType,
+          techdocs_ref: repository.catalogFacts.techDocsRef,
+          provides_apis: repository.catalogFacts.providesApis,
+          has_external_docs: repository.catalogFacts.hasExternalDocs,
           archived: repository.archived,
           last_seen_at: now,
           removed_at: null,

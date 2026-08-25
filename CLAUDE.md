@@ -73,8 +73,9 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/plugin.ts` / `src/alpha.tsx` | Legacy and declarative entry points |
 | `src/main/apis.ts` / `src/main/api_refs.ts` | `createApiFactory` wiring; one stateless client behind four data refs (repositories, contributors, coverage, time series), plus a separate config ref |
 | `src/infrastructure/http/code_health_backend_client.ts` | The only thing the browser talks to |
-| `src/main/router.tsx` | Page composition and the backend-reachability gate |
-| `src/domain/entities/time_range.ts` | Which windows are offered, bounded by coverage |
+| `src/main/router.tsx` | Page composition and the backend-reachability gate; Insights is the root tab |
+| `src/domain/entities/time_range.ts` | Which windows are offered, bounded by coverage — rolling ranges and calendar months |
+| `src/presentation/components/range_picker.tsx` | One control for both, so the two can never disagree |
 | `src/presentation/components/backfill_progress.tsx` | Why wider ranges are not available yet |
 
 ## Decisions worth not re-litigating
@@ -94,7 +95,32 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
   alphabetically with no dates at all, so `$top=1` reliably returned the *oldest* version-like tag.
 - **Churn is not comparable across platforms.** GitHub reports added and deleted lines; Azure DevOps
   reports changed files. The line fields stay null there rather than carrying a different unit under
-  the same name.
+  the same name. Azure DevOps exposes no line count anywhere in its REST API — reconstructing one
+  would mean diffing every blob of every commit — so `ContributorSummary.churnUnit` carries the unit
+  each row was measured in and the table prints it under the figure. Before that field existed the
+  contributors table showed `0 / +0 / -0` for an entire Azure DevOps fleet, which reads as "nobody
+  wrote any code" rather than as "the provider never said". The unit is decided by whether the
+  provider *reported* the field, never by whether the value came back above zero: a quiet week is a
+  real measurement of zero.
+- **Insights is the landing tab.** It is the only tab that answers a question about the fleet rather
+  than about one row of it, so it is what someone opening the plugin cold wants first; the two
+  tables are the drill-down. Moving it to `/` cost the `insights` sub route, which is the breaking
+  change the changelog leads with — an app deep-linking to `/insights` has to move to the plugin
+  root, and `codeHealthPlugin.routes.insights` became `routes.repositories`.
+- **Documentation and catalog-API grades combine the entity with the repository.** The catalog half
+  (`backstage.io/techdocs-ref`, `spec.providesApis`, `spec.type`, `metadata.links`) is read by
+  discovery and stored on the repository row, because it changes when somebody edits a YAML file
+  rather than on the snapshot's schedule. The repository half (a `docs/` tree, an API definition) is
+  read by the daily snapshot. Both fields stay `null` until a snapshot exists, because grading on
+  half the evidence reports a gap that is not there.
+- **The repository file scan is shallow on purpose** — the root, `docs/` and `api/`. On GitHub the
+  three trees ride along in the snapshot's existing GraphQL document and cost no request at all; on
+  Azure DevOps it is one listing per repository plus one for each of those directories that exists.
+  A recursive walk would be unbounded on a large repository and would cost a different amount on
+  each platform, which is exactly what makes a cross-platform metric meaningless.
+- **A README does not count as documentation.** Nearly every repository has one, so counting it
+  would grade the whole fleet documented. It is still reported as a check, because "has a README and
+  nothing else" and "has nothing at all" are different conversations to have with a team.
 - **A day is recorded as fetched only when a window covers it end to end**, so "no activity" and
   "not fetched yet" stay distinguishable and the range picker never offers a period it can only
   answer partially.

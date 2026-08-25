@@ -57,6 +57,69 @@ describe("KnexCodeHealthStore", () => {
       expect(tracked.state.status).toBe("pending");
     });
 
+    it("should round-trip the catalog facts the metrics read", async () => {
+      // given
+      const store = await createStore();
+      const repository = DiscoveredRepositoryBuilder.create()
+        .withCatalogFacts({
+          entityKind: "Component",
+          entityType: "service",
+          techDocsRef: "dir:.",
+          providesApis: 2,
+          hasExternalDocs: true,
+        })
+        .build();
+
+      // when
+      await store.syncRepositories({
+        discovered: [repository],
+        retentionDays: 365,
+        now: NOW,
+      });
+
+      // then
+      const [tracked] = await store.listTrackedRepositories();
+      expect(tracked.repository.catalogFacts).toEqual({
+        entityKind: "Component",
+        entityType: "service",
+        techDocsRef: "dir:.",
+        providesApis: 2,
+        hasExternalDocs: true,
+      });
+    });
+
+    it("should refresh the catalog facts when the entity changes", async () => {
+      // given
+      // These come from a YAML file somebody edits, so a rediscovery has to
+      // pick the edit up rather than keep the value it first saw.
+      const store = await createStore();
+      const before = DiscoveredRepositoryBuilder.create().build();
+      await store.syncRepositories({
+        discovered: [before],
+        retentionDays: 365,
+        now: NOW,
+      });
+
+      // when
+      await store.syncRepositories({
+        discovered: [
+          DiscoveredRepositoryBuilder.create()
+            .withEntityRef(before.entityRef)
+            .withCatalogFacts({ techDocsRef: "dir:.", providesApis: 1 })
+            .build(),
+        ],
+        retentionDays: 365,
+        now: NOW,
+      });
+
+      // then
+      const [tracked] = await store.listTrackedRepositories();
+      expect(tracked.repository.catalogFacts).toMatchObject({
+        techDocsRef: "dir:.",
+        providesApis: 1,
+      });
+    });
+
     it("should start the incremental cursor a day back so the first run has a window", async () => {
       // given
       const store = await createStore();
@@ -445,6 +508,7 @@ describe("KnexCodeHealthStore", () => {
         badgeStatus: null,
         sonarMetrics: null,
         wakaTimeMetrics: null,
+        repositoryFiles: null,
       };
       for (const day of ["2026-08-08", "2026-08-09", "2026-08-11"]) {
         await store.saveSnapshot({
@@ -491,6 +555,7 @@ describe("KnexCodeHealthStore", () => {
         badgeStatus: null,
         sonarMetrics: null,
         wakaTimeMetrics: null,
+        repositoryFiles: null,
       };
       for (const repository of [first, second]) {
         await store.saveSnapshot({
@@ -532,6 +597,7 @@ describe("KnexCodeHealthStore", () => {
         badgeStatus: null,
         sonarMetrics: null,
         wakaTimeMetrics: null,
+        repositoryFiles: null,
       };
 
       // when

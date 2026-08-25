@@ -22,6 +22,7 @@ export class ContributorBuilder {
       linesDeleted: 300,
       linesOfCode: 400,
       changedFiles: 40,
+      churnUnit: "lines",
       pullRequestsOpened: 10,
       pullRequestsMerged: 8,
       reviewsGiven: 10,
@@ -39,6 +40,40 @@ export class ContributorBuilder {
 
   static create(): ContributorBuilder {
     return new ContributorBuilder();
+  }
+
+  /** A contributor whose provider reports file churn rather than line churn. */
+  withFileChurn(changedFiles: number): this {
+    this.props = {
+      ...this.props,
+      churnUnit: "files",
+      changedFiles,
+      linesAdded: 0,
+      linesDeleted: 0,
+      linesOfCode: 0,
+    };
+    return this;
+  }
+
+  withoutChurn(): this {
+    this.props = {
+      ...this.props,
+      churnUnit: "none",
+      changedFiles: 0,
+      linesAdded: 0,
+      linesDeleted: 0,
+      linesOfCode: 0,
+    };
+    return this;
+  }
+
+  withPullRequests(opened: number, merged: number): this {
+    this.props = {
+      ...this.props,
+      pullRequestsOpened: opened,
+      pullRequestsMerged: merged,
+    };
+    return this;
   }
 
   withKey(key: string): this {

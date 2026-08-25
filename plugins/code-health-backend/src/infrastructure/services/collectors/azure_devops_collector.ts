@@ -5,6 +5,7 @@ import type {
   CodeHealthEvent,
   EventOutcome,
 } from "../../../domain/entities/code_health_event";
+import type { RepositoryFileFacts } from "../../../domain/entities/repository_snapshot";
 import type { TrackedRepository } from "../../../domain/entities/tracked_repository";
 import type { CredentialsResolver } from "../../../domain/services/credentials_resolver";
 import type {
@@ -18,6 +19,7 @@ import type {
 import type { ProviderGateway } from "../../http/provider_gateway";
 import { evaluatePolicies, pickLatestTag } from "./azure_devops_snapshot";
 import { buildCompliance } from "./compliance";
+import { detectRepositoryFiles, SCANNED_DIRECTORIES } from "./repository_files";
 import type {
   AdoBuildDefinitionNode,
   AdoItemNode,
@@ -90,6 +92,15 @@ const identityKey = (identity: AdoIdentityNode | undefined): string | null => {
 const identityName = (identity: AdoIdentityNode | undefined): string | null =>
   identity?.displayName ?? identity?.uniqueName ?? identity?.email ?? null;
 
+/**
+ * Repository-relative path of an item.
+ *
+ * Azure DevOps reports paths rooted at `/`, and the listing of `/docs` includes
+ * `/docs` itself, so both the leading slash and the scope have to be stripped
+ * before the shared classifier sees them.
+ */
+const pathOf = (item: AdoItemNode): string => (item.path ?? "").replace(/^\/+/, "");
+
 const isoOrNull = (value: string | undefined): Date | null => {
   if (!value) return null;
   const parsed = new Date(value);
@@ -159,7 +170,7 @@ export class AzureDevOpsCollector implements VcsCollector {
     const repositoryId = repositoryNode.id ?? repository.externalId ?? repository.name;
     const defaultBranch = repositoryNode.defaultBranch?.replace(/^refs\/heads\//, "") ?? null;
 
-    const [policies, definitions, tags, branches, latestBuild, readme] = await Promise.all([
+    const [policies, definitions, tags, branches, latestBuild, readme, files] = await Promise.all([
       this.projectPolicies(repository, headers, context),
       this.getJson<AdoListResponse<AdoBuildDefinitionNode>>(
         `${project}/_apis/build/definitions?repositoryId=${encodeURIComponent(repositoryId)}` +
@@ -186,6 +197,7 @@ export class AzureDevOpsCollector implements VcsCollector {
         context,
       ),
       this.readme(repository, repositoryId, headers, context),
+      this.repositoryFiles(repository, repositoryId, headers, context),
     ]);
 
     const findings = evaluatePolicies(policies, repositoryId);
@@ -227,6 +239,7 @@ export class AzureDevOpsCollector implements VcsCollector {
           ...findings,
         }),
         badgeStatus: readme === null ? null : parseBadgesFromReadme(readme),
+        repositoryFiles: files,
       },
       repositoryFacts: {
         defaultBranch: defaultBranch ?? repository.defaultBranch,
@@ -261,6 +274,68 @@ export class AzureDevOpsCollector implements VcsCollector {
     const policies = [...(body.value ?? [])];
     context.projectCache.set(key, policies);
     return policies;
+  }
+
+  /**
+   * The shallow file scan behind the documentation and API-exposure metrics.
+   *
+   * One listing of the root, then one of `docs/` and one of `api/` — and only
+   * when the root said those directories exist, so the common repository costs
+   * a single request. A recursive listing would be unbounded on a large
+   * repository and is not needed: nothing here looks deeper than GitHub's own
+   * scan does, which keeps the metric comparable across the two platforms.
+   */
+  private async repositoryFiles(
+    repository: TrackedRepository,
+    repositoryId: string,
+    headers: Record<string, string>,
+    context: SnapshotContext,
+  ): Promise<RepositoryFileFacts> {
+    const root = await this.listItems(repository, repositoryId, "/", headers, context);
+
+    const present = SCANNED_DIRECTORIES.filter((directory) =>
+      root.some((item) => item.isFolder === true && pathOf(item) === directory),
+    );
+
+    const nested = await Promise.all(
+      present.map((directory) =>
+        this.listItems(repository, repositoryId, `/${directory}`, headers, context),
+      ),
+    );
+
+    return detectRepositoryFiles(
+      [root, ...nested]
+        .flat()
+        .filter((item) => item.isFolder !== true)
+        .map(pathOf)
+        .filter((path) => path !== ""),
+    );
+  }
+
+  private async listItems(
+    repository: TrackedRepository,
+    repositoryId: string,
+    scopePath: string,
+    headers: Record<string, string>,
+    context: SnapshotContext,
+  ): Promise<AdoItemNode[]> {
+    const parameters = new URLSearchParams({
+      "api-version": API_VERSION,
+      scopePath,
+      recursionLevel: "OneLevel",
+    });
+    const url =
+      `${this.projectUrl(repository)}/_apis/git/repositories/${encodeURIComponent(repositoryId)}` +
+      `/items?${parameters.toString()}`;
+
+    try {
+      const body = await this.getJson<AdoListResponse<AdoItemNode>>(url, headers, context);
+      return [...(body.value ?? [])];
+    } catch {
+      // An empty repository, or one whose default branch has no such directory,
+      // answers 404. Neither is a reason to fail the whole snapshot.
+      return [];
+    }
   }
 
   private async readme(

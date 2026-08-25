@@ -1,9 +1,20 @@
-import type { RepositorySummary } from "@rios0rios0/backstage-plugin-code-health-common";
-import { EMPTY_REPOSITORY_ACTIVITY } from "@rios0rios0/backstage-plugin-code-health-common";
+import type {
+  ApiExposure,
+  DocumentationStatus,
+  RepositorySummary,
+} from "@rios0rios0/backstage-plugin-code-health-common";
+import {
+  buildApiExposure,
+  buildDocumentationStatus,
+  EMPTY_REPOSITORY_ACTIVITY,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import { aggregateActivity } from "../entities/activity";
 import type { CodeHealthEvent } from "../entities/code_health_event";
 import { toDay } from "../entities/day";
-import type { RepositorySnapshotPayload } from "../entities/repository_snapshot";
+import type {
+  RepositoryFileFacts,
+  RepositorySnapshotPayload,
+} from "../entities/repository_snapshot";
 import { repositoryFullName, type TrackedRepository } from "../entities/tracked_repository";
 import type { CodeHealthStore } from "../repositories/code_health_store";
 
@@ -31,7 +42,48 @@ const unsnapshotted = (repository: TrackedRepository): RepositorySnapshotPayload
   badgeStatus: null,
   sonarMetrics: null,
   wakaTimeMetrics: null,
+  repositoryFiles: null,
 });
+
+/**
+ * Grades documentation from the catalog entry and the repository together.
+ *
+ * Returns null until both halves are in: the catalog half is known from
+ * discovery, but the repository half arrives with the daily snapshot, and a
+ * repository graded `missing` on half the evidence would report a gap that is
+ * not there. Null reads as "not measured yet" everywhere downstream, the same
+ * way an unsnapshotted quality gate does.
+ */
+const documentationOf = (
+  repository: TrackedRepository,
+  files: RepositoryFileFacts | null,
+  isArchived: boolean,
+): DocumentationStatus | null => {
+  if (files === null) return null;
+
+  return buildDocumentationStatus({
+    hasTechDocs: repository.catalogFacts.techDocsRef !== null,
+    hasDocsSource: files.hasDocsSource,
+    hasReadme: files.hasReadme,
+    hasExternalDocs: repository.catalogFacts.hasExternalDocs,
+    isArchived,
+  });
+};
+
+const apiExposureOf = (
+  repository: TrackedRepository,
+  files: RepositoryFileFacts | null,
+  isArchived: boolean,
+): ApiExposure | null => {
+  if (files === null) return null;
+
+  return buildApiExposure({
+    declaredApis: repository.catalogFacts.providesApis,
+    definitionPath: files.apiDefinitionPath,
+    entityType: repository.catalogFacts.entityType,
+    isArchived,
+  });
+};
 
 export class ListRepositorySummaries {
   constructor(private readonly store: CodeHealthStore) {}
@@ -65,6 +117,9 @@ export class ListRepositorySummaries {
     return tracked.map(({ repository }) => {
       const payload = snapshotsByRepository.get(repository.id) ?? unsnapshotted(repository);
       const repositoryEvents = eventsByRepository.get(repository.id);
+      // Undefined on a snapshot written before the scan existed, which is the
+      // same "not measured" case as never having been snapshotted at all.
+      const files = payload.repositoryFiles ?? null;
 
       return {
         id: repository.id,
@@ -86,6 +141,8 @@ export class ListRepositorySummaries {
         branches: payload.branches,
         sonarMetrics: payload.sonarMetrics,
         complianceStatus: payload.complianceStatus,
+        documentation: documentationOf(repository, files, payload.isArchived),
+        apiExposure: apiExposureOf(repository, files, payload.isArchived),
         badgeStatus: payload.badgeStatus,
         wakaTimeMetrics: payload.wakaTimeMetrics,
         activity: repositoryEvents

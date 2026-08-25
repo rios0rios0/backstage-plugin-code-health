@@ -73,7 +73,19 @@ plugins/code-health/src/
 - **Branch policies are fetched once per project**, cached for the whole snapshot pass.
 - **The latest Azure DevOps tag is chosen by version comparison**, because its refs API returns tags
   alphabetically with no dates.
-- **Line churn is null on Azure DevOps**, which reports changed files rather than lines.
+- **Line churn is null on Azure DevOps**, which reports changed files rather than lines and exposes
+  no line count anywhere in its REST API. `ContributorSummary.churnUnit` carries which unit a row
+  was measured in, so a view renders the figure it has instead of a zero. Do not infer the unit from
+  which number is non-zero: that misreads a real quiet week as a missing measurement.
+- **Insights is the landing tab**, at `/`. Contributors is `/contributors` and repositories is
+  `/repositories`. It leads because it is the only tab that answers a question about the fleet
+  rather than about one row of it.
+- **The documentation and API grades need both halves of the evidence.** The catalog half comes from
+  discovery, the repository half from the daily snapshot, so both read `null` — "not measured" —
+  until a snapshot exists. Grading on half of it reports gaps that are not there.
+- **The repository file scan stays shallow**: the root, `docs/` and `api/`. A recursive walk is
+  unbounded on a large repository and costs a different amount on each platform, which would make
+  the metric incomparable between them.
 - **A day is recorded as fetched only when a window covers it end to end.**
 - **Cursors move only after the window is committed.**
 - **Sonar, compliance and badge history cannot be backfilled**; those series start at installation.

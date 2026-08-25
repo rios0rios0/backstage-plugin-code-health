@@ -1,6 +1,10 @@
 import { codeHealthApis } from "../src/main/apis";
 import { CodeHealthPage, codeHealthPlugin } from "../src/plugin";
-import { contributorsRouteRef, insightsRouteRef, rootRouteRef } from "../src/routes";
+import {
+  contributorsRouteRef,
+  repositoriesRouteRef,
+  rootRouteRef,
+} from "../src/routes";
 
 describe("codeHealthPlugin", () => {
   it("should be registered under the plugin id the package declares", () => {
@@ -35,9 +39,11 @@ describe("codeHealthPlugin", () => {
     const routes = codeHealthPlugin.routes;
 
     // then
+    // The root renders Insights now, so the sub routes are the two tables. An
+    // app deep-linking to the old `/insights` path has to move to the root.
     expect(routes.root).toBe(rootRouteRef);
     expect(routes.contributors).toBe(contributorsRouteRef);
-    expect(routes.insights).toBe(insightsRouteRef);
+    expect(routes.repositories).toBe(repositoriesRouteRef);
   });
 
   it("should provide the page as a renderable routable extension", () => {

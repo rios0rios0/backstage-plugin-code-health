@@ -93,6 +93,7 @@ export class StubVcsCollector implements VcsCollector {
     branches: ["main"],
     complianceStatus: null,
     badgeStatus: null,
+    repositoryFiles: null,
   };
 
   private snapshotEvents: CodeHealthEvent[] = [];

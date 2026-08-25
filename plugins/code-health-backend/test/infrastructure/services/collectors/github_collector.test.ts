@@ -725,6 +725,15 @@ describe("GithubCollector", () => {
             text: "![Build Status](https://img.shields.io/github/actions/workflow/status/x/y)",
           },
           workflows: { entries: [{ name: "default.yaml", type: "blob" }] },
+          root: {
+            entries: [
+              { name: "README.md", type: "blob" },
+              { name: "docs", type: "tree" },
+              { name: "go.mod", type: "blob" },
+            ],
+          },
+          docsTree: { entries: [{ name: "index.md", type: "blob" }] },
+          apiTree: { entries: [{ name: "openapi.yaml", type: "blob" }] },
           ...overrides,
         },
       },
@@ -752,6 +761,49 @@ describe("GithubCollector", () => {
       expect(result.payload.ciStatus).toMatchObject({ state: "SUCCESS", commitSha: "abc123" });
       expect(result.payload.latestRelease).toMatchObject({ tagName: "v1.2.0" });
       expect(result.payload.latestTag).toMatchObject({ name: "v1.2.0" });
+    });
+
+    it("should scan the trees it already asked for", async () => {
+      // given
+      // The trees ride along in the same document, so the documentation and
+      // API-definition scan costs no extra request at all.
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({ body: snapshotBody() }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      expect(server.requests).toHaveLength(1);
+      expect(result.payload.repositoryFiles).toEqual({
+        hasReadme: true,
+        hasDocsSource: true,
+        apiDefinitionPath: "api/openapi.yaml",
+      });
+    });
+
+    it("should ignore directories when scanning for files", async () => {
+      // given
+      // An empty `docs/` is not documentation, and counting the directory entry
+      // itself would report one.
+      const { collector } = createCollector();
+      server.on("/graphql", () => ({
+        body: snapshotBody({
+          root: { entries: [{ name: "docs", type: "tree" }] },
+          docsTree: { entries: [] },
+          apiTree: null,
+        }),
+      }));
+
+      // when
+      const result = await collector.snapshot(aTrackedRepository(), snapshotContext());
+
+      // then
+      expect(result.payload.repositoryFiles).toEqual({
+        hasReadme: false,
+        hasDocsSource: false,
+        apiDefinitionPath: null,
+      });
     });
 
     it("should treat a ruleset as branch protection", async () => {
