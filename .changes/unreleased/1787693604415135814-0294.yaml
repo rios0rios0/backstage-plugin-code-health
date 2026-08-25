@@ -1,0 +1,4 @@
+kind: 'Changed'
+body: '**BREAKING CHANGE:** moved **Insights** to the plugin root and repositories to `/repositories`. Insights leads because it is the only tab that answers a question about the fleet rather than about one row of it, and it is what someone opening the plugin cold wants first. An app deep-linking to `/insights` must link to the plugin root instead, and `codeHealthPlugin.routes.insights` is now `codeHealthPlugin.routes.repositories`'
+breaking: true
+time: '2026-08-25T21:33:24.415096109Z'

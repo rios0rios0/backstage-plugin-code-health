@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a **Catalog APIs** card to the Insights tab, and an **API** column to the repositories table, flagging repositories that ship an OpenAPI, AsyncAPI, GraphQL or protobuf definition and declare no `spec.providesApis`. A definition found in the repository is reported as a fact with its path; a component merely typed as a service is kept apart as the weaker signal, so an inference never dilutes a real finding'
+time: '2026-08-25T21:33:24.427698332Z'

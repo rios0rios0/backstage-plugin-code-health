@@ -163,7 +163,8 @@ Do not add a `collectCoverageFrom` exclusion to make a threshold pass; write the
 
 - `code-check > quality:basic-checks` is gated on `github.event_name == 'pull_request'`, so it never
   runs on a push to `main`. On a pull request it does run, and it fails unless the branch is rebased
-  on `main` **and** `CHANGELOG.md` gained entries under `[Unreleased]`.
+  on `main` **and** the branch added a changelog fragment under `.changes/unreleased/`. On a
+  `bump/*` branch the same check flips and demands an updated `CHANGELOG.md` instead.
 - `management > report:sonarqube` is gated on a non-empty `sonar_host` input, which
   `.github/workflows/default.yaml` does not pass. The repository forwards `SONAR_TOKEN` but has no
   SonarCloud project, so enabling the input would turn a skip into a failure.
@@ -352,3 +353,28 @@ For a stricter posture, a trust relationship can be made **stage-only**: CI then
 `npm stage publish`, the version is held privately, and a maintainer releases it with
 `npm stage approve <stage-id>` under 2FA. That trades the hands-off release for a human checkpoint;
 the current setup publishes directly.
+
+<!-- chlog:start -->
+## Changelog (chlog) — MANDATORY
+
+If the repository you are working in uses chlog (a `.chlog.yaml` or `.chlog.yml`
+config file, or a `.changes/` directory, exists at the project root), the
+following is binding and ALWAYS applies: whenever you make ANY change, you MUST
+create a changelog fragment as part of the same change — automatically, without
+being asked, before committing.
+
+- Do NOT edit CHANGELOG.md directly; it is generated from fragments.
+- Create the fragment with:
+  `chlog new --kind <Kind> --body "<imperative description>"`
+- Valid kinds: Added, Changed, Deprecated, Removed, Fixed, Security
+- Choose the kind that best matches the change (e.g., new feature → Added,
+  bug fix → Fixed, behavior change → Changed, removal → Removed, security fix → Security).
+- If the change is backward-INCOMPATIBLE with the public API (a breaking
+  change), you MUST add the `--breaking` flag:
+  `chlog new --kind <Kind> --breaking --body "<description>"`.
+  This is the ONLY thing that triggers a major version bump — the kind alone
+  never does (per SemVer, major = incompatible change). When unsure whether a
+  change breaks compatibility, ask the user instead of guessing.
+- Fragments are YAML files in `.changes/unreleased/`; stage them with your commit.
+- `chlog check` fails the build when a fragment is missing — never skip it.
+<!-- chlog:end -->
