@@ -207,11 +207,9 @@ that version to all four `package.json` files, branches `chore/bump-x.x.x`, and 
 
 The frontend and the backend declare a caret range on `-common`, and `.autobump.yaml` moves it on
 every release so the three published packages install as a matched set. That exact string is also a
-**resolution descriptor** in `yarn.lock`, in three places:
+**resolution descriptor** in `yarn.lock` (the selector for the workspace package):
 
-```
-"@rios0rios0/backstage-plugin-code-health-common@npm:^2.2.0, @rios0rios0/...@workspace:plugins/code-health-common":
-```
+    "@rios0rios0/backstage-plugin-code-health-common@npm:^X.Y.Z, @rios0rios0/backstage-plugin-code-health-common@workspace:plugins/code-health-common":
 
 AutoBump rewrites version files with regular expressions and does not run a package manager, so the
 lockfile is left behind. Every CI job then starts with `yarn install --immutable`, which refuses:
