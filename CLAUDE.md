@@ -191,13 +191,72 @@ that version to all four `package.json` files, branches `chore/bump-x.x.x`, and 
    the private workspace root, which is never published, so `plugins/*/package.json` is appended.
    Without it a release ships three packages still claiming the previous version, and
    `delivery-publish`'s tag-versus-`package.json` guard fails all three.
-3. The bump level comes from the changelog itself: a line **beginning** `- **BREAKING CHANGE:**` is
+3. That file's **second** pattern moves the caret range the frontend and the backend declare on
+   `-common`, and moving it desynchronises `yarn.lock` — see the section below. The version bumps
+   themselves are lockfile-neutral, because Yarn records a workspace as `0.0.0-use.local` and never
+   writes its version into the lockfile at all.
+4. The bump level comes from the changelog itself: a line **beginning** `- **BREAKING CHANGE:**` is
    major, `### Added` is minor, everything else patch. A breaking change explained mid-sentence
    counts for nothing — this is why the `2.0.0` entries lead with the marker.
-4. The merge commit must keep `chore/bump-x.x.x` or `chore(bump): ...version to x.x.x` — that string
+5. The merge commit must keep `chore/bump-x.x.x` or `chore(bump): ...version to x.x.x` — that string
    is what the pipeline matches on.
-5. On merge, `delivery-release` (from the shared workflow) cuts the tag and GitHub Release, and
+6. On merge, `delivery-release` (from the shared workflow) cuts the tag and GitHub Release, and
    `delivery-publish` (in `.github/workflows/default.yaml`) publishes each package to npm.
+
+### The lockfile the bump desynchronises
+
+The frontend and the backend declare a caret range on `-common`, and `.autobump.yaml` moves it on
+every release so the three published packages install as a matched set. That exact string is also a
+**resolution descriptor** in `yarn.lock`, in three places:
+
+```
+"@rios0rios0/backstage-plugin-code-health-common@npm:^2.2.0, @rios0rios0/...@workspace:plugins/code-health-common":
+```
+
+AutoBump rewrites version files with regular expressions and does not run a package manager, so the
+lockfile is left behind. Every CI job then starts with `yarn install --immutable`, which refuses:
+
+```
+YN0028: The lockfile would have been modified by this install, which is explicitly forbidden.
+```
+
+The whole gate goes red, and so would `delivery-publish` after a merge — the release is blocked, not
+merely noisy. `2.3.0` hit this.
+
+**The fix is a `refresh_commands` entry in the operator's `~/.autobump.yaml`**, which regenerates
+`yarn.lock` inside the bump commit:
+
+```yaml
+languages:
+  typescript:
+    refresh_commands:
+      - run: ['yarn', 'install', '--mode=update-lockfile']
+        files: ['yarn.lock']
+```
+
+**It cannot live in this repository's `.autobump.yaml`, and putting it there does nothing.**
+AutoBump reads a project's own config out of the repository it is releasing, which in `run` mode is a
+repository it discovered rather than one anybody vetted; honouring an executable from there would let
+any scanned repository run code with the release credentials. `SanitizeUntrustedLanguages` therefore
+drops a non-empty `refresh_commands` arriving from a project file, warning and continuing. A project
+file may only write `refresh_commands: []`, to opt **out**.
+
+Requires AutoBump carrying `rios0rios0/autobump#317`. On an older binary the key is not merely
+ignored — user config is decoded with `KnownFields(true)`, so an unrecognised key **aborts the
+release**. Check `autobump version` before adding it.
+
+Without that entry the lockfile has to be refreshed by hand on every release, after AutoBump has
+opened the PR and checked you back out to `main`:
+
+```bash
+git fetch origin && git checkout chore/bump-X.Y.Z
+yarn install --mode=update-lockfile
+git add yarn.lock && git commit --amend --no-edit
+git push --force-with-lease
+```
+
+`--mode=update-lockfile` resolves without linking, and `^X.Y.Z` resolves against the local workspace,
+so it does not go looking for a version that is not on npm yet.
 
 `delivery-publish` is repo-local because publishing to a registry is not part of any of the shared
 `*-library.yaml` workflows. It runs as a matrix over the three package directories, only after the
