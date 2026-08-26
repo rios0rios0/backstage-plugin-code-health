@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added fleet test-coverage figures to the Insights tab: the average and the median coverage per repository, how many sit below SonarQube''s default 80% gate, the distribution across four bands, and a ranking of the least-covered repositories. The mean is unweighted so a small untested repository is not hidden behind one large well-tested service, and the median sits beside it because a mean over a long tail says little on its own'
-time: '2026-08-25T21:33:24.432897221Z'

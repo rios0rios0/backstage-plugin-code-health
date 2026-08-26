@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added the catalog facts both audits read (`backstage.io/techdocs-ref`, `spec.type`, `spec.providesApis`, documentation links) to the tracked repository row, written by discovery. They change when somebody edits a YAML file rather than on the snapshot''s schedule, and re-reading them per dashboard load would put a catalog query back on the request path this design exists to keep clear'
-time: '2026-08-25T21:33:24.42319404Z'

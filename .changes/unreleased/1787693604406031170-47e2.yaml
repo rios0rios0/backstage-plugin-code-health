@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed `codeHealth.defaultRange` to accept `today`. A specific calendar month is deliberately not accepted: it would be a fixed month that goes stale the moment it passes'
-time: '2026-08-25T21:33:24.405993589Z'

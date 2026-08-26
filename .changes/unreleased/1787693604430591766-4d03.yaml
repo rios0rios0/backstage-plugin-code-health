@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added a **Documentation** card to the Insights tab, and a **Docs** column to the repositories table. It separates repositories that publish TechDocs from ones that already write documentation nobody wired up — a `docs/` tree, an `mkdocs.yml`, a link out to a wiki — from ones with nothing at all, because the first gap costs one annotation and the second costs somebody sitting down to write. Both cards name the repositories rather than only counting them'
-time: '2026-08-25T21:33:24.430365524Z'
