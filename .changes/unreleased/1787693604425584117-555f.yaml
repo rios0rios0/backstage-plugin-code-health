@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added a shallow repository file scan behind both audits — the root, `docs/` and `api/`. On GitHub the three trees ride along in the snapshot''s existing GraphQL document and cost no extra request at all; on Azure DevOps it is one listing per repository per day, plus one for each of those two directories that exists'
-time: '2026-08-25T21:33:24.425546086Z'

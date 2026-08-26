@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the approval-rate and pipeline column headings to carry a tooltip explaining what each divides. Both are ratios whose numerator and denominator the heading does not name, and a reader who guesses wrong reads the column backwards: the approval rate is how somebody votes when they review, not how their own pull requests fare, and the pipeline rate covers runs requested for them'
-time: '2026-08-25T21:33:24.408199358Z'

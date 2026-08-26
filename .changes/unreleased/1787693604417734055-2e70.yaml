@@ -1,3 +1,0 @@
-kind: 'Fixed'
-body: 'fixed the help tooltips on the contributors table being unreachable without a pointer, and invisible to assistive technology. An SVG has no focus event for the tooltip to open on, and Material UI stamps `aria-hidden` on any icon carrying no `titleAccess`, so the explanations existed only for people using a mouse'
-time: '2026-08-25T21:33:24.417685613Z'
