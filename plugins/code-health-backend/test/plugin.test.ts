@@ -491,6 +491,22 @@ describe("codeHealthPlugin", () => {
       expect(response.status).toBe(400);
     });
 
+    it("should reject a reference that is not one at all", async () => {
+      // given
+      // A bare name reaches the catalog's own parser, which throws rather than
+      // answering — the screen would show a 500 where it promises to say
+      // plainly that the user does not exist.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/identities/links")
+        .send({ source: "wakatime", sourceKey: "jrios", entityRef: "felipe" });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
     it("should reject a link with nothing to link", async () => {
       // given
       const { server } = await startBackend([]);

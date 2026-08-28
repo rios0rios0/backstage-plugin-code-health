@@ -53,6 +53,33 @@ const commit = (repositoryId: string, at: string, actor = "dev@example.com") =>
   EventBuilder.commit().withRepository(repositoryId).withActor(actor).at(at).withChurn(10, 2, 1);
 
 describe("ListRepositorySummaries", () => {
+  it("should read a snapshot written before the integration fields existed", async () => {
+    // given
+    // The store parses stored JSON with a cast rather than a validation, so an
+    // older payload simply has no key. Left undefined it survives every
+    // `=== null` guard downstream and reaches code that dereferences it — and
+    // any range predating the upgrade reproduces that, not just the first load.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    const { jiraMetrics, confluenceMetrics, ...older } = aSnapshotPayload();
+    await store.saveSnapshot({
+      repositoryId: repository!.id,
+      day: "2026-08-10",
+      capturedAt: NOW,
+      payload: older as typeof older & {
+        jiraMetrics: null;
+        confluenceMetrics: null;
+      },
+    });
+
+    // when
+    const [summary] = await new ListRepositorySummaries(store).run(WINDOW);
+
+    // then
+    expect(summary?.jiraMetrics).toBeNull();
+    expect(summary?.confluenceMetrics).toBeNull();
+  });
+
   it("should render a repository with the counters from its window", async () => {
     // given
     const { store, discovered } = await seed();
@@ -351,6 +378,50 @@ describe("ListContributorSummaries", () => {
     ]);
   });
 
+  it("should not invent a row from coding time when the call is scoped to a repository", async () => {
+    // given
+    // Coding time is measured per person across everything they touched, not
+    // per repository, so a scoped call would otherwise list people who have
+    // never been near it.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.commitIngestion({
+      repositoryId: repository!.id,
+      events: [commit(repository!.id, "2026-08-09T10:00:00.000Z", "dev@example.com").build()],
+      chunk: { repositoryId: repository!.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+    await store.saveContributorMetrics({
+      source: "wakatime",
+      day: "2026-08-09",
+      capturedAt: NOW,
+      metrics: new Map([
+        ["elsewhere", WakaTimeMetricsBuilder.aDay("2026-08-09").withSeconds(3600).build()],
+      ]),
+    });
+
+    // when
+    const scoped = await new ListContributorSummaries({ store }).run({
+      ...WINDOW,
+      repositoryId: repository!.id,
+    });
+
+    // then
+    expect(scoped.map((row) => row.key)).toEqual(["vcs:dev@example.com"]);
+
+    // when
+    // Unscoped, the same person is a row of their own — a week in an editor
+    // without a commit is worth seeing.
+    const unscoped = await new ListContributorSummaries({ store }).run(WINDOW);
+
+    // then
+    expect(unscoped.map((row) => row.key).sort()).toEqual([
+      "vcs:dev@example.com",
+      "wakatime:elsewhere",
+    ]);
+  });
+
   it("should give somebody with coding time and no commits a row of their own", async () => {
     // given
     // A week spent in an editor without a single commit is worth seeing, and a
@@ -370,6 +441,9 @@ describe("ListContributorSummaries", () => {
 
     // then
     expect(contributor?.key).toBe("wakatime:quiet");
+    // And the name falls back to the account key, source and all, so a reader
+    // knows which system to go and look in.
+    expect(contributor?.displayName).toBe("wakatime:quiet");
     expect(contributor?.commits).toBe(0);
     expect(contributor?.wakaTimeMetrics?.totalSeconds).toBe(3600);
     expect(contributor?.churnUnit).toBe("none");

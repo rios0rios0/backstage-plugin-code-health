@@ -108,7 +108,7 @@ export class CodeHealthBackendClient
     const body = await this.get<ListIdentitiesResponse>("identities", {
       ...(filter.sources === undefined || filter.sources.length === 0
         ? {}
-        : { source: filter.sources.join(",") }),
+        : { source: [...filter.sources] }),
       ...(filter.linked === undefined ? {} : { linked: String(filter.linked) }),
     });
     return [...body.items];
@@ -160,9 +160,23 @@ export class CodeHealthBackendClient
     return this.options.discoveryApi.getBaseUrl(CODE_HEALTH_PLUGIN_ID);
   }
 
-  private async get<T>(path: string, query: Record<string, string>): Promise<T> {
+  /**
+   * A list value becomes a repeated parameter, not a comma-joined one.
+   *
+   * `source=vcs&source=jira` is what the backend parses; `source=vcs,jira` is a
+   * single value that matches no known source and is rejected with a 400.
+   */
+  private async get<T>(
+    path: string,
+    query: Record<string, string | readonly string[]>,
+  ): Promise<T> {
     const baseUrl = await this.baseUrl();
-    const parameters = new URLSearchParams(query);
+    const parameters = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      for (const entry of Array.isArray(value) ? value : [value as string]) {
+        parameters.append(key, entry);
+      }
+    }
     const suffix = parameters.toString() === "" ? "" : `?${parameters.toString()}`;
 
     const response = await this.options.fetchApi.fetch(

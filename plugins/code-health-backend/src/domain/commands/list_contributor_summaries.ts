@@ -207,7 +207,7 @@ const aggregateSonar = (
  */
 const fallbackName = (personKey: string, totals: Accumulator): string => {
   const first = [...totals.identities.values()][0];
-  return first?.sourceKey ?? personKey;
+  return first === undefined ? personKey : identityKey(first);
 };
 
 /**
@@ -269,7 +269,9 @@ export class ListContributorSummaries {
    * are exactly the rows that show the linking still needs doing.
    *
    * A person with coding time and no commits is a real row too, not an empty
-   * one: a week spent in an editor without a single commit is worth seeing.
+   * one: a week spent in an editor without a single commit is worth seeing —
+   * except on a call scoped to one repository, where the events are the only
+   * thing that knows which repository somebody touched.
    */
   async run(input: {
     from: Date;
@@ -329,6 +331,20 @@ export class ListContributorSummaries {
       return existing;
     };
 
+    /**
+     * The same, but never inventing a row.
+     *
+     * Coding time, tickets and pages are measured for a person across
+     * everything they touched, not per repository — so on a call scoped to one
+     * repository they would otherwise add people who have never been near it.
+     * Scoped, they only enrich somebody the events already put on the page; the
+     * figures themselves stay whole-fleet, which the column help says.
+     */
+    const enrichOnly = (identity: IdentityRef): Accumulator | undefined => {
+      if (input.repositoryId === undefined) return accumulatorFor(identity);
+      return byPerson.get(people.keyOf(identity));
+    };
+
     for (const event of events) {
       if (!event.actorKey) continue;
       const identity: IdentityRef = {
@@ -342,21 +358,24 @@ export class ListContributorSummaries {
 
     for (const row of wakaTimeRows) {
       const identity: IdentityRef = { source: "wakatime", sourceKey: row.contributorKey };
-      const accumulator = accumulatorFor(identity);
+      const accumulator = enrichOnly(identity);
+      if (accumulator === undefined) continue;
       remember(accumulator, identity, null);
       accumulator.wakaTime.push(row.payload);
     }
 
     for (const row of jiraRows) {
       const identity: IdentityRef = { source: "jira", sourceKey: row.contributorKey };
-      const accumulator = accumulatorFor(identity);
+      const accumulator = enrichOnly(identity);
+      if (accumulator === undefined) continue;
       remember(accumulator, identity, null);
       accumulator.jira.push(row.payload);
     }
 
     for (const [sourceKey, metrics] of confluenceRows) {
       const identity: IdentityRef = { source: "confluence", sourceKey };
-      const accumulator = accumulatorFor(identity);
+      const accumulator = enrichOnly(identity);
+      if (accumulator === undefined) continue;
       remember(accumulator, identity, null);
       accumulator.confluence.push(metrics);
     }

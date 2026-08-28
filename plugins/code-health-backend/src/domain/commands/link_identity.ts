@@ -1,4 +1,5 @@
 import type { IdentitySource } from "@rios0rios0/backstage-plugin-code-health-common";
+import { parseEntityRef } from "@rios0rios0/backstage-plugin-code-health-common";
 import { normalizeSourceKey } from "../entities/identity";
 import type { CodeHealthStore } from "../repositories/code_health_store";
 import type { DirectoryReader } from "../services/identity_resolver";
@@ -17,6 +18,13 @@ export class UnknownUserError extends Error {
   }
 }
 
+export class MalformedEntityRefError extends Error {
+  constructor(entityRef: string) {
+    super(`\`${entityRef}\` is not an entity reference; expected \`user:<namespace>/<name>\``);
+    this.name = "MalformedEntityRefError";
+  }
+}
+
 /**
  * Attaches an account to a catalog user, or detaches it again.
  *
@@ -26,6 +34,11 @@ export class UnknownUserError extends Error {
  * before, and the person who made the link would have no way to tell it had not
  * worked. Failing loudly at the moment of the mistake is the only point at
  * which it is cheap to fix.
+ *
+ * The reference is checked for shape here rather than left to the catalog,
+ * which throws on an unparseable one — a bare name typed into the link field
+ * would otherwise surface as a 500 instead of the "told plainly that it does
+ * not exist" the screen promises.
  */
 export class LinkIdentity {
   constructor(
@@ -42,20 +55,35 @@ export class LinkIdentity {
   }): Promise<void> {
     const sourceKey = normalizeSourceKey(input.sourceKey);
 
+    // Shape first, before any lookup: a request that could never be valid is
+    // rejected without touching the database, and the caller is told which of
+    // the two things was wrong rather than being sent looking for a user that
+    // was never a reference in the first place.
+    if (parseEntityRef(input.entityRef) === null) {
+      throw new MalformedEntityRefError(input.entityRef);
+    }
+
     const observed = await this.store.listIdentities({ sources: [input.source] });
     if (!observed.some((identity) => identity.sourceKey === sourceKey)) {
       throw new UnknownIdentityError(input.source, sourceKey);
     }
 
     const users = await this.directory.getUsersByRef([input.entityRef]);
-    if (!users.has(input.entityRef)) {
+    const user = users.get(input.entityRef);
+    if (user === undefined) {
       throw new UnknownUserError(input.entityRef);
     }
 
     await this.store.saveIdentityLink({
       source: input.source,
       sourceKey,
-      entityRef: input.entityRef,
+      // The reference the catalog entity itself produces, not the one that was
+      // typed. `user:jdoe` omits the namespace and `user:default/JDoe` gets the
+      // case wrong, and the catalog resolves both — but the stored string *is*
+      // the person key, so either would produce a key that never joins the
+      // canonical one `ReconcileIdentities` writes, and the same human would
+      // hold two rows. Which is the exact failure this feature exists to remove.
+      entityRef: user.entityRef,
       origin: "manual",
       linkedBy: input.linkedBy,
       linkedAt: input.now,

@@ -13,6 +13,7 @@ import Router from "express-promise-router";
 import { z } from "zod";
 import type { GetRepositoryTimeSeries } from "../../domain/commands/get_repository_time_series";
 import {
+  MalformedEntityRefError,
   UnknownIdentityError,
   UnknownUserError,
   type LinkIdentity,
@@ -101,6 +102,10 @@ const readSources = (value: unknown): readonly IdentitySource[] | undefined => {
  * framework; mapping them lives here, where the transport does.
  */
 const asHttpError = (error: unknown): unknown => {
+  // A reference that cannot be parsed is a bad request; one that parses but
+  // names nobody is a missing thing. Collapsing the two would tell somebody who
+  // typed a bare name to go and look for a user that was never asked for.
+  if (error instanceof MalformedEntityRefError) return new InputError(error.message);
   if (error instanceof UnknownIdentityError || error instanceof UnknownUserError) {
     return new NotFoundError(error.message);
   }

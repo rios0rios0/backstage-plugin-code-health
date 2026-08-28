@@ -249,8 +249,15 @@ export class ListRepositorySummaries {
         // Both come from the snapshot rather than from the window's events:
         // neither product exposes what a project looked like on an arbitrary
         // past day, so the figure is the most recent one taken at or before it.
-        jiraMetrics: payload.jiraMetrics,
-        confluenceMetrics: payload.confluenceMetrics,
+        //
+        // `?? null` for the same reason `repositoryFiles` needs it above: a
+        // payload written before these fields existed carries no key, and the
+        // store parses stored JSON with a cast rather than a validation. Left
+        // undefined it survives every `=== null` guard downstream and reaches
+        // code that dereferences it — and picking any range that predates the
+        // upgrade reproduces that permanently, not just once after it.
+        jiraMetrics: payload.jiraMetrics ?? null,
+        confluenceMetrics: payload.confluenceMetrics ?? null,
         activity: repositoryEvents
           ? aggregateActivity(repositoryEvents)
           : EMPTY_REPOSITORY_ACTIVITY,

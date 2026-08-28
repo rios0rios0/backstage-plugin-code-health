@@ -202,6 +202,13 @@ export class WakaTimeApiEnricher implements WakaTimeEnricher {
    * dashboard and its membership change on a human timescale, and re-walking
    * two endpoints every night to learn the same answer is two requests of the
    * budget spent on nothing.
+   *
+   * Only a non-empty answer is kept. Both resolvers report a failed lookup as
+   * an empty list, and latching that would mean one transient 500 on the
+   * dashboards call leaves WakaTime collecting nothing at all until the backend
+   * process is restarted — with a single warning, days earlier, as the only
+   * trace. The argument for memoising is that an *answer* is stable; the
+   * absence of one is not an answer.
    */
   private async resolveSubjects(
     context: EnrichmentContext,
@@ -212,7 +219,7 @@ export class WakaTimeApiEnricher implements WakaTimeEnricher {
       ? await this.resolveCurrentUser(context)
       : await this.resolveOrganisationMembers(context);
 
-    this.subjects = resolved;
+    if (resolved.length > 0) this.subjects = resolved;
     return resolved;
   }
 

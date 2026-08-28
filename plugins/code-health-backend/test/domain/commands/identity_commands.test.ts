@@ -1,5 +1,6 @@
 import {
   LinkIdentity,
+  MalformedEntityRefError,
   UnknownIdentityError,
   UnknownUserError,
 } from "../../../src/domain/commands/link_identity";
@@ -219,6 +220,52 @@ describe("LinkIdentity", () => {
       linkedBy: "user:default/admin",
       linkedAt: NOW,
     });
+  });
+
+  it("should store the catalog's own reference, not the one that was typed", async () => {
+    // given
+    // The catalog resolves `user:jdoe` with the namespace omitted just as
+    // happily as the canonical form, and the stored string *is* the person key
+    // — so keeping the typed one would produce a key that never joins the
+    // canonical one reconciliation writes, and the same human would hold two
+    // rows.
+    const store = await seed([{ source: "wakatime", sourceKey: "jrios" }]);
+    const directory = new StubDirectoryReader([
+      { entityRef: "user:default/felipe", displayName: "Felipe", email: null, picture: null },
+    ]);
+
+    // when
+    await new LinkIdentity(store, directory).link({
+      source: "wakatime",
+      sourceKey: "jrios",
+      entityRef: "user:felipe",
+      linkedBy: null,
+      now: NOW,
+    });
+
+    // then
+    const [link] = await store.listIdentityLinks();
+    expect(link?.entityRef).toBe("user:default/felipe");
+  });
+
+  it("should reject a reference that is not one at all", async () => {
+    // given
+    // A bare name reaches the catalog's own parser, which throws rather than
+    // answering — so the screen would show a 500 where it promises to say
+    // plainly that the user does not exist.
+    const store = await seed([{ source: "wakatime", sourceKey: "jrios" }]);
+
+    // when
+    const linking = new LinkIdentity(store, new StubDirectoryReader()).link({
+      source: "wakatime",
+      sourceKey: "jrios",
+      entityRef: "felipe",
+      linkedBy: null,
+      now: NOW,
+    });
+
+    // then
+    await expect(linking).rejects.toThrow(MalformedEntityRefError);
   });
 
   it("should refuse an account nobody has observed", async () => {

@@ -375,6 +375,58 @@ describe("WakaTimeApiEnricher", () => {
     expect(server.requestsFor("/summaries")).toHaveLength(2);
   });
 
+  it("should retry the lookup after a failed one rather than latching it", async () => {
+    // given
+    // A failed resolve reports an empty list, and memoising that would leave one
+    // transient 500 on the dashboards call collecting nothing at all until the
+    // backend process is restarted — with a single warning, days earlier, as
+    // the only trace.
+    // 403 rather than 500, so the gateway does not retry it: the point is one
+    // failed resolve, not one failed request.
+    let resolves = 0;
+    server
+      .onPath("/dashboards", () => {
+        resolves += 1;
+        return resolves === 1
+          ? { status: 403, body: { error: "try again" } }
+          : { body: { data: [{ id: "dash-1", name: "Everyone" }] } };
+      })
+      .onPath("/members", () => ({ body: { data: [{ id: "m", user: { username: "dev" } }] } }))
+      .on("/summaries", () => ({ body: { data: [aSummaryDay("2026-08-10", 60)] } }));
+    const { enricher } = createEnricher();
+
+    // when
+    const first = await enricher.fetchWindow(window());
+    const second = await enricher.fetchWindow(window());
+
+    // then
+    expect(first.identities).toEqual([]);
+    expect(second.identities.map((identity) => identity.sourceKey)).toEqual(["dev"]);
+  });
+
+  it("should retry when the organisation had no dashboard yet", async () => {
+    // given
+    // A dashboard created after the first pass would otherwise never be seen.
+    let resolves = 0;
+    server
+      .onPath("/dashboards", () => {
+        resolves += 1;
+        return resolves === 1
+          ? { body: { data: [] } }
+          : { body: { data: [{ id: "dash-1", name: "Everyone" }] } };
+      })
+      .onPath("/members", () => ({ body: { data: [{ id: "m", user: { username: "dev" } }] } }))
+      .on("/summaries", () => ({ body: { data: [] } }));
+    const { enricher } = createEnricher();
+
+    // when
+    await enricher.fetchWindow(window());
+    const second = await enricher.fetchWindow(window());
+
+    // then
+    expect(second.identities.map((identity) => identity.sourceKey)).toEqual(["dev"]);
+  });
+
   describe("AI metrics", () => {
     it("should read tokens and authorship from the durations resource", async () => {
       // given
