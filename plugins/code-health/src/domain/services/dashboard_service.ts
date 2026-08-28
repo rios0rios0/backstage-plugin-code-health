@@ -1,6 +1,9 @@
 import type {
   ContributorSummary,
   CoverageInfo,
+  IdentityRow,
+  IdentitySource,
+  IntegrationCapabilities,
   RepositorySummary,
   TimeSeriesBucket,
   TimeSeriesPoint,
@@ -43,4 +46,41 @@ export interface CoverageService {
  */
 export interface TimeSeriesService {
   getTimeSeries(window: TimeWindow, bucket: TimeSeriesBucket): Promise<TimeSeriesPoint[]>;
+}
+
+/**
+ * Which optional integrations the backend was configured with.
+ *
+ * Asked once, before anything is drawn. Inferring it from whether any row
+ * carries a value cannot tell a switched-off integration from one that is on
+ * and has not collected yet, and those want completely different words on the
+ * screen — as well as making a freshly configured install look broken for a day.
+ */
+export interface IntegrationsService {
+  getCapabilities(): Promise<IntegrationCapabilities>;
+}
+
+/**
+ * The accounts the plugin has seen, and which person each belongs to.
+ *
+ * This is the only write the dashboard makes. Everything else is a read of what
+ * a scheduled task already collected; linking two accounts is a statement only
+ * a person can make, and it is what turns three partial rows into one.
+ */
+export interface IdentityService {
+  listIdentities(filter: {
+    sources?: readonly IdentitySource[];
+    linked?: boolean;
+  }): Promise<IdentityRow[]>;
+
+  linkIdentity(link: {
+    source: IdentitySource;
+    sourceKey: string;
+    entityRef: string;
+  }): Promise<void>;
+
+  unlinkIdentity(identity: {
+    source: IdentitySource;
+    sourceKey: string;
+  }): Promise<void>;
 }

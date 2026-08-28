@@ -1,5 +1,7 @@
 import type { ContributorSummary } from "./contributor_summary";
 import type { CoverageInfo } from "./coverage";
+import type { IdentityRow } from "./identity";
+import type { IntegrationCapabilities } from "./integrations";
 import type { RepositorySummary } from "./repository_summary";
 import type { TimeSeriesBucket, TimeSeriesPoint } from "./time_series";
 
@@ -40,6 +42,29 @@ export interface GetTimeSeriesResponse {
 }
 
 export type GetCoverageResponse = CoverageInfo;
+
+/**
+ * What the backend is configured to do, asked once before anything is drawn.
+ *
+ * The alternative — inferring an integration from whether any row happens to
+ * carry a value for it — cannot tell a switched-off integration from one that
+ * is on and has not run yet, and those want completely different words on the
+ * screen. It also makes a freshly configured install look broken for a day.
+ */
+export interface GetCapabilitiesResponse {
+  readonly integrations: IntegrationCapabilities;
+}
+
+export interface ListIdentitiesResponse {
+  readonly items: readonly IdentityRow[];
+}
+
+export interface LinkIdentityRequest {
+  readonly source: string;
+  readonly sourceKey: string;
+  /** A `user:<namespace>/<name>` reference. */
+  readonly entityRef: string;
+}
 
 export interface RefreshResponse {
   /** Scheduler task ids that were triggered. */

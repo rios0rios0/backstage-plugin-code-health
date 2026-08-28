@@ -8,6 +8,7 @@
   "files": [
     "dist",
     "config.d.ts",
+    "docs/*.md",
     "migrations/**/*.{js,d.ts}",
     "LICENSE",
     "README.md"
@@ -35,6 +36,9 @@
     "code-health",
     "github",
     "azure-devops",
+    "wakatime",
+    "jira",
+    "confluence",
     "ci"
   ],
   "publishConfig": {

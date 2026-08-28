@@ -6,6 +6,7 @@ import { BackstageCatalogReader } from "../../../src/infrastructure/services/bac
 interface RecordedQuery {
   readonly filter: unknown;
   readonly fields: readonly string[] | undefined;
+  readonly limit?: number | undefined;
 }
 
 /**
@@ -17,15 +18,35 @@ interface RecordedQuery {
  */
 class StubCatalogService {
   readonly queries: RecordedQuery[] = [];
+  readonly refQueries: Array<readonly string[]> = [];
 
   constructor(private readonly entities: Entity[] = []) {}
 
   async getEntities(request: {
     filter?: unknown;
     fields?: readonly string[];
+    limit?: number;
   }): Promise<{ items: Entity[] }> {
-    this.queries.push({ filter: request.filter, fields: request.fields });
+    this.queries.push({ filter: request.filter, fields: request.fields, limit: request.limit });
     return { items: this.entities };
+  }
+
+  async getEntitiesByRefs(request: {
+    entityRefs: readonly string[];
+    fields?: readonly string[];
+  }): Promise<{ items: Array<Entity | undefined> }> {
+    this.refQueries.push(request.entityRefs);
+    // Positional, and undefined for a reference the catalog does not hold —
+    // which is what the real client does, and the normal case for somebody who
+    // has left the organisation since the link was made.
+    return {
+      items: request.entityRefs.map((ref) =>
+        this.entities.find(
+          (entity) =>
+            `user:${entity.metadata.namespace ?? "default"}/${entity.metadata.name}` === ref,
+        ),
+      ),
+    };
   }
 
   asCatalogService(): CatalogService {
@@ -218,5 +239,123 @@ describe("BackstageCatalogReader.findUsersByEmail", () => {
 
     // then
     expect([...found.keys()]).toEqual(["jane@example.com"]);
+  });
+});
+
+describe("BackstageCatalogReader.listUsers", () => {
+  it("should return the directory as suggestion candidates", async () => {
+    // given
+    const catalog = new StubCatalogService([
+      aUser({ name: "felipe", email: "Felipe@Example.com", displayName: "Felipe Rios" }),
+    ]);
+
+    // when
+    const users = await new BackstageCatalogReader(
+      catalog.asCatalogService(),
+      stubAuth(),
+    ).listUsers();
+
+    // then
+    expect(users).toEqual([
+      {
+        entityRef: "user:default/felipe",
+        displayName: "Felipe Rios",
+        // Lowercased, so the matching rules compare like with like.
+        email: "felipe@example.com",
+        picture: null,
+      },
+    ]);
+  });
+
+  it("should fall back to the entity name when the profile carries none", async () => {
+    // given
+    // A candidate with no label at all cannot be picked from a list.
+    const catalog = new StubCatalogService([aUser({ name: "felipe" })]);
+
+    // when
+    const [user] = await new BackstageCatalogReader(
+      catalog.asCatalogService(),
+      stubAuth(),
+    ).listUsers();
+
+    // then
+    expect(user?.displayName).toBe("felipe");
+    expect(user?.email).toBeNull();
+  });
+
+  it("should cap the listing", async () => {
+    // given
+    // Enumerating a directory is the one thing this plugin otherwise refuses to
+    // do; the cap keeps a very large tenant from turning the screen into an
+    // outage.
+    const catalog = new StubCatalogService([]);
+
+    // when
+    await new BackstageCatalogReader(catalog.asCatalogService(), stubAuth()).listUsers();
+
+    // then
+    expect(catalog.queries[0]).toMatchObject({ filter: { kind: "User" }, limit: 5000 });
+  });
+});
+
+describe("BackstageCatalogReader.getUsersByRef", () => {
+  it("should fetch by reference and key the result by it", async () => {
+    // given
+    const catalog = new StubCatalogService([
+      aUser({ name: "felipe", displayName: "Felipe Rios" }),
+    ]);
+
+    // when
+    const users = await new BackstageCatalogReader(
+      catalog.asCatalogService(),
+      stubAuth(),
+    ).getUsersByRef(["user:default/felipe"]);
+
+    // then
+    expect(users.get("user:default/felipe")?.displayName).toBe("Felipe Rios");
+  });
+
+  it("should ask for each reference once", async () => {
+    // given
+    const catalog = new StubCatalogService([]);
+
+    // when
+    await new BackstageCatalogReader(catalog.asCatalogService(), stubAuth()).getUsersByRef([
+      "user:default/felipe",
+      "user:default/felipe",
+    ]);
+
+    // then
+    expect(catalog.refQueries).toEqual([["user:default/felipe"]]);
+  });
+
+  it("should not query at all when nothing was asked for", async () => {
+    // given
+    const catalog = new StubCatalogService([]);
+
+    // when
+    const users = await new BackstageCatalogReader(
+      catalog.asCatalogService(),
+      stubAuth(),
+    ).getUsersByRef([]);
+
+    // then
+    expect(users.size).toBe(0);
+    expect(catalog.refQueries).toEqual([]);
+  });
+
+  it("should skip a reference the catalog no longer holds", async () => {
+    // given
+    // Somebody who left the organisation after their account was linked.
+    const catalog = new StubCatalogService([]);
+
+    // when
+    const users = await new BackstageCatalogReader(
+      catalog.asCatalogService(),
+      stubAuth(),
+    ).getUsersByRef(["user:default/departed"]);
+
+    // then
+    expect(users.size).toBe(0);
   });
 });

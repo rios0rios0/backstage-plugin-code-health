@@ -8,6 +8,8 @@ import {
   codeHealthCoverageApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
+  codeHealthIdentitiesApiRef,
+  codeHealthIntegrationsApiRef,
   codeHealthRepositoriesApiRef,
   codeHealthTimeSeriesApiRef,
 } from "../src/main/api_refs";
@@ -16,6 +18,8 @@ import { StubAppThemeApi } from "./doubles/stub_app_theme_api";
 import { StubCoverageService } from "./doubles/stub_coverage_service";
 import { StubContributorService } from "./doubles/stub_contributor_service";
 import { StubDashboardService } from "./doubles/stub_dashboard_service";
+import { StubIdentityService } from "./doubles/stub_identity_service";
+import { StubIntegrationsService } from "./doubles/stub_integrations_service";
 import { StubTimeSeriesService } from "./doubles/stub_time_series_service";
 
 /**
@@ -33,6 +37,8 @@ const renderPage = (coverageService: StubCoverageService) =>
         [codeHealthRepositoriesApiRef, new StubDashboardService().withRepositories([])],
         [codeHealthContributorsApiRef, new StubContributorService().withContributors([])],
         [codeHealthTimeSeriesApiRef, new StubTimeSeriesService()],
+        [codeHealthIntegrationsApiRef, new StubIntegrationsService()],
+        [codeHealthIdentitiesApiRef, new StubIdentityService()],
       ]}
     >
       <Routes>

@@ -29,6 +29,8 @@ describe("codeHealthPlugin", () => {
       "plugin.code-health.config",
       "plugin.code-health.contributors",
       "plugin.code-health.coverage",
+      "plugin.code-health.identities",
+      "plugin.code-health.integrations",
       "plugin.code-health.repositories",
       "plugin.code-health.time-series",
     ]);

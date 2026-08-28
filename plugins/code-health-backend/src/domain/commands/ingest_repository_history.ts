@@ -11,6 +11,8 @@ import type {
   CodeHealthStore,
   TrackedRepositoryWithState,
 } from "../repositories/code_health_store";
+import type { IdentityObserver, ObservedIdentity } from "../services/identity_resolver";
+import { normalizeSourceKey } from "../entities/identity";
 import type { VcsCollector } from "../services/vcs_collector";
 
 /**
@@ -37,9 +39,45 @@ export interface IngestRepositoryHistoryOptions {
   readonly store: CodeHealthStore;
   /** Collector per platform, so a new platform is a map entry rather than a branch. */
   readonly collectors: ReadonlyMap<Platform, VcsCollector>;
+  readonly identities: IdentityObserver;
   readonly settings: IngestionSettings;
   readonly logger: LoggerService;
 }
+
+/**
+ * The distinct commit authors and reviewers a window turned up.
+ *
+ * Recorded here rather than derived later with a `SELECT DISTINCT actor_key`
+ * over the event table, whose cost grows with the whole history while this is
+ * bounded by the window that was just fetched. It is also the only way the
+ * Identities screen can offer somebody to link before anybody has selected a
+ * window that happens to contain them.
+ */
+const actorsIn = (events: readonly CodeHealthEvent[]): ObservedIdentity[] => {
+  const byKey = new Map<string, ObservedIdentity>();
+
+  for (const event of events) {
+    if (!event.actorKey) continue;
+    const sourceKey = normalizeSourceKey(event.actorKey);
+    const existing = byKey.get(sourceKey);
+    // A later event wins only when it carries something the earlier one did
+    // not: providers omit the display name on some event kinds, and letting a
+    // nameless review overwrite a named commit loses the only name there is.
+    byKey.set(sourceKey, {
+      source: "vcs",
+      sourceKey,
+      displayName: event.actorName ?? existing?.displayName ?? null,
+      // Azure DevOps identifies a commit author by e-mail, which is exactly the
+      // evidence the automatic linking needs; GitHub reports a login and this
+      // stays null, which is why those accounts wait for a human.
+      email: sourceKey.includes("@") ? sourceKey : (existing?.email ?? null),
+      avatarUrl: event.actorAvatarUrl ?? existing?.avatarUrl ?? null,
+      profileUrl: existing?.profileUrl ?? null,
+    });
+  }
+
+  return [...byKey.values()];
+};
 
 /**
  * The background actor.
@@ -214,6 +252,8 @@ export class IngestRepositoryHistory {
       now: input.now,
     });
 
+    await this.options.identities.observe(actorsIn(collected.events), input.now);
+
     return collected.events.length;
   }
 
@@ -248,6 +288,8 @@ export class IngestRepositoryHistory {
       status: nextCursor <= state.backfillFloor ? "complete" : "active",
       now: input.now,
     });
+
+    await this.options.identities.observe(actorsIn(collected.events), input.now);
 
     return collected.events.length;
   }

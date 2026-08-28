@@ -6,12 +6,16 @@ import {
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
+  codeHealthIdentitiesApiRef,
+  codeHealthIntegrationsApiRef,
   codeHealthRepositoriesApiRef,
   codeHealthTimeSeriesApiRef,
 } from "../../src/main/api_refs";
 import { Router } from "../../src/main/router";
 import { RepositoryBuilder } from "../builders/repository_builder";
 import { StubAppThemeApi } from "../doubles/stub_app_theme_api";
+import { StubIdentityService } from "../doubles/stub_identity_service";
+import { StubIntegrationsService } from "../doubles/stub_integrations_service";
 import { StubContributorService } from "../doubles/stub_contributor_service";
 import { StubCoverageService } from "../doubles/stub_coverage_service";
 import { StubDashboardService } from "../doubles/stub_dashboard_service";
@@ -23,6 +27,8 @@ const renderRouter = async (
     contributorService?: StubContributorService;
     coverageService?: StubCoverageService;
     timeSeriesService?: StubTimeSeriesService;
+    integrationsService?: StubIntegrationsService;
+    identityService?: StubIdentityService;
     /** Which tab to land on. Defaults to the root, which is Insights. */
     path?: string;
   } = {},
@@ -31,6 +37,8 @@ const renderRouter = async (
   const contributorService = overrides.contributorService ?? new StubContributorService();
   const coverageService = overrides.coverageService ?? new StubCoverageService();
   const timeSeriesService = overrides.timeSeriesService ?? new StubTimeSeriesService();
+  const integrationsService = overrides.integrationsService ?? new StubIntegrationsService();
+  const identityService = overrides.identityService ?? new StubIdentityService();
 
   await renderInTestApp(
     <TestApiProvider
@@ -41,6 +49,8 @@ const renderRouter = async (
         [codeHealthContributorsApiRef, contributorService],
         [codeHealthCoverageApiRef, coverageService],
         [codeHealthTimeSeriesApiRef, timeSeriesService],
+        [codeHealthIntegrationsApiRef, integrationsService],
+        [codeHealthIdentitiesApiRef, identityService],
       ]}
     >
       <Router />
@@ -48,7 +58,14 @@ const renderRouter = async (
     { routeEntries: [overrides.path ?? "/"] },
   );
 
-  return { dashboardService, contributorService, coverageService, timeSeriesService };
+  return {
+    dashboardService,
+    contributorService,
+    coverageService,
+    timeSeriesService,
+    integrationsService,
+    identityService,
+  };
 };
 
 describe("Router", () => {
@@ -88,10 +105,13 @@ describe("Router", () => {
     // The settings tab is gone: there is nothing left for a user to configure
     // now that credentials live in the backend's `integrations` block.
     const tabs = await screen.findAllByRole("tab");
+    // Identities sits last because it is maintenance rather than a measurement,
+    // even though what it decides shapes every tab in front of it.
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       "Insights",
       "Contributors",
       "Repositories",
+      "Identities",
     ]);
     expect(screen.queryByRole("tab", { name: "Settings" })).not.toBeInTheDocument();
   });

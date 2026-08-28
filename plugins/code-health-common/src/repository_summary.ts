@@ -1,12 +1,14 @@
 import type { ApiExposure } from "./api_exposure";
 import type { BadgeStatus } from "./badge_status";
 import type { ComplianceStatus } from "./compliance_status";
+import type { ConfluenceSpaceMetrics } from "./confluence_metrics";
+import type { JiraRepositoryMetrics } from "./jira_metrics";
 import type { DocumentationStatus } from "./documentation_status";
 import type { Platform } from "./platform";
 import type { Release } from "./release";
 import type { SonarMetrics } from "./sonar_metrics";
 import type { Tag } from "./tag";
-import type { WakaTimeMetrics } from "./wakatime_metrics";
+import type { WakaTimeProjectMetrics } from "./wakatime_metrics";
 import type { WorkflowStatus } from "./workflow_status";
 
 export type RepositoryVisibility = "PUBLIC" | "PRIVATE";
@@ -98,6 +100,15 @@ export interface RepositorySummary {
   readonly documentation: DocumentationStatus | null;
   readonly apiExposure: ApiExposure | null;
   readonly badgeStatus: BadgeStatus | null;
-  readonly wakaTimeMetrics: WakaTimeMetrics | null;
+  /**
+   * Coding time logged against the matching WakaTime project inside the window.
+   *
+   * Aggregated on read from the per-person day rows rather than stored on the
+   * snapshot: it is a question about a window, and a snapshot only knows about
+   * the day it was taken.
+   */
+  readonly wakaTimeMetrics: WakaTimeProjectMetrics | null;
+  readonly jiraMetrics: JiraRepositoryMetrics | null;
+  readonly confluenceMetrics: ConfluenceSpaceMetrics | null;
   readonly activity: RepositoryActivity;
 }

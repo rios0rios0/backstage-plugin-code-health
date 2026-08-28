@@ -144,7 +144,7 @@ describe("CodeHealthBackendClient", () => {
 
     // when / then
     await expect(client.refresh()).rejects.toThrow(
-      "code-health request to refresh failed with 403",
+      "code-health request to v1/refresh failed with 403",
     );
   });
 

@@ -18,6 +18,12 @@ application's existing **`integrations`** configuration, ingests a year of histo
 background job, and stores it in the Backstage database. The browser talks only to
 `/api/code-health` and holds no credential at all.
 
+Four optional integrations enrich that history and are absent unless configured: **Sonar** (through
+the community backend plugin), **WakaTime** (coding time and AI token counts), and **Jira** and
+**Confluence** (one Atlassian credential lights up both). They each identify people under their own
+account system, which is why a contributor row is a *person* rather than an account and why the
+**Identities** tab exists.
+
 All three packages share one version and are bumped together.
 
 ## Commands
@@ -56,13 +62,20 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 |---|---|
 | `src/plugin.ts` | `createBackendPlugin`, DI wiring, the three scheduled tasks |
 | `migrations/20260810000000_init.js` | The whole schema, portable Knex only |
+| `migrations/20260901000000_identities.js` | The person directory and the per-source measures table |
 | `src/infrastructure/repositories/knex_code_health_store.ts` | Persistence; commits events, fetched days and cursors in one transaction |
 | `src/infrastructure/http/provider_gateway.ts` | The single door every provider request passes through |
 | `src/domain/commands/discover_repositories.ts` | Catalog → tracked repositories |
 | `src/domain/commands/ingest_repository_history.ts` | The two-phase background actor |
-| `src/domain/commands/capture_repository_snapshots.ts` | Daily current-state capture |
+| `src/domain/commands/capture_repository_snapshots.ts` | Daily current-state capture, and every optional enricher's pass |
+| `src/domain/entities/person_directory.ts` | Which person an account belongs to, built per request from the link table |
+| `src/domain/commands/reconcile_identities.ts` | The one automatic link: an account whose e-mail matches a catalog `User` |
+| `src/domain/commands/link_identity.ts` / `list_identities.ts` | The Identities screen's read and its two writes |
 | `src/infrastructure/services/collectors/` | Azure DevOps and GitHub collectors |
-| `src/infrastructure/controllers/code_health_router.ts` | The read API |
+| `src/infrastructure/services/wakatime_enricher.ts` | Coding time and AI tokens, per member per day |
+| `src/infrastructure/services/atlassian/` | One client, the Jira enricher and the Confluence enricher |
+| `src/infrastructure/controllers/code_health_router.ts` | The read API, the capabilities probe and the identity links |
+| `docs/wakatime.md`, `docs/jira.md`, `docs/confluence.md` | What each integration measures, and what its provider cannot answer |
 
 ### Frontend (`plugins/code-health`)
 
@@ -71,9 +84,12 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | File | Purpose |
 |---|---|
 | `src/plugin.ts` / `src/alpha.tsx` | Legacy and declarative entry points |
-| `src/main/apis.ts` / `src/main/api_refs.ts` | `createApiFactory` wiring; one stateless client behind four data refs (repositories, contributors, coverage, time series), plus a separate config ref |
+| `src/main/apis.ts` / `src/main/api_refs.ts` | `createApiFactory` wiring; one stateless client behind six data refs (repositories, contributors, coverage, time series, integrations, identities), plus a separate config ref |
 | `src/infrastructure/http/code_health_backend_client.ts` | The only thing the browser talks to |
-| `src/main/router.tsx` | Page composition and the backend-reachability gate; Insights is the root tab |
+| `src/main/router.tsx` | Page composition, the backend-reachability gate and the capabilities probe; Insights is the root tab |
+| `src/presentation/pages/identities_page.tsx` | Attaching an account to a catalog `User` — the plugin's only write |
+| `src/presentation/components/columns/` | One column-group factory per integration, called only when its flag is set |
+| `src/presentation/components/insights/` | One Insights card set per integration, on the same terms |
 | `src/domain/entities/time_range.ts` | Which windows are offered, bounded by coverage — rolling ranges and calendar months |
 | `src/presentation/components/range_picker.tsx` | One control for both, so the two can never disagree |
 | `src/presentation/components/backfill_progress.tsx` | Why wider ranges are not available yet |
@@ -126,6 +142,47 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
   answer partially.
 - **A cursor moves only after its window is committed.** A failed window is retried rather than
   leaving a hole nothing later would notice.
+- **A contributor row is a person, not an account.** Commits arrive under a commit-author address
+  or a login, coding time under a WakaTime username, tickets under an Atlassian `accountId`, and
+  none of the three matches the others. Keyed by account, one human occupied three rows that each
+  held a third of the story. `PersonDirectory` resolves accounts through the link table on *read*,
+  never at collection time, which is what makes correcting a link retroactive across every window
+  ever collected. An account nobody has linked keys under `<source>:<sourceKey>` and keeps its own
+  row — hiding it would hide every bot, every service account and everybody nobody has linked yet,
+  which are exactly the rows that show the work is unfinished.
+- **Only an e-mail match links automatically.** It is the same rule the catalog itself uses to
+  decide who a `User` is. Everything weaker — a shared local part, an identical display name, a
+  username resembling a name — is *offered* as a ranked suggestion and applied only when a person
+  confirms it, because two people who share a surname would silently become one contributor and a
+  merge nobody asked for is far harder to notice than a row that stayed separate. A manual link is
+  never overwritten by the automatic rule; the store enforces that rather than trusting callers,
+  since reconciliation runs on every ingestion pass.
+- **Integration columns are gated on configuration, not on data.** `/v1/capabilities` reports which
+  integrations the backend was configured with, and each column group is a *factory* the table calls
+  only when its flag is set. Inferring it from whether a row carries a value cannot tell a
+  switched-off integration from one that is on and has not collected yet, and it makes a freshly
+  configured install look broken until the first nightly pass. The one exception is the WakaTime AI
+  column group, which is gated on the data as well — opting out of the AI figures is a supported way
+  to run WakaTime, and a screen of em dashes reads as a fault rather than a choice.
+- **WakaTime members hang off a dashboard, not off the organisation.** There is no
+  `/orgs/{org}/members`; the path is `/users/current/orgs/{org}/dashboards` → `/members` →
+  `/members/{memberId}/summaries`, and members are addressed by their **member id** rather than
+  their username. Getting that wrong returns empty summaries for everybody rather than failing.
+- **WakaTime is stored a day at a time; the whole window is re-read every run.** `summaries` answers
+  for an arbitrary span in one request per member, so asking for thirty days costs exactly what
+  asking for one costs — and re-reading repairs a day collected while somebody's editor was offline.
+  The AI figures come from `durations`, which takes a single date, so they cost one request per
+  member per day, are opt-in, and catch up a few days per run. AI history therefore accumulates
+  forwards rather than being backfilled, and a chart of it starting in the middle is the design.
+- **A repository's coding time is derived on read, never stored on the snapshot.** WakaTime measures
+  a person and a *project*; the time a repository received is the sum of what its people logged
+  against the matching project, which is a question about a window rather than about the day the
+  snapshot was taken.
+- **Jira is stored per day, Confluence per window.** Jira's enricher fetches the window's issues
+  once and slices them arithmetically, so a per-day breakdown costs nothing. Confluence's written
+  volume walks a page's version bodies, so slicing it per day would multiply the walks by the length
+  of the window — its figures describe a trailing window, and the columns say so rather than leaving
+  a reader to assume.
 - **Sonar, compliance and badge history cannot be backfilled.** No provider reports what they looked
   like last March, and the `sonarqube` plugin exposes no measures-history passthrough. Those series
   begin at the first snapshot after installation, and the UI has to say so.

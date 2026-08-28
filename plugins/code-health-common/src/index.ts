@@ -9,13 +9,47 @@
 
 export { CODE_HEALTH_API_VERSION, CODE_HEALTH_PLUGIN_ID } from "./api";
 export type {
+  GetCapabilitiesResponse,
   GetCoverageResponse,
   GetTimeSeriesResponse,
+  LinkIdentityRequest,
   ListContributorsResponse,
+  ListIdentitiesResponse,
   ListRepositoriesResponse,
   RefreshResponse,
   TimeWindow,
 } from "./api";
+
+export {
+  enabledIntegrations,
+  INTEGRATION_IDS,
+  isIntegrationId,
+  NO_INTEGRATIONS,
+  parseIntegrationCapabilities,
+} from "./integrations";
+export type { IntegrationCapabilities, IntegrationId } from "./integrations";
+
+export {
+  emailLocalPart,
+  IDENTITY_SOURCE_LABELS,
+  IDENTITY_SOURCES,
+  identityMatchScore,
+  isIdentitySource,
+  MAX_SUGGESTIONS,
+  normalizeIdentityText,
+  suggestIdentityMatches,
+  SUGGESTION_FLOOR,
+} from "./identity";
+export type {
+  ContributorIdentity,
+  DirectoryUser,
+  IdentityLink,
+  IdentityLinkOrigin,
+  IdentityRow,
+  IdentitySource,
+  IdentitySuggestion,
+  ObservedIdentity,
+} from "./identity";
 
 export {
   API_SERVING_TYPES,
@@ -39,6 +73,53 @@ export type {
   DocumentationState,
   DocumentationStatus,
 } from "./documentation_status";
+
+export {
+  confluenceContributions,
+  confluenceSpaceIsActive,
+  confluenceSpacesContributedTo,
+  confluenceStaleShare,
+  confluenceViewsPerPage,
+  hasConfluenceActivity,
+  mergeConfluenceContributorMetrics,
+} from "./confluence_metrics";
+export type {
+  ConfluenceAnalyticsState,
+  ConfluenceContributorMetrics,
+  ConfluencePageReference,
+  ConfluenceSpaceMetrics,
+  ConfluenceSpaceReference,
+  ConfluenceVolumeUnit,
+  ConfluenceWindow,
+} from "./confluence_metrics";
+
+export {
+  addIssueTypeCounts,
+  buildDurationStats,
+  classifyIssueType,
+  computeBugRatio,
+  EMPTY_JIRA_INTERACTIONS,
+  EMPTY_JIRA_ISSUE_TYPES,
+  formatHours,
+  interactionsAreComplete,
+  interactionTotal,
+  meanHours,
+  mergeJiraContributorMetrics,
+  percentileHours,
+  totalIssueTypes,
+} from "./jira_metrics";
+export type {
+  JiraContributorMetrics,
+  JiraDurationStats,
+  JiraDurationTotals,
+  JiraInteractions,
+  JiraIssueTypeBucket,
+  JiraIssueTypeCounts,
+  JiraOpenIssue,
+  JiraPriorityCount,
+  JiraRepositoryMetrics,
+  JiraWindow,
+} from "./jira_metrics";
 
 export { computeRate } from "./contributor_summary";
 export type { ChurnUnit, ContributorSummary } from "./contributor_summary";
@@ -69,8 +150,25 @@ export type { Tag } from "./tag";
 export { isTimeSeriesBucket, TIME_SERIES_BUCKETS } from "./time_series";
 export type { TimeSeriesBucket, TimeSeriesPoint } from "./time_series";
 
-export { formatDuration } from "./wakatime_metrics";
-export type { WakaTimeMetrics } from "./wakatime_metrics";
+export {
+  aiAuthorshipShare,
+  breakdownTotal,
+  formatDuration,
+  formatTokens,
+  mergeBreakdowns,
+  mergeDailyTotals,
+  mergeWakaTimeMetrics,
+  topBreakdownName,
+  totalModelCost,
+} from "./wakatime_metrics";
+export type {
+  WakaTimeAiMetrics,
+  WakaTimeBreakdownItem,
+  WakaTimeDayTotal,
+  WakaTimeMetrics,
+  WakaTimeProjectMetrics,
+  WakaTimeSeriesPoint,
+} from "./wakatime_metrics";
 
 export { CI_STATES, isCIState } from "./workflow_status";
 export type { CIState, WorkflowStatus } from "./workflow_status";

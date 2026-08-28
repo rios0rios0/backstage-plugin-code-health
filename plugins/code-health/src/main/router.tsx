@@ -10,14 +10,18 @@ import { useApi } from "@backstage/core-plugin-api";
 import Box from "@material-ui/core/Box";
 import type { ReactNode } from "react";
 import { ThemeToggleButton } from "../presentation/components/theme_toggle_button";
+import { useCapabilities } from "../presentation/hooks/use_capabilities";
 import { useCoverage } from "../presentation/hooks/use_coverage";
 import { ContributorsPage } from "../presentation/pages/contributors_page";
 import { DashboardPage } from "../presentation/pages/dashboard_page";
+import { IdentitiesPage } from "../presentation/pages/identities_page";
 import { InsightsPage } from "../presentation/pages/insights_page";
 import {
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
+  codeHealthIdentitiesApiRef,
+  codeHealthIntegrationsApiRef,
   codeHealthRepositoriesApiRef,
   codeHealthTimeSeriesApiRef,
 } from "./api_refs";
@@ -55,6 +59,11 @@ const TabBody = ({ error, children }: { error: string | null; children: ReactNod
  * Insights is the landing tab. It is the only one that answers a question about
  * the fleet rather than about one row of it, so it is what someone opening the
  * plugin cold wants first; contributors and repositories are the drill-down.
+ *
+ * Identities sits last because it is maintenance rather than a measurement:
+ * somebody goes there once after installation and then only when a new account
+ * turns up. What it decides, though, shapes every other tab — a contributor row
+ * is a person, and it is where a person is defined.
  */
 export const Router = () => {
   const config = useApi(codeHealthConfigApiRef);
@@ -62,7 +71,12 @@ export const Router = () => {
   const contributorService = useApi(codeHealthContributorsApiRef);
   const coverageService = useApi(codeHealthCoverageApiRef);
   const timeSeriesService = useApi(codeHealthTimeSeriesApiRef);
+  const integrationsService = useApi(codeHealthIntegrationsApiRef);
+  const identityService = useApi(codeHealthIdentitiesApiRef);
   const coverage = useCoverage(coverageService);
+  // Asked once, alongside the reachability probe, so no view has to decide for
+  // itself whether an empty column means "off" or "not collected yet".
+  const { capabilities } = useCapabilities(integrationsService);
 
   return (
     <Page themeId="tool">
@@ -84,6 +98,7 @@ export const Router = () => {
                 timeSeriesService={timeSeriesService}
                 coverage={coverage}
                 config={config}
+                capabilities={capabilities}
               />
             </TabBody>
           </TabbedLayout.Route>
@@ -94,6 +109,7 @@ export const Router = () => {
                 contributorService={contributorService}
                 coverage={coverage}
                 config={config}
+                capabilities={capabilities}
               />
             </TabBody>
           </TabbedLayout.Route>
@@ -104,6 +120,16 @@ export const Router = () => {
                 dashboardService={dashboardService}
                 coverage={coverage}
                 config={config}
+                capabilities={capabilities}
+              />
+            </TabBody>
+          </TabbedLayout.Route>
+
+          <TabbedLayout.Route path="/identities" title="Identities">
+            <TabBody error={coverage.error}>
+              <IdentitiesPage
+                identityService={identityService}
+                capabilities={capabilities}
               />
             </TabBody>
           </TabbedLayout.Route>

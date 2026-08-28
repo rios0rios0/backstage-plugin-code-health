@@ -1,3 +1,4 @@
+import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
 import type { UseCoverageResult } from "../../../src/presentation/hooks/use_coverage";
@@ -20,6 +21,7 @@ const renderPage = (service: StubContributorService, enabled = true) =>
       contributorService={service}
       coverage={coverageResult()}
       config={DEFAULT_CODE_HEALTH_CONFIG}
+      capabilities={NO_INTEGRATIONS}
       enabled={enabled}
     />,
   );

@@ -2,14 +2,23 @@ import type { HttpAuthService, SchedulerService } from "@backstage/backend-plugi
 import { InputError, NotFoundError } from "@backstage/errors";
 import {
   CODE_HEALTH_API_VERSION,
+  isIdentitySource,
   isTimeSeriesBucket,
+  type IdentitySource,
+  type IntegrationCapabilities,
   type TimeSeriesBucket,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import express from "express";
 import Router from "express-promise-router";
 import { z } from "zod";
 import type { GetRepositoryTimeSeries } from "../../domain/commands/get_repository_time_series";
+import {
+  UnknownIdentityError,
+  UnknownUserError,
+  type LinkIdentity,
+} from "../../domain/commands/link_identity";
 import type { ListContributorSummaries } from "../../domain/commands/list_contributor_summaries";
+import type { ListIdentities } from "../../domain/commands/list_identities";
 import type { ListRepositorySummaries } from "../../domain/commands/list_repository_summaries";
 import type { CodeHealthStore } from "../../domain/repositories/code_health_store";
 
@@ -64,6 +73,47 @@ const readBucket = (value: unknown): TimeSeriesBucket => {
   return value;
 };
 
+const linkSchema = z.object({
+  source: z.string(),
+  sourceKey: z.string().min(1),
+  entityRef: z.string().min(1),
+});
+
+/**
+ * Reads the `source` query parameter, which narrows the Identities screen to
+ * one system. An unrecognised value is rejected rather than ignored: silently
+ * returning every source would look like a filter that does not work.
+ */
+const readSources = (value: unknown): readonly IdentitySource[] | undefined => {
+  if (value === undefined) return undefined;
+  const values = Array.isArray(value) ? value : [value];
+  const sources = values.filter(isIdentitySource);
+  if (sources.length !== values.length) {
+    throw new InputError("`source` must be one of vcs, wakatime, jira or confluence");
+  }
+  return sources;
+};
+
+/**
+ * Turns the linking command's own refusals into HTTP.
+ *
+ * The command throws plain domain errors so it stays testable without a web
+ * framework; mapping them lives here, where the transport does.
+ */
+const asHttpError = (error: unknown): unknown => {
+  if (error instanceof UnknownIdentityError || error instanceof UnknownUserError) {
+    return new NotFoundError(error.message);
+  }
+  return error;
+};
+
+const readLinked = (value: unknown): boolean | undefined => {
+  if (value === undefined) return undefined;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new InputError("`linked` must be true or false");
+};
+
 export interface CodeHealthRouterOptions {
   readonly store: CodeHealthStore;
   readonly httpAuth: HttpAuthService;
@@ -71,6 +121,9 @@ export interface CodeHealthRouterOptions {
   readonly repositories: ListRepositorySummaries;
   readonly contributors: ListContributorSummaries;
   readonly timeSeries: GetRepositoryTimeSeries;
+  readonly identities: ListIdentities;
+  readonly links: LinkIdentity;
+  readonly capabilities: IntegrationCapabilities;
   readonly refreshableTaskIds: readonly string[];
 }
 
@@ -90,6 +143,73 @@ export const createCodeHealthRouter = (options: CodeHealthRouterOptions): expres
   router.get("/health", (_request, response) => {
     response.json({ status: "ok" });
   });
+
+  // Asked once before anything is drawn, so a column for a switched-off
+  // integration is never built rather than being built and left empty.
+  router.get(`/${version}/capabilities`, (_request, response) => {
+    response.json({ integrations: options.capabilities });
+  });
+
+  router.get(`/${version}/identities`, async (request, response) => {
+    const sources = readSources(request.query.source);
+    const linked = readLinked(request.query.linked);
+
+    response.json({
+      items: await options.identities.run({
+        ...(sources === undefined ? {} : { sources }),
+        ...(linked === undefined ? {} : { linked }),
+      }),
+    });
+  });
+
+  /**
+   * Attaches an account to a catalog user.
+   *
+   * `PUT` rather than `POST` because it is idempotent: an account has at most
+   * one link, and linking the same pair twice has to mean the same thing as
+   * linking it once.
+   */
+  router.put(`/${version}/identities/links`, async (request, response) => {
+    // A signed-in user, not a service. A manual link is a human's statement
+    // that two accounts are the same person, and it outranks everything the
+    // plugin infers — so who made it is recorded, and a service account cannot.
+    const credentials = await options.httpAuth.credentials(request, { allow: ["user"] });
+
+    const parsed = linkSchema.safeParse(request.body);
+    if (!parsed.success) throw new InputError(parsed.error.message);
+    if (!isIdentitySource(parsed.data.source)) {
+      throw new InputError("`source` must be one of vcs, wakatime, jira or confluence");
+    }
+
+    try {
+      await options.links.link({
+        source: parsed.data.source,
+        sourceKey: parsed.data.sourceKey,
+        entityRef: parsed.data.entityRef,
+        linkedBy: credentials.principal.userEntityRef,
+        now: new Date(),
+      });
+    } catch (error) {
+      throw asHttpError(error);
+    }
+
+    response.status(204).end();
+  });
+
+  router.delete(
+    `/${version}/identities/links/:source/:sourceKey`,
+    async (request, response) => {
+      await options.httpAuth.credentials(request, { allow: ["user"] });
+
+      const { source, sourceKey } = request.params;
+      if (!isIdentitySource(source)) {
+        throw new InputError("`source` must be one of vcs, wakatime, jira or confluence");
+      }
+
+      await options.links.unlink({ source, sourceKey });
+      response.status(204).end();
+    },
+  );
 
   router.get(`/${version}/coverage`, async (_request, response) => {
     const counts = await options.store.getCoverage();

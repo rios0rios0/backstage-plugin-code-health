@@ -4,8 +4,9 @@ import { ListRepositorySummaries } from "../../../src/domain/commands/list_repos
 import type { RepositorySnapshotPayload } from "../../../src/domain/entities/repository_snapshot";
 import { DiscoveredRepositoryBuilder } from "../../builders/discovered_repository_builder";
 import { EventBuilder } from "../../builders/event_builder";
+import { WakaTimeMetricsBuilder } from "../../builders/wakatime_metrics_builder";
 import { InMemoryCodeHealthStore } from "../../doubles/in_memory_code_health_store";
-import { StubCatalogReader } from "../../doubles/stub_catalog_reader";
+import { StubDirectoryReader } from "../../doubles/stub_directory_reader";
 
 const NOW = new Date("2026-08-10T12:00:00.000Z");
 const WINDOW = {
@@ -30,7 +31,8 @@ const aSnapshotPayload = (
   complianceStatus: null,
   badgeStatus: null,
   sonarMetrics: null,
-  wakaTimeMetrics: null,
+  jiraMetrics: null,
+  confluenceMetrics: null,
   repositoryFiles: null,
   ...overrides,
 });
@@ -177,11 +179,13 @@ describe("ListContributorSummaries", () => {
     });
 
     // when
-    const contributors = await new ListContributorSummaries(store).run(WINDOW);
+    const contributors = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributors).toHaveLength(2);
-    expect(contributors[0]).toMatchObject({ key: "dev@example.com", commits: 2 });
+    // The key is the account, source-qualified: a row is a person, and an
+    // account nobody has linked is a person of one account.
+    expect(contributors[0]).toMatchObject({ key: "vcs:dev@example.com", commits: 2 });
   });
 
   it("should aggregate the Sonar metrics of the repositories a contributor touched", async () => {
@@ -210,7 +214,7 @@ describe("ListContributorSummaries", () => {
     }
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributor?.sonarMetrics).toEqual({
@@ -251,13 +255,13 @@ describe("ListContributorSummaries", () => {
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributor?.sonarMetrics).toBeNull();
   });
 
-  it("should resolve a contributor to the catalog user with the same e-mail", async () => {
+  it("should show the catalog's name and photo for a linked account", async () => {
     // given
     // The catalog is the organisation's record of who someone is, so its display
     // name and picture win over whatever the provider attached to the commit.
@@ -270,31 +274,40 @@ describe("ListContributorSummaries", () => {
       status: "active",
       now: NOW,
     });
-    const catalog = new StubCatalogReader().withUsers({
-      "dev@example.com": {
+    await store.saveIdentityLink({
+      source: "vcs",
+      sourceKey: "dev@example.com",
+      entityRef: "user:default/dev_example.com",
+      origin: "catalog-email",
+      linkedBy: null,
+      linkedAt: NOW,
+    });
+    const directory = new StubDirectoryReader([
+      {
         entityRef: "user:default/dev_example.com",
         displayName: "Dev Eloper",
+        email: "dev@example.com",
         picture: "https://example.com/dev.png",
       },
-    });
+    ]);
 
     // when
-    const [contributor] = await new ListContributorSummaries(store, catalog).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store, directory }).run(WINDOW);
 
     // then
     expect(contributor).toMatchObject({
+      key: "user:default/dev_example.com",
       entityRef: "user:default/dev_example.com",
       displayName: "Dev Eloper",
       avatarUrl: "https://example.com/dev.png",
     });
   });
 
-  it("should match a catalog user seeded under a mixed-case address", async () => {
+  it("should merge two accounts linked to one person onto a single row", async () => {
     // given
-    // The catalog contract keys results by the lowercased address, so a user
-    // whose entity spells it differently still has to resolve. This pins the
-    // double to that contract — one that normalised only the query would
-    // silently disagree with the real adapter.
+    // The whole reason a row is a person rather than an account: commits arrive
+    // under one address and coding time under a WakaTime username, and keyed by
+    // account the same human occupies two rows holding half the story each.
     const { store, discovered } = await seed();
     const [repository] = discovered;
     await store.commitIngestion({
@@ -304,25 +317,69 @@ describe("ListContributorSummaries", () => {
       status: "active",
       now: NOW,
     });
-    const catalog = new StubCatalogReader().withUsers({
-      "Dev@Example.COM": {
-        entityRef: "user:default/dev_example.com",
-        displayName: "Dev Eloper",
-        picture: null,
-      },
+    await store.saveContributorMetrics({
+      source: "wakatime",
+      day: "2026-08-09",
+      capturedAt: NOW,
+      metrics: new Map([
+        ["jrios", WakaTimeMetricsBuilder.aDay("2026-08-09").withSeconds(7200).build()],
+      ]),
+    });
+    for (const identity of [
+      { source: "vcs" as const, sourceKey: "dev@example.com" },
+      { source: "wakatime" as const, sourceKey: "jrios" },
+    ]) {
+      await store.saveIdentityLink({
+        ...identity,
+        entityRef: "user:default/dev",
+        origin: "manual",
+        linkedBy: "user:default/admin",
+        linkedAt: NOW,
+      });
+    }
+
+    // when
+    const contributors = await new ListContributorSummaries({ store }).run(WINDOW);
+
+    // then
+    expect(contributors).toHaveLength(1);
+    expect(contributors[0]?.commits).toBe(1);
+    expect(contributors[0]?.wakaTimeMetrics?.totalSeconds).toBe(7200);
+    expect(contributors[0]?.identities.map((identity) => identity.source).sort()).toEqual([
+      "vcs",
+      "wakatime",
+    ]);
+  });
+
+  it("should give somebody with coding time and no commits a row of their own", async () => {
+    // given
+    // A week spent in an editor without a single commit is worth seeing, and a
+    // row that only appears once code lands cannot show it.
+    const { store } = await seed();
+    await store.saveContributorMetrics({
+      source: "wakatime",
+      day: "2026-08-09",
+      capturedAt: NOW,
+      metrics: new Map([
+        ["quiet", WakaTimeMetricsBuilder.aDay("2026-08-09").withSeconds(3600).build()],
+      ]),
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store, catalog).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
-    expect(contributor.entityRef).toBe("user:default/dev_example.com");
+    expect(contributor?.key).toBe("wakatime:quiet");
+    expect(contributor?.commits).toBe(0);
+    expect(contributor?.wakaTimeMetrics?.totalSeconds).toBe(3600);
+    expect(contributor?.churnUnit).toBe("none");
   });
 
-  it("should leave a contributor unlinked when no catalog user matches", async () => {
+  it("should leave an account nobody has linked on a row of its own", async () => {
     // given
     // Bots, service accounts and commits from a personal address have no entity.
-    // Guessing one by display name would silently merge two different people.
+    // Hiding them would hide exactly the rows that show the linking still needs
+    // doing, and guessing one by display name would merge two different people.
     const { store, discovered } = await seed();
     const [repository] = discovered;
     await store.commitIngestion({
@@ -332,23 +389,26 @@ describe("ListContributorSummaries", () => {
       status: "active",
       now: NOW,
     });
-    const catalog = new StubCatalogReader().withUsers({});
 
     // when
-    const [contributor] = await new ListContributorSummaries(store, catalog).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({
+      store,
+      directory: new StubDirectoryReader(),
+    }).run(WINDOW);
 
     // then
     expect(contributor?.entityRef).toBeNull();
-    expect(contributor?.key).toBe("bot@ci.local");
+    expect(contributor?.key).toBe("vcs:bot@ci.local");
     // The display name falls back to what the provider reported on the commit,
-    // which is the only name available for an identity the catalog does not know.
+    // which is the only name available for an identity nothing else knows.
     expect(contributor?.displayName).toBe("Dev Example");
   });
 
-  it("should look up only the contributors present in the window", async () => {
+  it("should look up only the people on the page, and only the linked ones", async () => {
     // given
     // The directory is routinely thousands of entities and this runs on every
-    // dashboard load, so the query must be bounded by who actually committed.
+    // dashboard load, so the fetch must be bounded by who was actually active —
+    // and an unlinked account has no reference to fetch at all.
     const { store, discovered } = await seed();
     const [repository] = discovered;
     await store.commitIngestion({
@@ -361,14 +421,24 @@ describe("ListContributorSummaries", () => {
       status: "active",
       now: NOW,
     });
-    const catalog = new StubCatalogReader().withUsers({});
+    await store.saveIdentityLink({
+      source: "vcs",
+      sourceKey: "one@example.com",
+      entityRef: "user:default/one",
+      origin: "catalog-email",
+      linkedBy: null,
+      linkedAt: NOW,
+    });
+    const directory = new StubDirectoryReader();
 
     // when
-    await new ListContributorSummaries(store, catalog).run(WINDOW);
+    await new ListContributorSummaries({ store, directory }).run(WINDOW);
 
     // then
-    expect(catalog.emailLookups).toHaveLength(1);
-    expect([...catalog.emailLookups[0]].sort()).toEqual(["one@example.com", "two@example.com"]);
+    expect(directory.refLookups).toEqual([["user:default/one"]]);
+    // Never the whole directory: that listing exists for the Identities screen,
+    // where somebody deliberately asked for it.
+    expect(directory.listUserCalls).toBe(0);
   });
 
   it("should sort the busiest contributor first", async () => {
@@ -388,12 +458,12 @@ describe("ListContributorSummaries", () => {
     });
 
     // when
-    const contributors = await new ListContributorSummaries(store).run(WINDOW);
+    const contributors = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributors.map((contributor) => contributor.key)).toEqual([
-      "busy@example.com",
-      "quiet@example.com",
+      "vcs:busy@example.com",
+      "vcs:quiet@example.com",
     ]);
   });
 
@@ -414,7 +484,7 @@ describe("ListContributorSummaries", () => {
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributor).toMatchObject({
@@ -441,7 +511,7 @@ describe("ListContributorSummaries", () => {
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributor.pipelineSuccessRate).toBe(50);
@@ -469,7 +539,7 @@ describe("ListContributorSummaries", () => {
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributor.linesOfCode).toBe(0);
@@ -490,7 +560,7 @@ describe("ListContributorSummaries", () => {
     }
 
     // when
-    const contributors = await new ListContributorSummaries(store).run({
+    const contributors = await new ListContributorSummaries({ store }).run({
       ...WINDOW,
       repositoryId: discovered[0].id,
     });
@@ -500,33 +570,34 @@ describe("ListContributorSummaries", () => {
     expect(contributors[0].repositories).toBe(1);
   });
 
-  it("should attach WakaTime measures on the shared contributor key", async () => {
+  it("should sum a person's WakaTime days across the window", async () => {
     // given
-    // Both sides normalise the identity the same way, which is what lets the
-    // join happen without an identity mapping table.
-    const { store, discovered } = await seed();
-    const [repository] = discovered;
-    await store.commitIngestion({
-      repositoryId: repository.id,
-      events: [commit(repository.id, "2026-08-09T10:00:00.000Z", "dev@example.com").build()],
-      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
-      status: "active",
-      now: NOW,
-    });
-    await store.saveContributorMetrics({
-      day: "2026-08-10",
-      capturedAt: NOW,
-      metrics: new Map([["dev@example.com", { totalSeconds: 3600, dailyAverageSeconds: 120 }]]),
-    });
+    // Stored per day so a past month can be answered; the row has to add them
+    // back up rather than showing whichever day happened to be last.
+    const { store } = await seed();
+    for (const [day, seconds] of [
+      ["2026-08-09", 3600],
+      ["2026-08-10", 1800],
+      // Outside the window, and must not be counted.
+      ["2026-08-12", 9999],
+    ] as const) {
+      await store.saveContributorMetrics({
+        source: "wakatime",
+        day,
+        capturedAt: NOW,
+        metrics: new Map([
+          ["dev", WakaTimeMetricsBuilder.aDay(day).withSeconds(seconds).build()],
+        ]),
+      });
+    }
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
-    expect(contributor.wakaTimeMetrics).toEqual({
-      totalSeconds: 3600,
-      dailyAverageSeconds: 120,
-    });
+    expect(contributor?.wakaTimeMetrics?.totalSeconds).toBe(5400);
+    expect(contributor?.wakaTimeMetrics?.measuredDays).toBe(2);
+    expect(contributor?.wakaTimeMetrics?.dailyAverageSeconds).toBe(2700);
   });
 
   it("should count the pull requests a contributor opened and merged", async () => {
@@ -546,7 +617,7 @@ describe("ListContributorSummaries", () => {
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     // An abandoned pull request counts towards neither, so neither number is
@@ -569,7 +640,7 @@ describe("ListContributorSummaries", () => {
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     // The release still names them as a contributor to the window, but it is
@@ -597,7 +668,7 @@ describe("ListContributorSummaries", () => {
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributor.displayName).toBe("Dev Example");
@@ -623,7 +694,7 @@ describe("ListContributorSummaries", () => {
     });
 
     // when
-    const contributors = await new ListContributorSummaries(store).run(WINDOW);
+    const contributors = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributors).toEqual([]);
@@ -917,7 +988,7 @@ describe("ListContributorSummaries churn unit", () => {
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributor.churnUnit).toBe("lines");
@@ -947,7 +1018,7 @@ describe("ListContributorSummaries churn unit", () => {
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     expect(contributor.churnUnit).toBe("files");
@@ -974,7 +1045,7 @@ describe("ListContributorSummaries churn unit", () => {
     });
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     // "The provider said zero" and "the provider never said" are different
@@ -1014,7 +1085,7 @@ describe("ListContributorSummaries churn unit", () => {
     }
 
     // when
-    const [contributor] = await new ListContributorSummaries(store).run(WINDOW);
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
     // The more precise figure wins where it exists, rather than degrading the

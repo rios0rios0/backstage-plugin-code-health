@@ -1,5 +1,6 @@
 import { ConfigReader } from "@backstage/config";
 import type { JsonObject } from "@backstage/types";
+import { integrationCapabilitiesOf } from "../../../src/domain/entities/ingestion_settings";
 import { readCodeHealthSettings } from "../../../src/infrastructure/services/backstage_settings_reader";
 
 const read = (data: JsonObject) => readCodeHealthSettings(new ConfigReader(data));
@@ -20,9 +21,153 @@ describe("readCodeHealthSettings", () => {
     expect(settings.sonar.enabled).toBe(false);
     expect(settings.wakaTime).toEqual({
       organization: null,
+      dashboard: null,
       apiKey: null,
       baseUrl: "https://wakatime.com/api/v1",
+      historyDays: 30,
+      // Off by default: coding time for a whole window costs one request per
+      // member, while the AI figures cost one per member per day.
+      includeAiMetrics: false,
+      aiDaysPerRun: 3,
     });
+    expect(settings.atlassian).toEqual({
+      baseUrl: null,
+      email: null,
+      apiToken: null,
+      maxResultsPerRun: 2000,
+      historyDays: 90,
+      // Both products default to on: configuring the site is the whole of the
+      // work, and an operator who pastes a token wants both.
+      jira: { enabled: true, storyPointsField: null },
+      confluence: { enabled: true, spaceKeys: [] },
+    });
+  });
+
+  it("should report nothing enabled when no integration is configured", () => {
+    // given / when
+    const capabilities = integrationCapabilitiesOf(read({}));
+
+    // then
+    expect(capabilities).toEqual({ wakatime: false, jira: false, confluence: false });
+  });
+
+  it("should light up WakaTime on the key alone", () => {
+    // given
+    // The organisation is optional: with none, the key's own account is
+    // measured, which is the useful behaviour on a personal plan.
+    const settings = read({ codeHealth: { wakaTime: { apiKey: "fixture-token-placeholder" } } });
+
+    // when / then
+    expect(integrationCapabilitiesOf(settings).wakatime).toBe(true);
+  });
+
+  it("should light up both Atlassian products from one credential", () => {
+    // given
+    // The behaviour the whole `atlassian` block exists for: they are the same
+    // account and the same token, and asking for it twice only creates a way
+    // for the two to drift apart.
+    const settings = read({
+      codeHealth: {
+        atlassian: {
+          baseUrl: "https://acme.atlassian.net/",
+          email: "bot@acme.com",
+          apiToken: "fixture-token-placeholder",
+        },
+      },
+    });
+
+    // when
+    const capabilities = integrationCapabilitiesOf(settings);
+
+    // then
+    expect(capabilities).toMatchObject({ jira: true, confluence: true });
+    // And the trailing slash is stripped, so a path can always be appended.
+    expect(settings.atlassian.baseUrl).toBe("https://acme.atlassian.net");
+  });
+
+  it("should let one Atlassian product be switched off without the other", () => {
+    // given
+    const settings = read({
+      codeHealth: {
+        atlassian: {
+          baseUrl: "https://acme.atlassian.net",
+          email: "bot@acme.com",
+          apiToken: "fixture-token-placeholder",
+          confluence: { enabled: false },
+        },
+      },
+    });
+
+    // when / then
+    expect(integrationCapabilitiesOf(settings)).toEqual({
+      wakatime: false,
+      jira: true,
+      confluence: false,
+    });
+  });
+
+  it("should treat an Atlassian site with no token as not configured", () => {
+    // given
+    // Half a credential collects nothing and would light up columns that stay
+    // permanently empty.
+    const settings = read({
+      codeHealth: { atlassian: { baseUrl: "https://acme.atlassian.net" } },
+    });
+
+    // when / then
+    expect(integrationCapabilitiesOf(settings)).toMatchObject({ jira: false, confluence: false });
+  });
+
+  it("should read the WakaTime collection settings", () => {
+    // given / when
+    const settings = read({
+      codeHealth: {
+        wakaTime: {
+          organization: "acme",
+          dashboard: "Platform",
+          apiKey: "fixture-token-placeholder",
+          baseUrl: "https://wakapi.internal/api/v1/",
+          historyDays: 90,
+          includeAiMetrics: true,
+          aiDaysPerRun: 7,
+        },
+      },
+    });
+
+    // then
+    expect(settings.wakaTime).toEqual({
+      organization: "acme",
+      dashboard: "Platform",
+      apiKey: "fixture-token-placeholder",
+      baseUrl: "https://wakapi.internal/api/v1",
+      historyDays: 90,
+      includeAiMetrics: true,
+      aiDaysPerRun: 7,
+    });
+  });
+
+  it("should read the Atlassian collection settings", () => {
+    // given / when
+    const settings = read({
+      codeHealth: {
+        atlassian: {
+          baseUrl: "https://acme.atlassian.net",
+          email: "bot@acme.com",
+          apiToken: "fixture-token-placeholder",
+          maxResultsPerRun: 500,
+          historyDays: 30,
+          jira: { enabled: true, storyPointsField: "customfield_10016" },
+          confluence: { enabled: true, spaceKeys: ["ENG", "  ", "OPS"] },
+        },
+      },
+    });
+
+    // then
+    expect(settings.atlassian.maxResultsPerRun).toBe(500);
+    expect(settings.atlassian.historyDays).toBe(30);
+    expect(settings.atlassian.jira.storyPointsField).toBe("customfield_10016");
+    // A blank entry is dropped rather than becoming a space key nothing matches.
+    expect(settings.atlassian.confluence.spaceKeys).toEqual(["ENG", "OPS"]);
   });
 
   it("should schedule the three tasks globally by default", () => {

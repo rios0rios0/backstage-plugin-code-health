@@ -11,6 +11,8 @@ import {
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthIdentitiesApiRef,
+  codeHealthIntegrationsApiRef,
   codeHealthTimeSeriesApiRef,
 } from "../../src/main/api_refs";
 import { CodeHealthBackendClient } from "../../src/infrastructure/http/code_health_backend_client";
@@ -36,6 +38,8 @@ describe("codeHealthApis", () => {
       codeHealthConfigApiRef.id,
       codeHealthContributorsApiRef.id,
       codeHealthCoverageApiRef.id,
+      codeHealthIdentitiesApiRef.id,
+      codeHealthIntegrationsApiRef.id,
       codeHealthRepositoriesApiRef.id,
       codeHealthTimeSeriesApiRef.id,
     ].sort());

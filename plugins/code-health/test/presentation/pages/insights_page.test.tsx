@@ -1,3 +1,4 @@
+import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
@@ -42,6 +43,7 @@ const renderPage = (
         timeSeriesService={timeSeriesService}
         coverage={coverageResult()}
         config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
       />
     </MemoryRouter>,
   );

@@ -1,3 +1,4 @@
+import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { fireEvent, render as renderBare, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
@@ -32,6 +33,7 @@ describe("DashboardPage", () => {
         dashboardService={service}
         coverage={coverageResult()}
         config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
       />,
     );
 
@@ -49,6 +51,7 @@ describe("DashboardPage", () => {
         dashboardService={service}
         coverage={coverageResult()}
         config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
       />,
     );
 
@@ -66,6 +69,7 @@ describe("DashboardPage", () => {
         dashboardService={service}
         coverage={coverageResult()}
         config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
       />,
     );
 
@@ -86,6 +90,7 @@ describe("DashboardPage", () => {
         dashboardService={service}
         coverage={coverageResult()}
         config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
       />,
     );
     await waitFor(() => expect(service.callCount).toBe(1));
@@ -111,6 +116,7 @@ describe("DashboardPage", () => {
         dashboardService={service}
         coverage={coverageResult({ coverage: aCoverageInfo({ earliestDay: null }) })}
         config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
       />,
     );
 
@@ -132,6 +138,7 @@ describe("DashboardPage", () => {
           coverage: aCoverageInfo({ backfill: { repositories: 4, complete: 1, percent: 32.5 } }),
         })}
         config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
       />,
     );
 
@@ -153,6 +160,7 @@ describe("DashboardPage", () => {
         dashboardService={service}
         coverage={coverageResult()}
         config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
         enabled={false}
       />,
     );

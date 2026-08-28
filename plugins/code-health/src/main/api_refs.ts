@@ -4,6 +4,8 @@ import type {
   ContributorService,
   CoverageService,
   DashboardService,
+  IdentityService,
+  IntegrationsService,
   TimeSeriesService,
 } from "../domain/services/dashboard_service";
 
@@ -34,4 +36,20 @@ export const codeHealthCoverageApiRef = createApiRef<CoverageService>({
 /** Fleet-wide activity over time, for the Insights charts. */
 export const codeHealthTimeSeriesApiRef = createApiRef<TimeSeriesService>({
   id: "plugin.code-health.time-series",
+});
+
+/**
+ * Which optional integrations the backend was configured with.
+ *
+ * Its own ref rather than a field on the config ref: this one is answered by
+ * the backend, and a view that reads it is depending on the backend being
+ * reachable in a way that reading `app-config.yaml` never is.
+ */
+export const codeHealthIntegrationsApiRef = createApiRef<IntegrationsService>({
+  id: "plugin.code-health.integrations",
+});
+
+/** The accounts the plugin has seen, and which person each one belongs to. */
+export const codeHealthIdentitiesApiRef = createApiRef<IdentityService>({
+  id: "plugin.code-health.identities",
 });

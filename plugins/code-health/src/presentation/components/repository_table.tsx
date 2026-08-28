@@ -14,14 +14,23 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import type { RepositorySummary } from "@rios0rios0/backstage-plugin-code-health-common";
-import { catalogEntityPath } from "@rios0rios0/backstage-plugin-code-health-common";
+import type {
+  IntegrationCapabilities,
+  RepositorySummary,
+} from "@rios0rios0/backstage-plugin-code-health-common";
+import {
+  catalogEntityPath,
+  NO_INTEGRATIONS,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import { Link as RouterLink } from "react-router-dom";
 import { BadgeStatusCell } from "./badge_status_cell";
 import { ComplianceBadge } from "./compliance_badge";
 import { DataTable, PaginationControls } from "./data_table";
 import { ApiExposureBadge } from "./api_exposure_badge";
 import { DocumentationBadge } from "./documentation_badge";
+import { confluenceRepositoryColumns } from "./columns/confluence_columns";
+import { jiraRepositoryColumns } from "./columns/jira_columns";
+import { wakaTimeRepositoryColumns } from "./columns/wakatime_columns";
 import { EmptyCell } from "./empty_cell";
 import { StateChip } from "./state_chip";
 import { StatusBadge } from "./status_badge";
@@ -30,6 +39,8 @@ interface RepositoryTableProps {
   repositories: RepositorySummary[];
   totalCount: number;
   isLoading: boolean;
+  /** Which integrations the backend was configured with. */
+  capabilities?: IntegrationCapabilities;
 }
 
 const formatRelativeDate = (dateString: string): string => {
@@ -403,6 +414,7 @@ export const RepositoryTable = ({
   repositories,
   totalCount,
   isLoading,
+  capabilities = NO_INTEGRATIONS,
 }: RepositoryTableProps) => {
   const [sorting, setSorting] = useState<SortingState>([{ id: "fullName", desc: false }]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -416,9 +428,19 @@ export const RepositoryTable = ({
     return data;
   }, [repositories, showArchived, showForks]);
 
+  const allColumns = useMemo(
+    () => [
+      ...columns,
+      ...(capabilities.wakatime ? wakaTimeRepositoryColumns() : []),
+      ...(capabilities.jira ? jiraRepositoryColumns() : []),
+      ...(capabilities.confluence ? confluenceRepositoryColumns() : []),
+    ],
+    [capabilities.wakatime, capabilities.jira, capabilities.confluence],
+  );
+
   const table = useReactTable({
     data: filteredData,
-    columns,
+    columns: allColumns,
     state: { sorting, columnFilters },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
