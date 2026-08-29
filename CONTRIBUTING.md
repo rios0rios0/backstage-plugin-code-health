@@ -121,14 +121,18 @@ every `package.json`, and opens the pull request:
 autobump .
 ```
 
-Requires AutoBump 3.0.0 or newer. Nothing else is needed: AutoBump reads your own configuration from
+Requires AutoBump 3.0.0 or newer. No `-c` is needed: AutoBump reads your own configuration from
 `$HOME`, and this repository's `.autobump.yaml` is the last of four configuration layers, merged on
 top of yours rather than mistaken for it.
 
-`.autobump.yaml` sets `refresh: true`, which regenerates `yarn.lock` inside the bump commit — the
-bump moves a caret range that is also a resolution descriptor in the lockfile, and without the
-refresh every CI job's `yarn install --immutable` answers `YN0028`. It also adds
-`plugins/*/package.json` to the version files AutoBump knows about. Its
+Your `~/.autobump.yaml` needs `refresh: true` under `languages.typescript`, and the old
+`refresh_commands` block deleted — 3.0.0 recognises the removed key by name and aborts rather than
+ignoring it. The refresh regenerates `yarn.lock` inside the bump commit: the bump moves a caret range
+that is also a resolution descriptor in the lockfile, and without it every CI job's
+`yarn install --immutable` answers `YN0028`. See `CLAUDE.md` > Release for why that setting is yours
+rather than this repository's.
+
+`.autobump.yaml` adds `plugins/*/package.json` to the version files AutoBump knows about. Its
 TypeScript defaults cover only the root `package.json`, which in this workspace is private and never
 published, so without that entry a release would leave all three packages on the previous version
 and fail `delivery-publish`'s tag-versus-`package.json` guard.

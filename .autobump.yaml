@@ -4,13 +4,11 @@
 # published copy, the operator's own file, then this one -- so everything here is merged on
 # top of what AutoBump already carries rather than replacing it.
 #
-# `refresh: true` regenerates `yarn.lock` inside the bump commit. Moving the caret range the
-# frontend and the backend declare on `-common` changes a resolution descriptor the lockfile
-# keys on, so without it every CI job's `yarn install --immutable` answers YN0028 and the
-# release is blocked. AutoBump owns the command -- it detects Yarn from `packageManager` and
-# runs `yarn install --mode=update-lockfile`, which resolves without linking, so no install
-# script runs. Requires AutoBump 3.0.0. On 2.x a project file is decoded non-strictly, so this
-# key is silently ignored there and the lockfile goes stale again -- check `autobump version`.
+# The lockfile refresh is NOT configured here, deliberately. `refresh` is read from a
+# project's own file only when it is `false`: a repository may switch the refresh off, never
+# on, because turning it on starts a package manager inside a repository AutoBump may merely
+# have discovered. Whoever releases this repository sets `refresh: true` under
+# `languages.typescript` in their own `~/.autobump.yaml` -- see CLAUDE.md > Release.
 #
 # AutoBump's TypeScript defaults know exactly one version file, `package.json`. In this
 # workspace that file is the private root, which is never published; the three packages under
@@ -29,8 +27,6 @@
 #
 #   autobump .
 #
-refresh: true
-
 languages:
   typescript:
     version_files:
