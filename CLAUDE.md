@@ -263,14 +263,29 @@ add later, which suppressing the findings by id would not.
 CI runs `rios0rios0/pipelines/.github/workflows/yarn-library.yaml` on every push and pull request.
 There is no deployment target — the artifacts are three npm packages.
 
-Releasing is [AutoBump](https://github.com/rios0rios0/autobump)'s job: `autobump -c ~/.autobump.yaml
-local .` reads `[Unreleased]`, derives the version, moves the entries under a dated heading, writes
-that version to all four `package.json` files, branches `chore/bump-x.x.x`, and opens the PR.
+Releasing is [AutoBump](https://github.com/rios0rios0/autobump)'s job: `autobump .` reads
+`[Unreleased]`, derives the version, moves the entries under a dated heading, writes that version to
+all four `package.json` files, regenerates `yarn.lock`, branches `chore/bump-x.x.x`, and opens the PR.
 
-1. Naming the global config with `-c` is required, not tidiness. AutoBump searches the working
-   directory before `$HOME`, under the same four names `.autobump.yaml` uses, so from the repository
-   root it would otherwise load the per-project overrides *as* the global config and find no
-   credentials in them.
+**Requires AutoBump 3.0.0, and one edit to your own `~/.autobump.yaml`.** The `local` subcommand is
+gone, and `refresh_commands` was replaced by `refresh: true`:
+
+```yaml
+# ~/.autobump.yaml -- replace the old block
+languages:
+  typescript:
+    refresh: true
+```
+
+**Delete the old `refresh_commands` block when you do.** The operator's configuration is decoded
+strictly in 3.0.0, and it recognises the removed key by name — so leaving it there does not degrade
+the release, it aborts every one, with a message naming the replacement. (A *project* file, by
+contrast, is lenient: an unknown key there is ignored. That asymmetry is why the refresh is
+configured in your file and not in this repository's.)
+
+1. No `-c` is needed any more. AutoBump reads the operator's configuration from `$HOME` only; the
+   working directory is not searched, so this file can no longer be mistaken for it. It is the last
+   of four configuration layers and is merged on top of the operator's rather than replacing it.
 2. `.autobump.yaml` exists because AutoBump's TypeScript defaults know one version file. Here that is
    the private workspace root, which is never published, so `plugins/*/package.json` is appended.
    Without it a release ships three packages still claiming the previous version, and
@@ -305,30 +320,35 @@ YN0028: The lockfile would have been modified by this install, which is explicit
 The whole gate goes red, and so would `delivery-publish` after a merge — the release is blocked, not
 merely noisy. `2.3.0` hit this.
 
-**The fix is a `refresh_commands` entry in the operator's `~/.autobump.yaml`**, which regenerates
-`yarn.lock` inside the bump commit:
+**The fix is `refresh: true` under `languages.typescript` in the operator's `~/.autobump.yaml`**,
+which regenerates `yarn.lock` inside the bump commit:
 
 ```yaml
 languages:
   typescript:
-    refresh_commands:
-      - run: ['yarn', 'install', '--mode=update-lockfile']
-        files: ['yarn.lock']
+    refresh: true
 ```
 
-**It cannot live in this repository's `.autobump.yaml`, and putting it there does nothing.**
-AutoBump reads a project's own config out of the repository it is releasing, which in `run` mode is a
-repository it discovered rather than one anybody vetted; honouring an executable from there would let
-any scanned repository run code with the release credentials. `SanitizeUntrustedLanguages` therefore
-drops a non-empty `refresh_commands` arriving from a project file, warning and continuing. A project
-file may only write `refresh_commands: []`, to opt **out**.
+AutoBump owns the command: it detects Yarn from `packageManager` in `package.json` and runs
+`yarn install --mode=update-lockfile`, which skips the link step entirely, so no package lifecycle
+script runs. It also passes `YARN_IGNORE_PATH=1`, because Yarn's launcher would otherwise exec
+whatever `yarnPath` in a repository's own `.yarnrc.yml` names.
 
-Requires AutoBump carrying `rios0rios0/autobump#317`. On an older binary the key is not merely
-ignored — user config is decoded with `KnownFields(true)`, so an unrecognised key **aborts the
-release**. Check `autobump version` before adding it.
+**It cannot be turned on from this repository's `.autobump.yaml`, and that is deliberate.** The key
+used to be `refresh_commands` and it carried the argv — an executable run with the release
+credentials — so AutoBump could not honour one from a repository it had merely discovered.
+`rios0rios0/autobump#338` replaced the argv with a flag and built-in recipes, which closes half of
+that: what runs is now a compile-time constant. The other half is *whether* anything runs at all, and
+that stayed with the operator, because a package manager resolving a lockfile still executes what
+the cloned repository supplies. A project file may write `refresh: false` to switch the refresh
+**off** — off can only ever remove an action — but never on.
 
-Without that entry the lockfile has to be refreshed by hand on every release, after AutoBump has
-opened the PR and checked you back out to `main`:
+So the setting lives in your configuration, and applies to every TypeScript project you release.
+That is harmless for the ones that do not need it: the refresh is a no-op for a project with no
+lockfile, and rewrites nothing for one already in step.
+
+On an AutoBump that predates 3.0.0, or if the refresh is ever turned off, the lockfile has to be
+regenerated by hand after AutoBump has opened the PR and checked you back out to `main`:
 
 ```bash
 git fetch origin && git checkout chore/bump-X.Y.Z
@@ -338,7 +358,7 @@ git push --force-with-lease
 ```
 
 `--mode=update-lockfile` resolves without linking, and `^X.Y.Z` resolves against the local workspace,
-so it does not go looking for a version that is not on npm yet.
+so it does not go looking for a version that is not on npm yet. It is the same command AutoBump runs.
 
 `delivery-publish` is repo-local because publishing to a registry is not part of any of the shared
 `*-library.yaml` workflows. It runs as a matrix over the three package directories, only after the

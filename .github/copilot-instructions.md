@@ -91,9 +91,10 @@ plugins/code-health/src/
 - **Sonar, compliance and badge history cannot be backfilled**; those series start at installation.
 - **The bump desynchronises `yarn.lock`.** `.autobump.yaml` moves the caret range the frontend and
   backend declare on `-common`, and that string is a resolution descriptor in the lockfile, so every
-  CI job's `yarn install --immutable` answers `YN0028` until the lockfile is regenerated. The fix is a
-  `refresh_commands` entry in the operator's `~/.autobump.yaml` — it cannot go in this repository's
-  own `.autobump.yaml`, where AutoBump drops it as untrusted. See `CLAUDE.md` > Release.
+  CI job's `yarn install --immutable` answers `YN0028` until the lockfile is regenerated. The fix is
+  `refresh: true` under `languages.typescript` in the **operator's** `~/.autobump.yaml` (AutoBump
+  3.0.0+), not in this repository's `.autobump.yaml`: a project file may switch the refresh off but
+  never on, because turning it on starts a package manager. See `CLAUDE.md` > Release.
 - **`.github/workflows/default.yaml` passes `install_run_scripts: true`.** The shared workflow
   installs with `--mode=skip-build`, and `better-sqlite3` is a native addon the store tests need.
   Removing the flag fails every `KnexCodeHealthStore` test with "Could not locate the bindings file".
