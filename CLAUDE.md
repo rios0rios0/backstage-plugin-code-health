@@ -263,14 +263,18 @@ add later, which suppressing the findings by id would not.
 CI runs `rios0rios0/pipelines/.github/workflows/yarn-library.yaml` on every push and pull request.
 There is no deployment target — the artifacts are three npm packages.
 
-Releasing is [AutoBump](https://github.com/rios0rios0/autobump)'s job: `autobump -c ~/.autobump.yaml
-local .` reads `[Unreleased]`, derives the version, moves the entries under a dated heading, writes
-that version to all four `package.json` files, branches `chore/bump-x.x.x`, and opens the PR.
+Releasing is [AutoBump](https://github.com/rios0rios0/autobump)'s job: `autobump .` reads
+`[Unreleased]`, derives the version, moves the entries under a dated heading, writes that version to
+all four `package.json` files, regenerates `yarn.lock`, branches `chore/bump-x.x.x`, and opens the PR.
 
-1. Naming the global config with `-c` is required, not tidiness. AutoBump searches the working
-   directory before `$HOME`, under the same four names `.autobump.yaml` uses, so from the repository
-   root it would otherwise load the per-project overrides *as* the global config and find no
-   credentials in them.
+**Requires AutoBump 3.0.0.** Two things changed there that matter here: the `local` subcommand is
+gone, and `.autobump.yaml` can now set `refresh: true` — which it does, and which is what keeps the
+lockfile in step. On 2.x a project file is decoded non-strictly, so that key is silently ignored
+there and the lockfile goes stale again; check `autobump version` before cutting a release.
+
+1. No `-c` is needed any more. AutoBump reads the operator's configuration from `$HOME` only; the
+   working directory is not searched, so this file can no longer be mistaken for it. It is the last
+   of four configuration layers and is merged on top of the operator's rather than replacing it.
 2. `.autobump.yaml` exists because AutoBump's TypeScript defaults know one version file. Here that is
    the private workspace root, which is never published, so `plugins/*/package.json` is appended.
    Without it a release ships three packages still claiming the previous version, and
@@ -305,30 +309,30 @@ YN0028: The lockfile would have been modified by this install, which is explicit
 The whole gate goes red, and so would `delivery-publish` after a merge — the release is blocked, not
 merely noisy. `2.3.0` hit this.
 
-**The fix is a `refresh_commands` entry in the operator's `~/.autobump.yaml`**, which regenerates
-`yarn.lock` inside the bump commit:
+**The fix is `refresh: true` in this repository's `.autobump.yaml`**, which regenerates `yarn.lock`
+inside the bump commit:
 
 ```yaml
-languages:
-  typescript:
-    refresh_commands:
-      - run: ['yarn', 'install', '--mode=update-lockfile']
-        files: ['yarn.lock']
+refresh: true
 ```
 
-**It cannot live in this repository's `.autobump.yaml`, and putting it there does nothing.**
-AutoBump reads a project's own config out of the repository it is releasing, which in `run` mode is a
-repository it discovered rather than one anybody vetted; honouring an executable from there would let
-any scanned repository run code with the release credentials. `SanitizeUntrustedLanguages` therefore
-drops a non-empty `refresh_commands` arriving from a project file, warning and continuing. A project
-file may only write `refresh_commands: []`, to opt **out**.
+That is the whole configuration. AutoBump owns the command: it detects Yarn from `packageManager` in
+`package.json` and runs `yarn install --mode=update-lockfile`, which skips the link step entirely, so
+no build or install script runs. `--no-immutable` is not needed and must not be added — that mode
+disables immutable installs by itself from Yarn 3.2, and passing `--immutable` alongside it is an
+error.
 
-Requires AutoBump carrying `rios0rios0/autobump#317`. On an older binary the key is not merely
-ignored — user config is decoded with `KnownFields(true)`, so an unrecognised key **aborts the
-release**. Check `autobump version` before adding it.
+**This used to be impossible from here, and the reason is worth keeping.** Until 3.0.0 the key was
+`refresh_commands`, and it carried the argv. An argv read from configuration is an executable run
+with the release credentials, so AutoBump could not honour one from a repository it had merely
+discovered — `SanitizeUntrustedLanguages` dropped it, and the entry had to live in the operator's
+`~/.autobump.yaml` instead, where it applied to every TypeScript project whether or not it needed
+one. 3.0.0 replaced the argv with a flag and the built-in recipes; with nothing executable left in
+configuration there is nothing to sanitize, so the setting now lives in the repository that actually
+has the problem.
 
-Without that entry the lockfile has to be refreshed by hand on every release, after AutoBump has
-opened the PR and checked you back out to `main`:
+On an AutoBump that predates 3.0.0, or if the refresh is ever turned off, the lockfile has to be
+regenerated by hand after AutoBump has opened the PR and checked you back out to `main`:
 
 ```bash
 git fetch origin && git checkout chore/bump-X.Y.Z
@@ -338,7 +342,7 @@ git push --force-with-lease
 ```
 
 `--mode=update-lockfile` resolves without linking, and `^X.Y.Z` resolves against the local workspace,
-so it does not go looking for a version that is not on npm yet.
+so it does not go looking for a version that is not on npm yet. It is the same command AutoBump runs.
 
 `delivery-publish` is repo-local because publishing to a registry is not part of any of the shared
 `*-library.yaml` workflows. It runs as a matrix over the three package directories, only after the

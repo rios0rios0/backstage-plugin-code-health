@@ -118,15 +118,17 @@ works out the next version from it, moves those entries under a dated heading, w
 every `package.json`, and opens the pull request:
 
 ```bash
-autobump -c ~/.autobump.yaml local .
+autobump .
 ```
 
-The `-c` is not optional here. AutoBump looks for a config file in the working directory before the
-home directory, under the same names as this repository's `.autobump.yaml`, so running it from the
-repository root without naming the global config makes it read the per-project overrides as the
-global config — which holds no credentials.
+Requires AutoBump 3.0.0 or newer. Nothing else is needed: AutoBump reads your own configuration from
+`$HOME`, and this repository's `.autobump.yaml` is the last of four configuration layers, merged on
+top of yours rather than mistaken for it.
 
-`.autobump.yaml` adds `plugins/*/package.json` to the version files AutoBump knows about. Its
+`.autobump.yaml` sets `refresh: true`, which regenerates `yarn.lock` inside the bump commit — the
+bump moves a caret range that is also a resolution descriptor in the lockfile, and without the
+refresh every CI job's `yarn install --immutable` answers `YN0028`. It also adds
+`plugins/*/package.json` to the version files AutoBump knows about. Its
 TypeScript defaults cover only the root `package.json`, which in this workspace is private and never
 published, so without that entry a release would leave all three packages on the previous version
 and fail `delivery-publish`'s tag-versus-`package.json` guard.

@@ -1,29 +1,36 @@
 # Per-project AutoBump overrides.
 #
-# AutoBump's TypeScript defaults know exactly one version file, `package.json`.
-# In this workspace that file is the private root, which is never published;
-# the three packages under `plugins/` are what npm actually receives, and
-# `delivery-publish` compares the release tag against each of their `version`
-# fields. A release that moved only the root would leave all three behind and
-# fail that guard, so the glob below is appended to the defaults.
+# This is the last of AutoBump's four configuration layers -- built-in defaults, the
+# published copy, the operator's own file, then this one -- so everything here is merged on
+# top of what AutoBump already carries rather than replacing it.
 #
-# `version_files` merges by path: the upstream `package.json` entry is left
-# alone rather than restated here, so its pattern stays upstream's to change.
+# `refresh: true` regenerates `yarn.lock` inside the bump commit. Moving the caret range the
+# frontend and the backend declare on `-common` changes a resolution descriptor the lockfile
+# keys on, so without it every CI job's `yarn install --immutable` answers YN0028 and the
+# release is blocked. AutoBump owns the command -- it detects Yarn from `packageManager` and
+# runs `yarn install --mode=update-lockfile`, which resolves without linking, so no install
+# script runs. Requires AutoBump 3.0.0. On 2.x a project file is decoded non-strictly, so this
+# key is silently ignored there and the lockfile goes stale again -- check `autobump version`.
 #
-# The second pattern moves the range the frontend and the backend declare on
-# `-common`. They ship as one release and a caret range does not cross a major,
-# so leaving it behind publishes two packages whose only sibling dependency
-# cannot resolve to anything that exists.
+# AutoBump's TypeScript defaults know exactly one version file, `package.json`. In this
+# workspace that file is the private root, which is never published; the three packages under
+# `plugins/` are what npm actually receives, and `delivery-publish` compares the release tag
+# against each of their `version` fields. A release that moved only the root would leave all
+# three behind and fail that guard, so the glob below is appended to the defaults.
 #
-# Run the bump from outside this directory, or name the global config
-# explicitly:
+# `version_files` merges by path: the upstream `package.json` entry is left alone rather than
+# restated here, so its pattern stays upstream's to change.
 #
-#   autobump -c ~/.autobump.yaml local .
+# The second pattern moves the range the frontend and the backend declare on `-common`. They
+# ship as one release and a caret range does not cross a major, so leaving it behind publishes
+# two packages whose only sibling dependency cannot resolve to anything that exists.
 #
-# AutoBump searches the working directory for a config file before the home
-# directory, and under the same four names this file uses. Running plain
-# `autobump local` from here would read this file as the *global* config, which
-# holds no credentials and no project list.
+# Release with:
+#
+#   autobump .
+#
+refresh: true
+
 languages:
   typescript:
     version_files:
