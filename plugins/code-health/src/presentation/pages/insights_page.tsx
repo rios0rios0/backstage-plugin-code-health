@@ -1,5 +1,8 @@
 import { ContentHeader, InfoCard, Progress, WarningPanel } from "@backstage/core-components";
-import type { TimeSeriesBucket } from "@rios0rios0/backstage-plugin-code-health-common";
+import type {
+  IntegrationCapabilities,
+  TimeSeriesBucket,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import Box from "@material-ui/core/Box";
 import Divider from "@material-ui/core/Divider";
 import Grid from "@material-ui/core/Grid";
@@ -36,6 +39,9 @@ import { RankingChart } from "../components/charts/ranking_chart";
 import { StatTile } from "../components/charts/stat_tile";
 import { StatusBreakdown } from "../components/charts/status_breakdown";
 import { DashboardToolbar } from "../components/dashboard_toolbar";
+import { ConfluenceInsights } from "../components/insights/confluence_insights";
+import { JiraInsights } from "../components/insights/jira_insights";
+import { WakaTimeInsights } from "../components/insights/wakatime_insights";
 import { useAutoRefresh } from "../hooks/use_auto_refresh";
 import type { UseCoverageResult } from "../hooks/use_coverage";
 import { useInsights } from "../hooks/use_insights";
@@ -47,6 +53,7 @@ interface InsightsPageProps {
   timeSeriesService: TimeSeriesService;
   coverage: UseCoverageResult;
   config: CodeHealthConfig;
+  capabilities: IntegrationCapabilities;
   enabled?: boolean;
 }
 
@@ -77,6 +84,7 @@ export const InsightsPage = ({
   timeSeriesService,
   coverage,
   config,
+  capabilities,
   enabled = true,
 }: InsightsPageProps) => {
   const range = useTimeRange(coverage.coverage, config.defaultRange);
@@ -188,7 +196,7 @@ export const InsightsPage = ({
                     label="Contributors"
                     value={formatCount(kpis.activeContributors)}
                     caption="committed in window"
-                    help="Distinct commit-author identities. The same person committing under two addresses counts twice."
+                    help="People who committed inside the window. A person's accounts across every system are one row once they are linked on the Identities tab; an account nobody has linked counts on its own."
                   />
                 </Grid>
                 <Grid item xs={6} sm={4} md={2}>
@@ -370,6 +378,18 @@ export const InsightsPage = ({
               </Box>
             </InfoCard>
           </Grid>
+
+          {capabilities.wakatime ? (
+            <WakaTimeInsights repositories={repositories} contributors={contributors} />
+          ) : null}
+
+          {capabilities.jira ? (
+            <JiraInsights repositories={repositories} contributors={contributors} />
+          ) : null}
+
+          {capabilities.confluence ? (
+            <ConfluenceInsights repositories={repositories} contributors={contributors} />
+          ) : null}
 
           <Grid item xs={12} md={6}>
             <InfoCard title="Fleet health">

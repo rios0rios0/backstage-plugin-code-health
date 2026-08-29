@@ -20,6 +20,23 @@ export interface RepositoryCatalogFacts {
   readonly providesApis: number;
   /** The entity links out to documentation hosted somewhere else. */
   readonly hasExternalDocs: boolean;
+  /**
+   * Where the optional integrations should look for this repository's work.
+   *
+   * Each is an annotation and each is null when the entity carries none, which
+   * is the only honest default: guessing a Jira project from a repository name
+   * would attribute one team's tickets to another team's repository, and the
+   * mistake would be invisible on a dashboard that shows only the total.
+   */
+  readonly jiraProjectKey: string | null;
+  readonly jiraComponent: string | null;
+  readonly confluenceSpaceKey: string | null;
+  /**
+   * The WakaTime project this repository is tracked as, when the entity names
+   * one. Absent, the repository name is matched case-insensitively, which is
+   * what WakaTime's own editor plugins derive a project name from.
+   */
+  readonly wakaTimeProject: string | null;
 }
 
 export const EMPTY_CATALOG_FACTS: RepositoryCatalogFacts = {
@@ -28,6 +45,10 @@ export const EMPTY_CATALOG_FACTS: RepositoryCatalogFacts = {
   techDocsRef: null,
   providesApis: 0,
   hasExternalDocs: false,
+  jiraProjectKey: null,
+  jiraComponent: null,
+  confluenceSpaceKey: null,
+  wakaTimeProject: null,
 };
 
 /**

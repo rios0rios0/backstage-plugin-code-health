@@ -33,7 +33,10 @@ afterEach(async () => {
   await Promise.all(started.splice(0).map((backend) => backend.stop()));
 });
 
-const startBackend = async (entities: Entity[]) => {
+const startBackend = async (
+  entities: Entity[],
+  integrations: Record<string, unknown> = {},
+) => {
   const knex = await databases.init("SQLITE_3");
   const backend = await startTestBackend({
     features: [
@@ -58,6 +61,7 @@ const startBackend = async (entities: Entity[]) => {
               schedule: { frequency: { trigger: "manual" }, timeout: { minutes: 1 } },
               snapshotSchedule: { frequency: { trigger: "manual" }, timeout: { minutes: 1 } },
             },
+            ...integrations,
           },
         },
       }),
@@ -378,6 +382,186 @@ describe("codeHealthPlugin", () => {
       // then
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body.triggered)).toBe(true);
+    });
+
+    it("should report every integration disabled when none is configured", async () => {
+      // given
+      // Told apart from "on but not collected yet", which wants completely
+      // different words on the screen.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server).get("/api/code-health/v1/capabilities");
+
+      // then
+      expect(response.status).toBe(200);
+      expect(response.body.integrations).toEqual({
+        wakatime: false,
+        jira: false,
+        confluence: false,
+      });
+    });
+
+    it("should light up both Atlassian products from one credential", async () => {
+      // given
+      const { server } = await startBackend([], {
+        wakaTime: { apiKey: "fixture-token-placeholder" },
+        atlassian: {
+          baseUrl: "https://acme.atlassian.net",
+          email: "bot@acme.com",
+          apiToken: "fixture-token-placeholder",
+        },
+      });
+
+      // when
+      const response = await request(server).get("/api/code-health/v1/capabilities");
+
+      // then
+      expect(response.body.integrations).toEqual({
+        wakatime: true,
+        jira: true,
+        confluence: true,
+      });
+    });
+
+    it("should list no identities before anything has been observed", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server).get("/api/code-health/v1/identities");
+
+      // then
+      expect(response.status).toBe(200);
+      expect(response.body.items).toEqual([]);
+    });
+
+    it("should reject a source the plugin does not know", async () => {
+      // given
+      // Silently returning every source would look like a filter that does not
+      // work.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .get("/api/code-health/v1/identities")
+        .query({ source: "sonar" });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should reject a `linked` filter that is not a boolean", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .get("/api/code-health/v1/identities")
+        .query({ linked: "maybe" });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should refuse to link an account nobody has observed", async () => {
+      // given
+      // A link that matches nothing looks exactly like one that worked.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/identities/links")
+        .send({ source: "wakatime", sourceKey: "ghost", entityRef: "user:default/felipe" });
+
+      // then
+      expect(response.status).toBe(404);
+    });
+
+    it("should reject a link naming a source it does not know", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/identities/links")
+        .send({ source: "sonar", sourceKey: "x", entityRef: "user:default/felipe" });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should reject a reference that is not one at all", async () => {
+      // given
+      // A bare name reaches the catalog's own parser, which throws rather than
+      // answering — the screen would show a 500 where it promises to say
+      // plainly that the user does not exist.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/identities/links")
+        .send({ source: "wakatime", sourceKey: "jrios", entityRef: "felipe" });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should reject a link with nothing to link", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/identities/links")
+        .send({ source: "wakatime", sourceKey: "", entityRef: "" });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should refuse a link from a service rather than a person", async () => {
+      // given
+      // A manual link is a human's statement that two accounts are the same
+      // person; who made it is recorded, and a service account cannot.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/identities/links")
+        .set("Authorization", "Bearer mock-service-token")
+        .send({ source: "wakatime", sourceKey: "x", entityRef: "user:default/felipe" });
+
+      // then
+      expect(response.status).toBe(403);
+    });
+
+    it("should accept removing a link that is not there", async () => {
+      // given
+      // `DELETE` is idempotent, and a screen that failed on a second click
+      // would be worse than one that shrugged.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server).delete(
+        "/api/code-health/v1/identities/links/wakatime/ghost",
+      );
+
+      // then
+      expect(response.status).toBe(204);
+    });
+
+    it("should reject removing a link for a source it does not know", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server).delete(
+        "/api/code-health/v1/identities/links/sonar/ghost",
+      );
+
+      // then
+      expect(response.status).toBe(400);
     });
 
     it("should refuse a refresh from a service rather than a person", async () => {

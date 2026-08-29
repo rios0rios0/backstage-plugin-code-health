@@ -11,6 +11,7 @@ import { CircuitOpenError } from "../../../src/domain/entities/provider_errors";
 import type { VcsCollector } from "../../../src/domain/services/vcs_collector";
 import { DiscoveredRepositoryBuilder } from "../../builders/discovered_repository_builder";
 import { InMemoryCodeHealthStore } from "../../doubles/in_memory_code_health_store";
+import { RecordingIdentityObserver } from "../../doubles/recording_identity_observer";
 import { RecordingLogger } from "../../doubles/recording_logger";
 import { StubVcsCollector } from "../../doubles/stub_vcs_collector";
 
@@ -69,14 +70,16 @@ const createActor = async (options: {
   });
 
   const collectors: ReadonlyMap<Platform, VcsCollector> = new Map([["github", collector]]);
+  const identities = new RecordingIdentityObserver();
   const actor = new IngestRepositoryHistory({
     store,
+    identities,
     collectors,
     settings: settings(options.overrides),
     logger,
   });
 
-  return { actor, store, collector, logger };
+  return { actor, store, collector, logger, identities };
 };
 
 describe("IngestRepositoryHistory", () => {
@@ -491,6 +494,7 @@ describe("IngestRepositoryHistory", () => {
       });
       const actor = new IngestRepositoryHistory({
         store,
+        identities: new RecordingIdentityObserver(),
         collectors: new Map(),
         settings: settings(),
         logger: new RecordingLogger(),

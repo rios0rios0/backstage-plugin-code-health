@@ -1,22 +1,34 @@
 import type {
   ChurnUnit,
+  ConfluenceContributorMetrics,
+  ContributorIdentity,
   ContributorSummary,
+  JiraContributorMetrics,
   QualityGateStatus,
   SonarMetrics,
+  WakaTimeMetrics,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
   computeRate,
   formatDebt,
+  mergeConfluenceContributorMetrics,
+  mergeJiraContributorMetrics,
+  mergeWakaTimeMetrics,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthEvent } from "../entities/code_health_event";
 import { toDay } from "../entities/day";
+import { identityKey, normalizeSourceKey, type IdentityRef } from "../entities/identity";
+import { PersonDirectory } from "../entities/person_directory";
 import type { CodeHealthStore } from "../repositories/code_health_store";
-import type { CatalogReader, CatalogUser } from "../services/catalog_reader";
+import type { CatalogReader } from "../services/catalog_reader";
+import type { DirectoryReader } from "../services/identity_resolver";
 
 interface Accumulator {
-  displayName: string;
+  displayName: string | null;
   avatarUrl: string | null;
   profileUrl: string | null;
+  /** The accounts merged onto this row, keyed so a repeat does not duplicate. */
+  identities: Map<string, ContributorIdentity>;
   commits: number;
   linesAdded: number;
   linesDeleted: number;
@@ -36,6 +48,9 @@ interface Accumulator {
   pipelineRuns: number;
   pipelineRunsSucceeded: number;
   repositories: Set<string>;
+  wakaTime: WakaTimeMetrics[];
+  jira: JiraContributorMetrics[];
+  confluence: ConfluenceContributorMetrics[];
 }
 
 /**
@@ -50,10 +65,11 @@ const churnUnitOf = (accumulator: Accumulator): ChurnUnit => {
   return accumulator.sawFiles ? "files" : "none";
 };
 
-const empty = (key: string): Accumulator => ({
-  displayName: key,
+const empty = (): Accumulator => ({
+  displayName: null,
   avatarUrl: null,
   profileUrl: null,
+  identities: new Map(),
   commits: 0,
   linesAdded: 0,
   linesDeleted: 0,
@@ -68,7 +84,22 @@ const empty = (key: string): Accumulator => ({
   pipelineRuns: 0,
   pipelineRunsSucceeded: 0,
   repositories: new Set(),
+  wakaTime: [],
+  jira: [],
+  confluence: [],
 });
+
+const remember = (
+  accumulator: Accumulator,
+  identity: IdentityRef,
+  displayName: string | null,
+): void => {
+  accumulator.identities.set(identityKey(identity), {
+    source: identity.source,
+    sourceKey: identity.sourceKey,
+    displayName,
+  });
+};
 
 const applyEvent = (accumulator: Accumulator, event: CodeHealthEvent): void => {
   accumulator.repositories.add(event.repositoryId);
@@ -167,37 +198,122 @@ const aggregateSonar = (
   };
 };
 
+/**
+ * What to call somebody nothing has a name for.
+ *
+ * The account key, not the person key: `wakatime:jrios` on a row tells a reader
+ * which system to go and look in, whereas a bare entity reference for an
+ * unlinked person would be a key nobody typed and nobody recognises.
+ */
+const fallbackName = (personKey: string, totals: Accumulator): string => {
+  const first = [...totals.identities.values()][0];
+  return first === undefined ? personKey : identityKey(first);
+};
+
+/**
+ * Folds one person's Confluence accounts together.
+ *
+ * Null for an empty list rather than a zeroed row, for the same reason as
+ * everywhere else here: somebody who does not write in Confluence must not
+ * appear as somebody who wrote nothing.
+ */
+const mergeConfluence = (
+  parts: readonly ConfluenceContributorMetrics[],
+): ConfluenceContributorMetrics | null =>
+  parts.reduce<ConfluenceContributorMetrics | null>(
+    (merged, next) =>
+      merged === null ? next : mergeConfluenceContributorMetrics(merged, next),
+    null,
+  );
+
+
+const mergeIdentities = (
+  seen: ReadonlyMap<string, ContributorIdentity>,
+  known: readonly ContributorIdentity[],
+): ContributorIdentity[] => {
+  const merged = new Map(seen);
+  for (const identity of known) {
+    const key = identityKey(identity);
+    const existing = merged.get(key);
+    // The identity table's name is the one the source itself reports, so it
+    // wins over the name a provider stamped on a commit — which is whatever the
+    // committer had in their git config that day.
+    if (existing === undefined || existing.displayName === null) merged.set(key, identity);
+  }
+  return [...merged.values()];
+};
+
+export interface ListContributorSummariesOptions {
+  readonly store: CodeHealthStore;
+  readonly catalog?: CatalogReader;
+  readonly directory?: DirectoryReader;
+}
+
 export class ListContributorSummaries {
-  constructor(
-    private readonly store: CodeHealthStore,
-    private readonly catalog?: CatalogReader,
-  ) {}
+  constructor(private readonly options: ListContributorSummariesOptions) {}
 
   /**
-   * Groups a window's events by contributor.
+   * Groups a window's activity by *person*.
    *
-   * Contributors are keyed by the normalised identity every event already
-   * carries — the commit author e-mail on Azure DevOps, the login on GitHub —
-   * so the same person under two addresses appears twice. Mapping identities is
-   * the catalog's job, and inventing a heuristic here would silently merge two
-   * people who happen to share a display name.
+   * A row used to be an account: the commit author e-mail on Azure DevOps, the
+   * login on GitHub, and one human under two addresses on two rows. That was
+   * survivable while commits were the only thing measured. Once coding time
+   * arrives under a WakaTime username and tickets under an Atlassian account
+   * id, the same human occupies three rows that each hold a third of the story,
+   * and no amount of sorting puts them back together.
+   *
+   * So accounts are resolved through the link table first, and everything is
+   * accumulated against the resulting person key. An account nobody has linked
+   * groups under itself and still gets a row — hiding it would hide every bot,
+   * every service account, and everybody nobody has got round to linking, which
+   * are exactly the rows that show the linking still needs doing.
+   *
+   * A person with coding time and no commits is a real row too, not an empty
+   * one: a week spent in an editor without a single commit is worth seeing —
+   * except on a call scoped to one repository, where the events are the only
+   * thing that knows which repository somebody touched.
    */
   async run(input: {
     from: Date;
     to: Date;
     repositoryId?: string;
   }): Promise<ContributorSummary[]> {
-    const [events, wakaTime, snapshots] = await Promise.all([
-      this.store.listEvents({
+    const day = toDay(input.to);
+
+    const [events, wakaTimeRows, jiraRows, confluenceRows, snapshots, links, identities] =
+      await Promise.all([
+      this.options.store.listEvents({
         from: input.from,
         to: input.to,
         ...(input.repositoryId === undefined
           ? {}
           : { repositoryIds: [input.repositoryId] }),
       }),
-      this.store.listLatestContributorMetrics(toDay(input.to)),
-      this.store.listLatestSnapshots({ day: toDay(input.to) }),
+      this.options.store.listContributorMetrics<WakaTimeMetrics>({
+        source: "wakatime",
+        from: toDay(input.from),
+        to: day,
+      }),
+      // Jira is stored a day at a time, so the window can be answered honestly.
+      this.options.store.listContributorMetrics<JiraContributorMetrics>({
+        source: "jira",
+        from: toDay(input.from),
+        to: day,
+      }),
+      // Confluence is not: measuring written volume walks a page's version
+      // bodies, and doing that per day would multiply the walks by the length
+      // of the window. Its row therefore describes a trailing window, which the
+      // column headings say rather than leaving a reader to assume.
+      this.options.store.listLatestContributorMetrics<ConfluenceContributorMetrics>({
+        source: "confluence",
+        day,
+      }),
+      this.options.store.listLatestSnapshots({ day }),
+      this.options.store.listIdentityLinks(),
+      this.options.store.listIdentities(),
     ]);
+
+    const people = new PersonDirectory({ links, identities });
 
     const sonarByRepository = new Map(
       snapshots.flatMap((snapshot) =>
@@ -207,35 +323,94 @@ export class ListContributorSummaries {
       ),
     );
 
-    const byContributor = new Map<string, Accumulator>();
+    const byPerson = new Map<string, Accumulator>();
+    const accumulatorFor = (identity: IdentityRef): Accumulator => {
+      const key = people.keyOf(identity);
+      const existing = byPerson.get(key) ?? empty();
+      byPerson.set(key, existing);
+      return existing;
+    };
+
+    /**
+     * The same, but never inventing a row.
+     *
+     * Coding time, tickets and pages are measured for a person across
+     * everything they touched, not per repository — so on a call scoped to one
+     * repository they would otherwise add people who have never been near it.
+     * Scoped, they only enrich somebody the events already put on the page; the
+     * figures themselves stay whole-fleet, which the column help says.
+     */
+    const enrichOnly = (identity: IdentityRef): Accumulator | undefined => {
+      if (input.repositoryId === undefined) return accumulatorFor(identity);
+      return byPerson.get(people.keyOf(identity));
+    };
+
     for (const event of events) {
       if (!event.actorKey) continue;
-      const existing =
-        byContributor.get(event.actorKey) ?? empty(event.actorKey);
-      applyEvent(existing, event);
-      byContributor.set(event.actorKey, existing);
+      const identity: IdentityRef = {
+        source: "vcs",
+        sourceKey: normalizeSourceKey(event.actorKey),
+      };
+      const accumulator = accumulatorFor(identity);
+      remember(accumulator, identity, event.actorName);
+      applyEvent(accumulator, event);
     }
 
-    // Only the keys that appear in this window are looked up, so the query is
-    // bounded by the number of people who committed rather than by the size of
-    // the directory — which is routinely thousands of entities.
-    const users =
-      this.catalog === undefined
-        ? new Map<string, CatalogUser>()
-        : await this.catalog.findUsersByEmail([...byContributor.keys()]);
+    for (const row of wakaTimeRows) {
+      const identity: IdentityRef = { source: "wakatime", sourceKey: row.contributorKey };
+      const accumulator = enrichOnly(identity);
+      if (accumulator === undefined) continue;
+      remember(accumulator, identity, null);
+      accumulator.wakaTime.push(row.payload);
+    }
 
-    return [...byContributor.entries()]
+    for (const row of jiraRows) {
+      const identity: IdentityRef = { source: "jira", sourceKey: row.contributorKey };
+      const accumulator = enrichOnly(identity);
+      if (accumulator === undefined) continue;
+      remember(accumulator, identity, null);
+      accumulator.jira.push(row.payload);
+    }
+
+    for (const [sourceKey, metrics] of confluenceRows) {
+      const identity: IdentityRef = { source: "confluence", sourceKey };
+      const accumulator = enrichOnly(identity);
+      if (accumulator === undefined) continue;
+      remember(accumulator, identity, null);
+      accumulator.confluence.push(metrics);
+    }
+
+    // Only the people on this page are looked up, so the query is bounded by
+    // who was active in the window rather than by the size of the directory.
+    const users =
+      this.options.directory === undefined
+        ? new Map()
+        : await this.options.directory.getUsersByRef(
+            [...byPerson.keys()].filter((key) => key.startsWith("user:")),
+          );
+
+    return [...byPerson.entries()]
       .map(([key, totals]) => {
-        const user = users.get(key.toLowerCase());
+        const profile = people.profileOf(key, {
+          displayName: totals.displayName,
+          avatarUrl: totals.avatarUrl,
+          profileUrl: totals.profileUrl,
+        });
+        const user = users.get(key);
+
         return {
           key,
-          // The catalog is the organisation's own record of who someone is, so it
-          // wins over the display name and avatar the provider attached to a
-          // commit. Both fall back to the provider's values when no user matched.
-          displayName: user?.displayName ?? totals.displayName,
-          avatarUrl: user?.picture ?? totals.avatarUrl,
-          profileUrl: totals.profileUrl,
-          entityRef: user?.entityRef ?? null,
+          // The catalog is the organisation's own record of who somebody is, so
+          // it outranks the name and photo a provider stamped on a commit.
+          displayName:
+            user?.displayName ?? profile.displayName ?? fallbackName(key, totals),
+          avatarUrl: user?.picture ?? profile.avatarUrl,
+          profileUrl: profile.profileUrl,
+          entityRef: profile.entityRef,
+          // Merged from what was actually seen in this window, unioned with what
+          // the directory knows, so a row always names at least the account it
+          // came from — including one the identity table has not recorded yet.
+          identities: mergeIdentities(totals.identities, profile.identities),
           commits: totals.commits,
           linesAdded: totals.linesAdded,
           linesDeleted: totals.linesDeleted,
@@ -249,10 +424,7 @@ export class ListContributorSummaries {
           reviewsGiven: totals.reviewsGiven,
           reviewsApproved: totals.reviewsApproved,
           reviewsRejected: totals.reviewsRejected,
-          prApprovalRate: computeRate(
-            totals.reviewsApproved,
-            totals.reviewsGiven,
-          ),
+          prApprovalRate: computeRate(totals.reviewsApproved, totals.reviewsGiven),
           pipelineRuns: totals.pipelineRuns,
           pipelineRunsSucceeded: totals.pipelineRunsSucceeded,
           pipelineSuccessRate: computeRate(
@@ -261,9 +433,13 @@ export class ListContributorSummaries {
           ),
           repositories: totals.repositories.size,
           sonarMetrics: aggregateSonar(totals.repositories, sonarByRepository),
-          wakaTimeMetrics: wakaTime.get(key) ?? null,
+          wakaTimeMetrics: mergeWakaTimeMetrics(totals.wakaTime),
+          jiraMetrics: mergeJiraContributorMetrics(totals.jira),
+          confluenceMetrics: mergeConfluence(totals.confluence),
         };
       })
       .sort((left, right) => right.commits - left.commits);
   }
 }
+
+

@@ -3,6 +3,8 @@ import type { ConfigApi, DiscoveryApi, FetchApi } from "@backstage/core-plugin-a
 export interface RecordedFetch {
   readonly url: string;
   readonly method: string;
+  /** The request body, for the writes; null on a read. */
+  readonly body: string | null;
 }
 
 export interface ScriptedResponse {
@@ -39,6 +41,7 @@ export class StubFetchApi {
         this.calls.push({
           url: String(input),
           method: init?.method ?? "GET",
+          body: typeof init?.body === "string" ? init.body : null,
         });
 
         if (this.failure) throw this.failure;

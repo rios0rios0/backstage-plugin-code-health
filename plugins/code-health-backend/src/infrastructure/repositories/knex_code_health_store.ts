@@ -1,13 +1,20 @@
 import { resolvePackagePath, type DatabaseService } from "@backstage/backend-plugin-api";
 import type {
   EventKind,
+  IdentityLinkOrigin,
+  IdentitySource,
+  IntegrationId,
   Platform,
-  WakaTimeMetrics,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { Knex } from "knex";
 import type { CodeHealthEvent, EventOutcome } from "../../domain/entities/code_health_event";
 import { eventId } from "../../domain/entities/code_health_event";
 import { addDays, daysBetween, fromStoredDate, toDay, type Day } from "../../domain/entities/day";
+import type {
+  IdentityLinkRecord,
+  IdentityRecord,
+  IdentityRef,
+} from "../../domain/entities/identity";
 import type { IngestionState } from "../../domain/entities/ingestion_state";
 import type {
   RepositorySnapshot,
@@ -20,10 +27,12 @@ import {
 } from "../../domain/entities/tracked_repository";
 import type {
   CodeHealthStore,
+  ContributorMetricRow,
   CoverageCounts,
   RecordChunkRequest,
   TrackedRepositoryWithState,
 } from "../../domain/repositories/code_health_store";
+import type { ObservedIdentity } from "../../domain/services/identity_resolver";
 
 const MIGRATIONS_DIR = resolvePackagePath(
   "@rios0rios0/backstage-plugin-code-health-backend",
@@ -35,7 +44,9 @@ const INGESTION_STATE = "code_health_ingestion_state";
 const EVENTS = "code_health_events";
 const CHUNKS = "code_health_ingested_chunks";
 const SNAPSHOTS = "code_health_snapshots";
-const CONTRIBUTOR_METRICS = "code_health_contributor_metrics";
+const CONTRIBUTOR_MEASURES = "code_health_contributor_measures";
+const IDENTITIES = "code_health_identities";
+const IDENTITY_LINKS = "code_health_identity_links";
 
 /** Rows are inserted in batches so a large window does not build one huge statement. */
 const INSERT_BATCH_SIZE = 200;
@@ -57,6 +68,10 @@ interface RepositoryRow {
   techdocs_ref: string | null;
   provides_apis: number | null;
   has_external_docs: boolean | number | null;
+  jira_project_key: string | null;
+  jira_component: string | null;
+  confluence_space_key: string | null;
+  wakatime_project: string | null;
   archived: boolean | number;
   discovered_at: Date | string;
   last_seen_at: Date | string;
@@ -94,6 +109,34 @@ interface SnapshotRow {
   day: Date | string;
   captured_at: Date | string;
   payload: string;
+}
+
+interface ContributorMeasureRow {
+  source: string;
+  day: Date | string;
+  contributor_key: string;
+  captured_at: Date | string;
+  payload: string;
+}
+
+interface IdentityRow {
+  source: string;
+  source_key: string;
+  display_name: string | null;
+  email: string | null;
+  avatar_url: string | null;
+  profile_url: string | null;
+  first_seen_at: Date | string;
+  last_seen_at: Date | string;
+}
+
+interface IdentityLinkRow {
+  source: string;
+  source_key: string;
+  entity_ref: string;
+  origin: string;
+  linked_by: string | null;
+  linked_at: Date | string;
 }
 
 const toDate = (value: Date | string): Date =>
@@ -135,6 +178,10 @@ const toRepository = (row: RepositoryRow): TrackedRepository => ({
     techDocsRef: row.techdocs_ref,
     providesApis: row.provides_apis ?? 0,
     hasExternalDocs: Boolean(row.has_external_docs),
+    jiraProjectKey: row.jira_project_key ?? null,
+    jiraComponent: row.jira_component ?? null,
+    confluenceSpaceKey: row.confluence_space_key ?? null,
+    wakaTimeProject: row.wakatime_project ?? null,
   },
   archived: Boolean(row.archived),
   discoveredAt: toDate(row.discovered_at),
@@ -182,6 +229,26 @@ const toEventRow = (event: CodeHealthEvent) => ({
   deletions: event.deletions,
   changed_files: event.changedFiles,
   payload: event.payload === null ? null : JSON.stringify(event.payload),
+});
+
+const toIdentityRecord = (row: IdentityRow): IdentityRecord => ({
+  source: row.source as IdentitySource,
+  sourceKey: row.source_key,
+  displayName: row.display_name,
+  email: row.email,
+  avatarUrl: row.avatar_url,
+  profileUrl: row.profile_url,
+  firstSeenAt: toDate(row.first_seen_at),
+  lastSeenAt: toDate(row.last_seen_at),
+});
+
+const toIdentityLink = (row: IdentityLinkRow): IdentityLinkRecord => ({
+  source: row.source as IdentitySource,
+  sourceKey: row.source_key,
+  entityRef: row.entity_ref,
+  origin: row.origin as IdentityLinkOrigin,
+  linkedBy: row.linked_by,
+  linkedAt: toDate(row.linked_at),
 });
 
 /** Adds whole days to an instant, preserving the time of day. */
@@ -239,6 +306,10 @@ export class KnexCodeHealthStore implements CodeHealthStore {
           techdocs_ref: repository.catalogFacts.techDocsRef,
           provides_apis: repository.catalogFacts.providesApis,
           has_external_docs: repository.catalogFacts.hasExternalDocs,
+          jira_project_key: repository.catalogFacts.jiraProjectKey,
+          jira_component: repository.catalogFacts.jiraComponent,
+          confluence_space_key: repository.catalogFacts.confluenceSpaceKey,
+          wakatime_project: repository.catalogFacts.wakaTimeProject,
           archived: repository.archived,
           last_seen_at: now,
           removed_at: null,
@@ -406,12 +477,14 @@ export class KnexCodeHealthStore implements CodeHealthStore {
       .merge(["captured_at", "payload"]);
   }
 
-  async saveContributorMetrics(options: {
+  async saveContributorMetrics<T>(options: {
+    source: IntegrationId;
     day: Day;
     capturedAt: Date;
-    metrics: ReadonlyMap<string, WakaTimeMetrics>;
+    metrics: ReadonlyMap<string, T>;
   }): Promise<void> {
     const rows = [...options.metrics.entries()].map(([contributorKey, metrics]) => ({
+      source: options.source,
       day: options.day,
       contributor_key: contributorKey,
       captured_at: options.capturedAt,
@@ -420,29 +493,149 @@ export class KnexCodeHealthStore implements CodeHealthStore {
     if (rows.length === 0) return;
 
     for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
-      await this.client(CONTRIBUTOR_METRICS)
+      await this.client(CONTRIBUTOR_MEASURES)
         .insert(rows.slice(index, index + INSERT_BATCH_SIZE))
-        .onConflict(["day", "contributor_key"])
+        .onConflict(["source", "day", "contributor_key"])
         .merge(["captured_at", "payload"]);
     }
   }
 
-  async listLatestContributorMetrics(day: Day): Promise<Map<string, WakaTimeMetrics>> {
-    const rows = await this.client<{
-      day: Date | string;
-      contributor_key: string;
-      payload: string;
-    }>(CONTRIBUTOR_METRICS)
-      .where("day", "<=", day)
+  async listContributorMetrics<T>(options: {
+    source: IntegrationId;
+    from: Day;
+    to: Day;
+  }): Promise<ContributorMetricRow<T>[]> {
+    const rows = await this.client<ContributorMeasureRow>(CONTRIBUTOR_MEASURES)
+      .where({ source: options.source })
+      .andWhere("day", ">=", options.from)
+      .andWhere("day", "<=", options.to)
+      .orderBy("day", "asc");
+
+    return rows.map((row) => ({
+      day: fromStoredDate(row.day),
+      contributorKey: row.contributor_key,
+      payload: JSON.parse(row.payload) as T,
+    }));
+  }
+
+  async listLatestContributorMetrics<T>(options: {
+    source: IntegrationId;
+    day: Day;
+  }): Promise<Map<string, T>> {
+    const rows = await this.client<ContributorMeasureRow>(CONTRIBUTOR_MEASURES)
+      .where({ source: options.source })
+      .andWhere("day", "<=", options.day)
       .orderBy("contributor_key")
       .orderBy("day", "desc");
 
-    const latest = new Map<string, WakaTimeMetrics>();
+    const latest = new Map<string, T>();
     for (const row of rows) {
       if (latest.has(row.contributor_key)) continue;
-      latest.set(row.contributor_key, JSON.parse(row.payload) as WakaTimeMetrics);
+      latest.set(row.contributor_key, JSON.parse(row.payload) as T);
     }
     return latest;
+  }
+
+  async listContributorMetricDays(options: {
+    source: IntegrationId;
+    from: Day;
+    to: Day;
+  }): Promise<Day[]> {
+    // Distinct rather than every row: the caller only wants to know which days
+    // it can skip, and a busy organisation has one row per person per day.
+    const rows = await this.client<ContributorMeasureRow>(CONTRIBUTOR_MEASURES)
+      .where({ source: options.source })
+      .andWhere("day", ">=", options.from)
+      .andWhere("day", "<=", options.to)
+      .distinct("day")
+      .orderBy("day", "asc");
+
+    return rows.map((row) => fromStoredDate(row.day));
+  }
+
+  async recordObservedIdentities(options: {
+    identities: readonly ObservedIdentity[];
+    now: Date;
+  }): Promise<void> {
+    if (options.identities.length === 0) return;
+
+    // Deduplicated in memory first: `onConflict().merge()` cannot handle a
+    // batch that names the same key twice, and a single ingestion window
+    // routinely reports one person on a dozen commits.
+    const byKey = new Map<string, ObservedIdentity>();
+    for (const identity of options.identities) {
+      byKey.set(`${identity.source}:${identity.sourceKey}`, identity);
+    }
+
+    const rows = [...byKey.values()].map((identity) => ({
+      source: identity.source,
+      source_key: identity.sourceKey,
+      display_name: identity.displayName,
+      email: identity.email,
+      avatar_url: identity.avatarUrl,
+      profile_url: identity.profileUrl,
+      first_seen_at: options.now,
+      last_seen_at: options.now,
+    }));
+
+    for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
+      await this.client(IDENTITIES)
+        .insert(rows.slice(index, index + INSERT_BATCH_SIZE))
+        .onConflict(["source", "source_key"])
+        // `first_seen_at` is deliberately absent: it is the one field that must
+        // survive being seen again, and merging it would reset every account to
+        // "first seen today" on every run.
+        .merge(["display_name", "email", "avatar_url", "profile_url", "last_seen_at"]);
+    }
+  }
+
+  async listIdentities(options?: {
+    sources?: readonly IdentitySource[];
+  }): Promise<IdentityRecord[]> {
+    const query = this.client<IdentityRow>(IDENTITIES);
+    if (options?.sources && options.sources.length > 0) {
+      query.whereIn("source", [...options.sources]);
+    }
+
+    const rows = await query.orderBy("source").orderBy("source_key");
+    return rows.map(toIdentityRecord);
+  }
+
+  async listIdentityLinks(): Promise<IdentityLinkRecord[]> {
+    const rows = await this.client<IdentityLinkRow>(IDENTITY_LINKS);
+    return rows.map(toIdentityLink);
+  }
+
+  async saveIdentityLink(link: IdentityLinkRecord): Promise<void> {
+    await this.client.transaction(async (trx) => {
+      const existing = await trx<IdentityLinkRow>(IDENTITY_LINKS)
+        .where({ source: link.source, source_key: link.sourceKey })
+        .first();
+
+      // A person stating that two accounts are the same human outranks a rule
+      // that noticed the addresses matched. Enforced here rather than in every
+      // caller, because the failure mode is the reconciliation task silently
+      // undoing somebody's correction half an hour after they made it.
+      if (existing?.origin === "manual" && link.origin !== "manual") return;
+
+      await trx(IDENTITY_LINKS)
+        .insert({
+          source: link.source,
+          source_key: link.sourceKey,
+          entity_ref: link.entityRef,
+          origin: link.origin,
+          linked_by: link.linkedBy,
+          linked_at: link.linkedAt,
+        })
+        .onConflict(["source", "source_key"])
+        .merge(["entity_ref", "origin", "linked_by", "linked_at"]);
+    });
+  }
+
+  async deleteIdentityLink(identity: IdentityRef): Promise<void> {
+    await this.client(IDENTITY_LINKS)
+      .where({ source: identity.source, source_key: identity.sourceKey })
+      .delete();
   }
 
   async listLatestSnapshots(options: {

@@ -1,5 +1,6 @@
 import { ContentHeader, WarningPanel } from "@backstage/core-components";
 import Box from "@material-ui/core/Box";
+import type { IntegrationCapabilities } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthConfig } from "../../domain/entities/code_health_config";
 import type { DashboardService } from "../../domain/services/dashboard_service";
 import { BackfillProgress } from "../components/backfill_progress";
@@ -14,6 +15,7 @@ interface DashboardPageProps {
   dashboardService: DashboardService;
   coverage: UseCoverageResult;
   config: CodeHealthConfig;
+  capabilities: IntegrationCapabilities;
   /** Skips fetching, used while the coverage probe is still in flight. */
   enabled?: boolean;
 }
@@ -22,6 +24,7 @@ export const DashboardPage = ({
   dashboardService,
   coverage,
   config,
+  capabilities,
   enabled = true,
 }: DashboardPageProps) => {
   const range = useTimeRange(coverage.coverage, config.defaultRange);
@@ -68,6 +71,7 @@ export const DashboardPage = ({
         repositories={repositories}
         totalCount={repositories.length}
         isLoading={isLoading}
+        capabilities={capabilities}
       />
     </>
   );

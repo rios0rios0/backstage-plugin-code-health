@@ -1,11 +1,18 @@
 import type {
   EventKind,
-  WakaTimeMetrics,
+  IdentitySource,
+  IntegrationId,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthEvent } from "../entities/code_health_event";
 import type { Day } from "../entities/day";
+import type {
+  IdentityLinkRecord,
+  IdentityRecord,
+  IdentityRef,
+} from "../entities/identity";
 import type { IngestionState } from "../entities/ingestion_state";
 import type { RepositorySnapshot } from "../entities/repository_snapshot";
+import type { ObservedIdentity } from "../services/identity_resolver";
 import type { DiscoveredRepository, TrackedRepository } from "../entities/tracked_repository";
 
 /** A repository together with where its ingestion has got to. */
@@ -19,6 +26,14 @@ export interface RecordChunkRequest {
   readonly kinds: readonly EventKind[];
   readonly days: readonly Day[];
   readonly ingestedAt: Date;
+}
+
+/** One stored row of an integration's per-person measures. */
+export interface ContributorMetricRow<T> {
+  readonly day: Day;
+  /** The account key the source reported, not a person. */
+  readonly contributorKey: string;
+  readonly payload: T;
 }
 
 export interface CoverageCounts {
@@ -103,18 +118,66 @@ export interface CodeHealthStore {
   saveSnapshot(snapshot: RepositorySnapshot): Promise<void>;
 
   /**
-   * Stores coding-time measures per contributor for one day. They are keyed by
-   * the same normalised identity commit events carry, so the contributors view
-   * joins them without an identity mapping table.
+   * Stores one integration's per-person measures for one day.
+   *
+   * Keyed by the raw account key the source itself uses — a WakaTime username,
+   * an Atlassian account id — rather than by a person. Resolving those to a
+   * person happens on read, so re-linking somebody's accounts corrects every
+   * window that was already collected instead of only the ones collected since.
+   * Storing the resolved person instead would bake a guess into the history.
    */
-  saveContributorMetrics(options: {
+  saveContributorMetrics<T>(options: {
+    source: IntegrationId;
     day: Day;
     capturedAt: Date;
-    metrics: ReadonlyMap<string, WakaTimeMetrics>;
+    metrics: ReadonlyMap<string, T>;
   }): Promise<void>;
 
-  /** The most recent contributor measures at or before `day`. */
-  listLatestContributorMetrics(day: Day): Promise<Map<string, WakaTimeMetrics>>;
+  /** Every stored row for one source across `[from, to]`, ascending by day. */
+  listContributorMetrics<T>(options: {
+    source: IntegrationId;
+    from: Day;
+    to: Day;
+  }): Promise<ContributorMetricRow<T>[]>;
+
+  /** The most recent row per account at or before `day`, for one source. */
+  listLatestContributorMetrics<T>(options: {
+    source: IntegrationId;
+    day: Day;
+  }): Promise<Map<string, T>>;
+
+  /** The days one source already has rows for, within `[from, to]`. */
+  listContributorMetricDays(options: {
+    source: IntegrationId;
+    from: Day;
+    to: Day;
+  }): Promise<Day[]>;
+
+  /**
+   * Records the accounts a source saw, refreshing the profile fields and
+   * `lastSeenAt` on one it already knew about.
+   */
+  recordObservedIdentities(options: {
+    identities: readonly ObservedIdentity[];
+    now: Date;
+  }): Promise<void>;
+
+  listIdentities(options?: {
+    sources?: readonly IdentitySource[];
+  }): Promise<IdentityRecord[]>;
+
+  listIdentityLinks(): Promise<IdentityLinkRecord[]>;
+
+  /**
+   * Writes a link, replacing whatever was there.
+   *
+   * An automatic link never replaces a manual one — the store enforces that
+   * rather than trusting every caller to remember, because the failure mode is
+   * a scheduled task quietly undoing somebody's correction.
+   */
+  saveIdentityLink(link: IdentityLinkRecord): Promise<void>;
+
+  deleteIdentityLink(identity: IdentityRef): Promise<void>;
 
   /** Most recent snapshot at or before `day`, per repository. */
   listLatestSnapshots(options: {

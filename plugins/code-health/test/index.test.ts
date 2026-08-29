@@ -50,6 +50,8 @@ describe("public API", () => {
       "codeHealthConfigApiRef",
       "codeHealthContributorsApiRef",
       "codeHealthCoverageApiRef",
+      "codeHealthIdentitiesApiRef",
+      "codeHealthIntegrationsApiRef",
       "codeHealthPlugin",
       "codeHealthRepositoriesApiRef",
       "contributorsRouteRef",

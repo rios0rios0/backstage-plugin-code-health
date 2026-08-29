@@ -1,3 +1,6 @@
+import type { ConfluenceContributorMetrics } from "./confluence_metrics";
+import type { ContributorIdentity } from "./identity";
+import type { JiraContributorMetrics } from "./jira_metrics";
 import type { SonarMetrics } from "./sonar_metrics";
 import type { WakaTimeMetrics } from "./wakatime_metrics";
 
@@ -5,10 +8,18 @@ import type { WakaTimeMetrics } from "./wakatime_metrics";
  * One row of the contributors dashboard, aggregated from the events inside the
  * requested window.
  *
- * Contributors are keyed by `key`, a normalised commit author identity — the
- * author e-mail lowercased on Azure DevOps, the login on GitHub. The same human
- * committing under two addresses therefore appears twice; mapping identities is
- * the catalog's job, not this plugin's.
+ * A row is a *person*, not an account. `key` is the catalog `User` entity the
+ * row's accounts resolved to, and falls back to `<source>:<sourceKey>` for an
+ * account nobody has linked yet — so an unlinked identity still gets a row
+ * rather than disappearing.
+ *
+ * This is the change that makes the row worth reading at all once more than one
+ * system is being measured. A person's commits arrive under a GitHub login,
+ * their coding time under a WakaTime username, their tickets under an Atlassian
+ * `accountId`, and none of the three matches the others. Keyed by account, the
+ * same human occupied three rows that each held a third of the story; keyed by
+ * person, the row adds up. {@link identities} names what was merged, because a
+ * total nobody can trace back to its sources is a number nobody trusts.
  */
 /**
  * Which unit a contributor's churn is actually measured in.
@@ -30,13 +41,24 @@ export interface ContributorSummary {
   readonly avatarUrl: string | null;
   readonly profileUrl: string | null;
   /**
-   * The catalog `User` this contributor resolved to, or null when none matched.
+   * The catalog `User` this person resolved to, or null when no account on the
+   * row is linked to one.
    *
-   * Matching is by profile e-mail and nothing else. Bots, service accounts and
-   * commits authored from a personal address have no entity and stay unlinked
-   * rather than being guessed at by name.
+   * A link is made two ways. An account whose e-mail matches a `User` profile
+   * is linked on sight, because that is the same rule the catalog itself uses
+   * to decide who somebody is. Everything else — a WakaTime username, an
+   * Atlassian `accountId`, a commit from a personal address — is *offered* as a
+   * ranked suggestion on the Identities screen and linked only when a person
+   * confirms it. Nothing is merged on a name resemblance alone: two people who
+   * share a surname would silently become one contributor, and a merge nobody
+   * asked for is far harder to notice than a row that stayed separate.
    */
   readonly entityRef: string | null;
+  /**
+   * Every account that was merged into this row, in the order they were
+   * observed. A single-account row carries one entry, never zero.
+   */
+  readonly identities: readonly ContributorIdentity[];
   readonly commits: number;
   readonly linesAdded: number;
   readonly linesDeleted: number;
@@ -64,6 +86,8 @@ export interface ContributorSummary {
   readonly repositories: number;
   readonly sonarMetrics: SonarMetrics | null;
   readonly wakaTimeMetrics: WakaTimeMetrics | null;
+  readonly jiraMetrics: JiraContributorMetrics | null;
+  readonly confluenceMetrics: ConfluenceContributorMetrics | null;
 }
 
 /** Percentage of `part` within `total`, rounded to one decimal, 0 when `total` is 0. */

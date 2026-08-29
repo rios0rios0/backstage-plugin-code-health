@@ -1,5 +1,7 @@
 import { mockServices, TestDatabases } from "@backstage/backend-test-utils";
 import type { CodeHealthEvent } from "../../../src/domain/entities/code_health_event";
+import type { Day } from "../../../src/domain/entities/day";
+import type { ObservedIdentity } from "../../../src/domain/services/identity_resolver";
 import { KnexCodeHealthStore } from "../../../src/infrastructure/repositories/knex_code_health_store";
 import { DiscoveredRepositoryBuilder } from "../../builders/discovered_repository_builder";
 
@@ -85,6 +87,10 @@ describe("KnexCodeHealthStore", () => {
         techDocsRef: "dir:.",
         providesApis: 2,
         hasExternalDocs: true,
+        jiraProjectKey: null,
+        jiraComponent: null,
+        confluenceSpaceKey: null,
+        wakaTimeProject: null,
       });
     });
 
@@ -507,7 +513,8 @@ describe("KnexCodeHealthStore", () => {
         complianceStatus: null,
         badgeStatus: null,
         sonarMetrics: null,
-        wakaTimeMetrics: null,
+        jiraMetrics: null,
+        confluenceMetrics: null,
         repositoryFiles: null,
       };
       for (const day of ["2026-08-08", "2026-08-09", "2026-08-11"]) {
@@ -554,7 +561,8 @@ describe("KnexCodeHealthStore", () => {
         complianceStatus: null,
         badgeStatus: null,
         sonarMetrics: null,
-        wakaTimeMetrics: null,
+        jiraMetrics: null,
+        confluenceMetrics: null,
         repositoryFiles: null,
       };
       for (const repository of [first, second]) {
@@ -596,7 +604,8 @@ describe("KnexCodeHealthStore", () => {
         complianceStatus: null,
         badgeStatus: null,
         sonarMetrics: null,
-        wakaTimeMetrics: null,
+        jiraMetrics: null,
+        confluenceMetrics: null,
         repositoryFiles: null,
       };
 
@@ -839,31 +848,77 @@ describe("KnexCodeHealthStore", () => {
     });
   });
 
-  describe("contributor metrics", () => {
+  describe("contributor measures", () => {
+    interface Measure {
+      readonly totalSeconds: number;
+    }
+
+    const write = (
+      store: KnexCodeHealthStore,
+      options: { source?: "wakatime" | "jira"; day: Day; seconds: number; key?: string },
+    ) =>
+      store.saveContributorMetrics<Measure>({
+        source: options.source ?? "wakatime",
+        day: options.day,
+        capturedAt: NOW,
+        metrics: new Map([[options.key ?? "dev@example.com", { totalSeconds: options.seconds }]]),
+      });
+
     it("should store and read back measures per contributor", async () => {
       // given
       const store = await createStore();
 
       // when
-      await store.saveContributorMetrics({
+      await store.saveContributorMetrics<Measure>({
+        source: "wakatime",
         day: "2026-08-10",
         capturedAt: NOW,
         metrics: new Map([
-          ["dev@example.com", { totalSeconds: 3600, dailyAverageSeconds: 120 }],
-          ["other@example.com", { totalSeconds: 60, dailyAverageSeconds: 2 }],
+          ["dev@example.com", { totalSeconds: 3600 }],
+          ["other@example.com", { totalSeconds: 60 }],
         ]),
       });
 
       // then
-      const metrics = await store.listLatestContributorMetrics("2026-08-10");
-      expect(metrics.get("dev@example.com")).toEqual({
-        totalSeconds: 3600,
-        dailyAverageSeconds: 120,
+      const rows = await store.listContributorMetrics<Measure>({
+        source: "wakatime",
+        from: "2026-08-10",
+        to: "2026-08-10",
       });
-      expect(metrics.size).toBe(2);
+      expect(rows).toHaveLength(2);
+      expect(rows.map((row) => row.contributorKey).sort()).toEqual([
+        "dev@example.com",
+        "other@example.com",
+      ]);
+      expect(rows[0]?.day).toBe("2026-08-10");
     });
 
-    it("should return the most recent measures at or before the requested day", async () => {
+    it("should keep two integrations' measures for the same person apart", async () => {
+      // given
+      // The source is part of the key precisely so a WakaTime day and a Jira day
+      // for one account cannot overwrite each other.
+      const store = await createStore();
+
+      // when
+      await write(store, { source: "wakatime", day: "2026-08-10", seconds: 100 });
+      await write(store, { source: "jira", day: "2026-08-10", seconds: 900 });
+
+      // then
+      const wakatime = await store.listContributorMetrics<Measure>({
+        source: "wakatime",
+        from: "2026-08-10",
+        to: "2026-08-10",
+      });
+      const jira = await store.listContributorMetrics<Measure>({
+        source: "jira",
+        from: "2026-08-10",
+        to: "2026-08-10",
+      });
+      expect(wakatime[0]?.payload.totalSeconds).toBe(100);
+      expect(jira[0]?.payload.totalSeconds).toBe(900);
+    });
+
+    it("should read only the days inside the requested window", async () => {
       // given
       const store = await createStore();
       for (const [day, seconds] of [
@@ -871,39 +926,79 @@ describe("KnexCodeHealthStore", () => {
         ["2026-08-09", 200],
         ["2026-08-11", 300],
       ] as const) {
-        await store.saveContributorMetrics({
-          day,
-          capturedAt: NOW,
-          metrics: new Map([["dev@example.com", { totalSeconds: seconds, dailyAverageSeconds: 1 }]]),
-        });
+        await write(store, { day, seconds });
       }
 
       // when
-      const metrics = await store.listLatestContributorMetrics("2026-08-10");
+      const rows = await store.listContributorMetrics<Measure>({
+        source: "wakatime",
+        from: "2026-08-09",
+        to: "2026-08-10",
+      });
 
       // then
       // A later capture must not leak into a past window, or the contributors
       // view would show today's numbers against last month.
-      expect(metrics.get("dev@example.com")?.totalSeconds).toBe(200);
+      expect(rows.map((row) => row.day)).toEqual(["2026-08-09"]);
+    });
+
+    it("should return the most recent row per account at or before the day", async () => {
+      // given
+      const store = await createStore();
+      for (const [day, seconds] of [
+        ["2026-08-08", 100],
+        ["2026-08-09", 200],
+        ["2026-08-11", 300],
+      ] as const) {
+        await write(store, { day, seconds });
+      }
+
+      // when
+      const latest = await store.listLatestContributorMetrics<Measure>({
+        source: "wakatime",
+        day: "2026-08-10",
+      });
+
+      // then
+      expect(latest.get("dev@example.com")?.totalSeconds).toBe(200);
+    });
+
+    it("should list the distinct days a source already covers", async () => {
+      // given
+      // The caller uses this to skip days it has, so a second person on the same
+      // day must not make the day appear twice.
+      const store = await createStore();
+      await write(store, { day: "2026-08-09", seconds: 1 });
+      await write(store, { day: "2026-08-09", seconds: 2, key: "other@example.com" });
+      await write(store, { day: "2026-08-11", seconds: 3 });
+
+      // when
+      const days = await store.listContributorMetricDays({
+        source: "wakatime",
+        from: "2026-08-08",
+        to: "2026-08-10",
+      });
+
+      // then
+      expect(days).toEqual(["2026-08-09"]);
     });
 
     it("should overwrite measures captured twice on the same day", async () => {
       // given
       const store = await createStore();
-      const write = (seconds: number) =>
-        store.saveContributorMetrics({
-          day: "2026-08-10",
-          capturedAt: NOW,
-          metrics: new Map([["dev@example.com", { totalSeconds: seconds, dailyAverageSeconds: 1 }]]),
-        });
 
       // when
-      await write(100);
-      await write(250);
+      await write(store, { day: "2026-08-10", seconds: 100 });
+      await write(store, { day: "2026-08-10", seconds: 250 });
 
       // then
-      const metrics = await store.listLatestContributorMetrics("2026-08-10");
-      expect(metrics.get("dev@example.com")?.totalSeconds).toBe(250);
+      const rows = await store.listContributorMetrics<Measure>({
+        source: "wakatime",
+        from: "2026-08-10",
+        to: "2026-08-10",
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.payload.totalSeconds).toBe(250);
     });
 
     it("should do nothing when there are no measures to store", async () => {
@@ -912,14 +1007,197 @@ describe("KnexCodeHealthStore", () => {
 
       // when
       await store.saveContributorMetrics({
+        source: "wakatime",
         day: "2026-08-10",
         capturedAt: NOW,
         metrics: new Map(),
       });
 
       // then
-      const metrics = await store.listLatestContributorMetrics("2026-08-10");
-      expect(metrics.size).toBe(0);
+      const rows = await store.listContributorMetrics({
+        source: "wakatime",
+        from: "2026-08-10",
+        to: "2026-08-10",
+      });
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe("identities", () => {
+    const anIdentity = (overrides: Partial<ObservedIdentity> = {}): ObservedIdentity => ({
+      source: "wakatime",
+      sourceKey: "jrios",
+      displayName: "J Rios",
+      email: null,
+      avatarUrl: null,
+      profileUrl: null,
+      ...overrides,
+    });
+
+    it("should record an account and read it back", async () => {
+      // given
+      const store = await createStore();
+
+      // when
+      await store.recordObservedIdentities({ identities: [anIdentity()], now: NOW });
+
+      // then
+      const [identity] = await store.listIdentities();
+      expect(identity).toMatchObject({ source: "wakatime", sourceKey: "jrios" });
+      expect(identity?.firstSeenAt).toEqual(NOW);
+    });
+
+    it("should refresh a known account without moving its first sighting", async () => {
+      // given
+      // `firstSeenAt` is the one field that has to survive being seen again;
+      // merging it would reset every account to "first seen today" every run.
+      const store = await createStore();
+      const later = new Date("2026-09-01T00:00:00.000Z");
+      await store.recordObservedIdentities({ identities: [anIdentity()], now: NOW });
+
+      // when
+      await store.recordObservedIdentities({
+        identities: [anIdentity({ displayName: "Felipe Rios" })],
+        now: later,
+      });
+
+      // then
+      const [identity] = await store.listIdentities();
+      expect(identity?.displayName).toBe("Felipe Rios");
+      expect(identity?.firstSeenAt).toEqual(NOW);
+      expect(identity?.lastSeenAt).toEqual(later);
+    });
+
+    it("should accept a batch naming the same account twice", async () => {
+      // given
+      // One ingestion window routinely reports the same person on a dozen
+      // commits, and an upsert cannot merge a batch that repeats a key.
+      const store = await createStore();
+
+      // when
+      await store.recordObservedIdentities({
+        identities: [anIdentity(), anIdentity({ displayName: "Second" })],
+        now: NOW,
+      });
+
+      // then
+      const identities = await store.listIdentities();
+      expect(identities).toHaveLength(1);
+      expect(identities[0]?.displayName).toBe("Second");
+    });
+
+    it("should do nothing when nothing was observed", async () => {
+      // given
+      const store = await createStore();
+
+      // when
+      await store.recordObservedIdentities({ identities: [], now: NOW });
+
+      // then
+      expect(await store.listIdentities()).toEqual([]);
+    });
+
+    it("should narrow the listing to the requested sources", async () => {
+      // given
+      const store = await createStore();
+      await store.recordObservedIdentities({
+        identities: [anIdentity(), anIdentity({ source: "vcs", sourceKey: "dev@example.com" })],
+        now: NOW,
+      });
+
+      // when
+      const identities = await store.listIdentities({ sources: ["vcs"] });
+
+      // then
+      expect(identities.map((identity) => identity.source)).toEqual(["vcs"]);
+    });
+
+    it("should store, replace and remove a link", async () => {
+      // given
+      const store = await createStore();
+      const link = {
+        source: "wakatime",
+        sourceKey: "jrios",
+        entityRef: "user:default/jrios",
+        origin: "manual",
+        linkedBy: "user:default/admin",
+        linkedAt: NOW,
+      } as const;
+
+      // when
+      await store.saveIdentityLink(link);
+      await store.saveIdentityLink({ ...link, entityRef: "user:default/felipe" });
+
+      // then
+      const [stored] = await store.listIdentityLinks();
+      expect(stored?.entityRef).toBe("user:default/felipe");
+      expect(stored?.linkedBy).toBe("user:default/admin");
+
+      // when
+      await store.deleteIdentityLink({ source: "wakatime", sourceKey: "jrios" });
+
+      // then
+      expect(await store.listIdentityLinks()).toEqual([]);
+    });
+
+    it("should refuse to let an automatic link overwrite a manual one", async () => {
+      // given
+      // The reconciliation task runs every few minutes, and quietly undoing
+      // somebody's correction is the single failure that would make the
+      // Identities screen pointless.
+      const store = await createStore();
+      await store.saveIdentityLink({
+        source: "wakatime",
+        sourceKey: "jrios",
+        entityRef: "user:default/felipe",
+        origin: "manual",
+        linkedBy: "user:default/admin",
+        linkedAt: NOW,
+      });
+
+      // when
+      await store.saveIdentityLink({
+        source: "wakatime",
+        sourceKey: "jrios",
+        entityRef: "user:default/somebody-else",
+        origin: "catalog-email",
+        linkedBy: null,
+        linkedAt: new Date("2026-09-01T00:00:00.000Z"),
+      });
+
+      // then
+      const [stored] = await store.listIdentityLinks();
+      expect(stored?.entityRef).toBe("user:default/felipe");
+      expect(stored?.origin).toBe("manual");
+    });
+
+    it("should let a manual link replace an automatic one", async () => {
+      // given
+      // The correction has to be possible in that direction, or the screen can
+      // only ever add links and never fix a wrong one.
+      const store = await createStore();
+      await store.saveIdentityLink({
+        source: "vcs",
+        sourceKey: "dev@example.com",
+        entityRef: "user:default/wrong",
+        origin: "catalog-email",
+        linkedBy: null,
+        linkedAt: NOW,
+      });
+
+      // when
+      await store.saveIdentityLink({
+        source: "vcs",
+        sourceKey: "dev@example.com",
+        entityRef: "user:default/right",
+        origin: "manual",
+        linkedBy: "user:default/admin",
+        linkedAt: NOW,
+      });
+
+      // then
+      const [stored] = await store.listIdentityLinks();
+      expect(stored?.entityRef).toBe("user:default/right");
     });
   });
 });

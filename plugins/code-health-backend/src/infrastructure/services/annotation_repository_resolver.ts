@@ -26,6 +26,19 @@ const SONAR_PROJECT_KEY_ANNOTATION = "sonarqube.org/project-key";
 const TECHDOCS_REF_ANNOTATION = "backstage.io/techdocs-ref";
 
 /**
+ * Where the optional integrations find this repository's work.
+ *
+ * `jira/project-key` and `jira/component` are the names the community Jira
+ * plugin already uses, so a catalog that has one configured needs no second
+ * annotation for this one. The Confluence and WakaTime names have no
+ * established convention to follow, so they are namespaced the same way.
+ */
+const JIRA_PROJECT_KEY_ANNOTATION = "jira/project-key";
+const JIRA_COMPONENT_ANNOTATION = "jira/component";
+const CONFLUENCE_SPACE_KEY_ANNOTATION = "confluence.io/space-key";
+const WAKATIME_PROJECT_ANNOTATION = "wakatime.com/project";
+
+/**
  * Link titles and types that mean "this is the documentation".
  *
  * Backstage puts no vocabulary on `metadata.links`, so the convention has to be
@@ -217,6 +230,10 @@ const catalogFactsOf = (entity: Entity): RepositoryCatalogFacts => {
     techDocsRef: annotation(entity, TECHDOCS_REF_ANNOTATION) ?? null,
     providesApis: countProvidedApis(entity),
     hasExternalDocs: hasExternalDocs(entity),
+    jiraProjectKey: annotation(entity, JIRA_PROJECT_KEY_ANNOTATION) ?? null,
+    jiraComponent: annotation(entity, JIRA_COMPONENT_ANNOTATION) ?? null,
+    confluenceSpaceKey: annotation(entity, CONFLUENCE_SPACE_KEY_ANNOTATION) ?? null,
+    wakaTimeProject: annotation(entity, WAKATIME_PROJECT_ANNOTATION) ?? null,
   };
 };
 

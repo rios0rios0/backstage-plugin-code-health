@@ -18,12 +18,22 @@ import {
   getSortedRowModel,
   useReactTable,
 } from "@tanstack/react-table";
-import type { ContributorSummary } from "@rios0rios0/backstage-plugin-code-health-common";
+import type {
+  ContributorSummary,
+  IntegrationCapabilities,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import {
   catalogEntityPath,
-  formatDuration,
+  NO_INTEGRATIONS,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import { Link as RouterLink } from "react-router-dom";
+import { confluenceContributorColumns } from "./columns/confluence_columns";
+import { jiraContributorColumns } from "./columns/jira_columns";
+import {
+  hasAiMetrics,
+  wakaTimeAiColumns,
+  wakaTimeContributorColumns,
+} from "./columns/wakatime_columns";
 import { DataTable, PaginationControls } from "./data_table";
 import { EmptyCell } from "./empty_cell";
 
@@ -31,6 +41,15 @@ interface ContributorsTableProps {
   contributors: ContributorSummary[];
   totalCount: number;
   isLoading: boolean;
+  /**
+   * Which integrations the backend was configured with.
+   *
+   * The columns for one are built only when it is on. Deciding from the data
+   * instead cannot tell a switched-off integration from one that is on and has
+   * not collected yet, and it makes a freshly configured install look broken
+   * until the first nightly pass.
+   */
+  capabilities?: IntegrationCapabilities;
 }
 
 const formatRate = (rate: number): string => `${rate.toFixed(1)}%`;
@@ -153,6 +172,31 @@ const ContributorName = ({
   return <Typography variant="body2">{contributor.displayName}</Typography>;
 };
 
+/**
+ * The identities merged onto one row, so a total nobody can trace back to its
+ * sources stays traceable.
+ *
+ * Only rendered when there is more than one, because a row that says "vcs" is
+ * telling the reader nothing they did not already assume.
+ */
+const MergedIdentities = ({ contributor }: { contributor: ContributorSummary }) => {
+  if (contributor.identities.length < 2) return null;
+
+  const sources = [...new Set(contributor.identities.map((identity) => identity.source))];
+
+  return (
+    <Tooltip
+      title={contributor.identities
+        .map((identity) => `${identity.source}: ${identity.sourceKey}`)
+        .join("\n")}
+    >
+      <Typography variant="caption" color="textSecondary" tabIndex={0}>
+        {sources.join(" · ")}
+      </Typography>
+    </Tooltip>
+  );
+};
+
 const ContributorCell = ({
   contributor,
 }: {
@@ -171,7 +215,10 @@ const ContributorCell = ({
             make every unphotographed contributor look identical. */}
         {initialsOf(contributor.displayName)}
       </Avatar>
-      <ContributorName contributor={contributor} />
+      <Box>
+        <ContributorName contributor={contributor} />
+        <MergedIdentities contributor={contributor} />
+      </Box>
     </Box>
   );
 };
@@ -365,51 +412,30 @@ const columns: ColumnDef<ContributorSummary>[] = [
   },
 ];
 
-const wakaTimeColumns: ColumnDef<ContributorSummary>[] = [
-  {
-    id: "totalTime",
-    accessorFn: (row) => row.wakaTimeMetrics?.totalSeconds ?? 0,
-    header: "Total Time (30d)",
-    cell: ({ row }) => {
-      const metrics = row.original.wakaTimeMetrics;
-      return (
-        <MetricCell
-          value={metrics ? formatDuration(metrics.totalSeconds) : null}
-        />
-      );
-    },
-    enableColumnFilter: false,
-  },
-  {
-    id: "dailyAverage",
-    accessorFn: (row) => row.wakaTimeMetrics?.dailyAverageSeconds ?? 0,
-    header: "Daily Avg",
-    cell: ({ row }) => {
-      const metrics = row.original.wakaTimeMetrics;
-      return (
-        <MetricCell
-          value={metrics ? formatDuration(metrics.dailyAverageSeconds) : null}
-        />
-      );
-    },
-    enableColumnFilter: false,
-  },
-];
-
 export const ContributorsTable = ({
   contributors,
   totalCount,
   isLoading,
+  capabilities = NO_INTEGRATIONS,
 }: ContributorsTableProps) => {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "churn", desc: true },
   ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
-  const hasWakaTime = contributors.some((c) => c.wakaTimeMetrics !== null);
+  // The AI columns are gated on the data as well as on the integration, because
+  // they are collected separately and opting out of them is a supported way to
+  // run WakaTime — a screen of em dashes reads as a fault rather than a choice.
+  const showAiColumns = capabilities.wakatime && hasAiMetrics(contributors);
   const allColumns = useMemo(
-    () => (hasWakaTime ? [...columns, ...wakaTimeColumns] : columns),
-    [hasWakaTime],
+    () => [
+      ...columns,
+      ...(capabilities.wakatime ? wakaTimeContributorColumns() : []),
+      ...(showAiColumns ? wakaTimeAiColumns() : []),
+      ...(capabilities.jira ? jiraContributorColumns() : []),
+      ...(capabilities.confluence ? confluenceContributorColumns() : []),
+    ],
+    [capabilities.wakatime, capabilities.jira, capabilities.confluence, showAiColumns],
   );
 
   const table = useReactTable({

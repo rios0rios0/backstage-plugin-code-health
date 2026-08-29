@@ -1,11 +1,12 @@
 import type {
   BadgeStatus,
   ComplianceStatus,
+  ConfluenceSpaceMetrics,
+  JiraRepositoryMetrics,
   Release,
   RepositoryVisibility,
   SonarMetrics,
   Tag,
-  WakaTimeMetrics,
   WorkflowStatus,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 
@@ -52,7 +53,13 @@ export interface RepositorySnapshotPayload {
   readonly complianceStatus: ComplianceStatus | null;
   readonly badgeStatus: BadgeStatus | null;
   readonly sonarMetrics: SonarMetrics | null;
-  readonly wakaTimeMetrics: WakaTimeMetrics | null;
+  /**
+   * Delivery and knowledge measures for the repository, or null when its entity
+   * names no Jira project or Confluence space. Null means "nothing to look at",
+   * which is a different statement from a project that closed no tickets.
+   */
+  readonly jiraMetrics: JiraRepositoryMetrics | null;
+  readonly confluenceMetrics: ConfluenceSpaceMetrics | null;
   /**
    * Null on a snapshot written before this field existed, which is why every
    * reader treats it as "not measured" rather than as "nothing found".

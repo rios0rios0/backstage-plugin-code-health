@@ -4,8 +4,8 @@
  * Repository credentials are deliberately absent: the plugin authenticates to
  * GitHub and Azure DevOps through the host application's existing
  * `integrations` configuration, so there is no second copy of a token to
- * rotate. The only secret declared here is the WakaTime key, which has no
- * `integrations` equivalent.
+ * rotate. The only secrets declared here are the WakaTime key and the Atlassian
+ * token, neither of which has an `integrations` equivalent.
  */
 export interface Config {
   codeHealth?: {
@@ -124,11 +124,25 @@ export interface Config {
 
     wakaTime?: {
       /**
-       * WakaTime organisation whose members are summarised.
+       * WakaTime organisation whose dashboard members are summarised.
+       *
+       * Leave it out to measure the key's own account instead, which is the
+       * useful behaviour on a personal plan — the alternative is an integration
+       * that silently collects nothing.
        *
        * @visibility backend
        */
       organization?: string;
+
+      /**
+       * Which dashboard inside the organisation, by id or by name.
+       *
+       * Members hang off a dashboard rather than off the organisation, and most
+       * organisations have exactly one. Leave it out and the first one is used.
+       *
+       * @visibility backend
+       */
+      dashboard?: string;
 
       /**
        * WakaTime API key. Read only by the backend and never sent to a browser.
@@ -143,6 +157,183 @@ export interface Config {
        * @visibility backend
        */
       baseUrl?: string;
+
+      /**
+       * Days of coding history collected on each snapshot pass. Defaults to 30.
+       *
+       * The whole window is re-read every run because it costs the same as one
+       * day: the summaries resource answers for an arbitrary span in a single
+       * request per member. How far back it can reach is a property of the
+       * WakaTime plan, not of this setting.
+       *
+       * @visibility backend
+       */
+      historyDays?: number;
+
+      /**
+       * Whether to collect AI authorship and token counts. Defaults to false.
+       *
+       * This is the expensive half. Coding time for a whole window costs one
+       * request per member; the AI figures come from the durations resource,
+       * which answers for a single day at a time.
+       *
+       * @visibility backend
+       */
+      includeAiMetrics?: boolean;
+
+      /**
+       * Days of AI figures collected per member per run, newest first.
+       * Defaults to 3.
+       *
+       * AI history therefore accumulates forwards from the day the option was
+       * switched on rather than being backfilled, which is why a chart of it
+       * starts in the middle.
+       *
+       * @visibility backend
+       */
+      aiDaysPerRun?: number;
+    };
+
+    /**
+     * One Atlassian Cloud site, shared by Jira and Confluence.
+     *
+     * Deliberately a single credential rather than one per product: they are
+     * the same account and the same API token, and asking for it twice only
+     * creates a way for the two to drift apart. Configuring the site switches
+     * both integrations on; switching one off afterwards is the exception, so
+     * it is the flag.
+     */
+    atlassian?: {
+      /**
+       * Site root, e.g. `https://acme.atlassian.net`. A trailing slash is
+       * stripped.
+       *
+       * @visibility backend
+       */
+      baseUrl?: string;
+
+      /**
+       * The Atlassian account the API token belongs to.
+       *
+       * @visibility backend
+       */
+      email?: string;
+
+      /**
+       * Atlassian API token. Read only by the backend, never sent to a browser.
+       *
+       * @visibility secret
+       */
+      apiToken?: string;
+
+      /**
+       * Ceiling on results pulled per run, per resource. Defaults to 2000.
+       *
+       * Both products page indefinitely, and a site with a decade of history
+       * would otherwise spend an entire request budget on one resource.
+       *
+       * @visibility backend
+       */
+      maxResultsPerRun?: number;
+
+      /**
+       * Days of history each run measures. Defaults to 90.
+       *
+       * @visibility backend
+       */
+      historyDays?: number;
+
+      jira?: {
+        /**
+         * Whether to collect Jira measures. Defaults to true once the site is
+         * configured.
+         *
+         * @visibility backend
+         */
+        enabled?: boolean;
+
+        /**
+         * JQL appended to every query with `AND`, e.g. to exclude a service-desk
+         * queue whose tickets are not engineering work.
+         *
+         * Interpolated verbatim, because there is no safe way to escape a
+         * fragment of a query language an operator is deliberately writing. It
+         * is acceptable only because it comes from this file rather than from a
+         * catalog entity or an HTTP request; project keys read from annotations
+         * are quoted and escaped instead.
+         *
+         * @visibility backend
+         */
+        filter?: string;
+
+        /**
+         * Custom field id holding story points, e.g. `customfield_10016`.
+         *
+         * Leave it out and the field is found by name at runtime. Pinning it is
+         * the escape hatch for a site that renamed the field, or one carrying
+         * both `Story Points` and `Story point estimate`.
+         *
+         * @visibility backend
+         */
+        storyPointsField?: string;
+
+        /**
+         * Issues fetched per project per run. Defaults to 1000.
+         *
+         * @visibility backend
+         */
+        maxIssuesPerProject?: number;
+      };
+
+      confluence?: {
+        /**
+         * Whether to collect Confluence measures. Defaults to true once the
+         * site is configured.
+         *
+         * @visibility backend
+         */
+        enabled?: boolean;
+
+        /**
+         * Spaces to restrict the sweep to. Empty means every space the token
+         * can read.
+         *
+         * @visibility backend
+         */
+        spaceKeys?: string[];
+
+        /**
+         * Days without an edit after which a page counts as stale.
+         * Defaults to 180.
+         *
+         * @visibility backend
+         */
+        staleAfterDays?: number;
+
+        /**
+         * Pages a run fetches a version history for, across every space.
+         * Defaults to 500.
+         *
+         * @visibility backend
+         */
+        maxPagesPerRun?: number;
+
+        /**
+         * Of those, how many get body fetches so written volume can be
+         * measured. Defaults to 150.
+         *
+         * @visibility backend
+         */
+        maxPagesForVolume?: number;
+
+        /**
+         * Pages a run asks the analytics API about. Premium sites only, since
+         * page-view analytics is not served on Standard. Defaults to 200.
+         *
+         * @visibility backend
+         */
+        maxAnalyticsLookups?: number;
+      };
     };
   };
 }

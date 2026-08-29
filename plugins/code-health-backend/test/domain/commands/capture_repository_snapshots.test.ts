@@ -10,16 +10,23 @@ import {
   DEFAULT_SNAPSHOT_SCHEDULE,
   type IngestionSettings,
 } from "../../../src/domain/entities/ingestion_settings";
+import type { Day } from "../../../src/domain/entities/day";
 import { CircuitOpenError } from "../../../src/domain/entities/provider_errors";
 import type { TrackedRepository } from "../../../src/domain/entities/tracked_repository";
 import type {
   EnrichmentContext,
   SonarEnricher,
   WakaTimeEnricher,
+  WakaTimeHarvest,
 } from "../../../src/domain/services/snapshot_enricher";
+import type { ConfluenceEnricher } from "../../../src/domain/services/confluence_enricher";
+import type { ObservedIdentity } from "../../../src/domain/services/identity_resolver";
+import type { JiraEnricher } from "../../../src/domain/services/jira_enricher";
 import type { VcsCollector } from "../../../src/domain/services/vcs_collector";
 import { DiscoveredRepositoryBuilder } from "../../builders/discovered_repository_builder";
+import { WakaTimeMetricsBuilder } from "../../builders/wakatime_metrics_builder";
 import { InMemoryCodeHealthStore } from "../../doubles/in_memory_code_health_store";
+import { RecordingIdentityObserver } from "../../doubles/recording_identity_observer";
 import { RecordingLogger } from "../../doubles/recording_logger";
 import { StubVcsCollector } from "../../doubles/stub_vcs_collector";
 
@@ -52,18 +59,29 @@ class StubWakaTimeEnricher implements WakaTimeEnricher {
   private failure: Error | null = null;
 
   callCount = 0;
+  /** The window the command asked for, so a test can assert on the span. */
+  lastRequest: { from: Day; to: Day; aiDays: readonly Day[] } | null = null;
 
-  constructor(private readonly metrics: Map<string, WakaTimeMetrics> = new Map()) {}
+  constructor(
+    private readonly byDay: ReadonlyMap<Day, ReadonlyMap<string, WakaTimeMetrics>> = new Map(),
+    private readonly identities: readonly ObservedIdentity[] = [],
+  ) {}
 
   withFailure(failure: Error): StubWakaTimeEnricher {
     this.failure = failure;
     return this;
   }
 
-  async fetchAll(_context: EnrichmentContext): Promise<ReadonlyMap<string, WakaTimeMetrics>> {
+  async fetchWindow(input: {
+    from: Day;
+    to: Day;
+    aiDays: readonly Day[];
+    context: EnrichmentContext;
+  }): Promise<WakaTimeHarvest> {
     this.callCount += 1;
+    this.lastRequest = { from: input.from, to: input.to, aiDays: input.aiDays };
     if (this.failure) throw this.failure;
-    return this.metrics;
+    return { identities: this.identities, byDay: this.byDay };
   }
 }
 
@@ -72,6 +90,9 @@ const createCommand = async (options: {
   collector?: StubVcsCollector;
   sonar?: SonarEnricher | null;
   wakaTime?: WakaTimeEnricher | null;
+  wakaTimeWindow?: { historyDays: number; aiDays: number };
+  jira?: JiraEnricher | null;
+  confluence?: ConfluenceEnricher | null;
   overrides?: Partial<IngestionSettings>;
 }) => {
   const store = new InMemoryCodeHealthStore();
@@ -89,16 +110,21 @@ const createCommand = async (options: {
   });
 
   const collectors: ReadonlyMap<Platform, VcsCollector> = new Map([["github", collector]]);
+  const identities = new RecordingIdentityObserver();
   const command = new CaptureRepositorySnapshots({
     store,
     collectors,
     sonar: options.sonar ?? null,
     wakaTime: options.wakaTime ?? null,
+    wakaTimeWindow: options.wakaTimeWindow ?? { historyDays: 30, aiDays: 0 },
+    jira: options.jira ?? null,
+    confluence: options.confluence ?? null,
+    identities,
     settings: settings(options.overrides),
     logger,
   });
 
-  return { command, store, collector, logger };
+  return { command, store, collector, logger, identities };
 };
 
 describe("CaptureRepositorySnapshots", () => {
@@ -192,8 +218,9 @@ describe("CaptureRepositorySnapshots", () => {
     // given
     // WakaTime reports per member for the organisation, so asking per
     // repository would multiply one answer by the repository count.
+    const monday = WakaTimeMetricsBuilder.aDay("2026-08-10").withSeconds(3600).build();
     const wakaTime = new StubWakaTimeEnricher(
-      new Map([["dev@example.com", { totalSeconds: 3600, dailyAverageSeconds: 120 }]]),
+      new Map([["2026-08-10", new Map([["dev@example.com", monday]])]]),
     );
     const { command, store } = await createCommand({ repositories: 4, wakaTime });
 
@@ -202,11 +229,75 @@ describe("CaptureRepositorySnapshots", () => {
 
     // then
     expect(wakaTime.callCount).toBe(1);
-    const metrics = await store.listLatestContributorMetrics("2026-08-10");
-    expect(metrics.get("dev@example.com")).toEqual({
-      totalSeconds: 3600,
-      dailyAverageSeconds: 120,
+    const rows = await store.listContributorMetrics<WakaTimeMetrics>({
+      source: "wakatime",
+      from: "2026-08-10",
+      to: "2026-08-10",
     });
+    expect(rows).toEqual([
+      { day: "2026-08-10", contributorKey: "dev@example.com", payload: monday },
+    ]);
+  });
+
+  it("should ask for the whole configured history, not only today", async () => {
+    // given
+    // The summaries resource answers for an arbitrary span in one request per
+    // member, so asking for a month costs exactly what asking for a day costs.
+    const wakaTime = new StubWakaTimeEnricher();
+    const { command } = await createCommand({
+      wakaTime,
+      wakaTimeWindow: { historyDays: 7, aiDays: 0 },
+    });
+
+    // when
+    await command.run({ now: NOW });
+
+    // then
+    expect(wakaTime.lastRequest).toEqual({
+      from: "2026-08-04",
+      to: "2026-08-10",
+      aiDays: [],
+    });
+  });
+
+  it("should ask for AI figures only on the most recent days", async () => {
+    // given
+    // The durations resource takes a single date, so a month of AI history
+    // would cost thirty times what the coding time costs.
+    const wakaTime = new StubWakaTimeEnricher();
+    const { command } = await createCommand({
+      wakaTime,
+      wakaTimeWindow: { historyDays: 30, aiDays: 2 },
+    });
+
+    // when
+    await command.run({ now: NOW });
+
+    // then
+    expect(wakaTime.lastRequest?.aiDays).toEqual(["2026-08-09", "2026-08-10"]);
+  });
+
+  it("should record the accounts WakaTime reported even when they logged nothing", async () => {
+    // given
+    // An account that coded nothing all month is still an account somebody may
+    // need to link, and the Identities screen is where they would look for it.
+    const wakaTime = new StubWakaTimeEnricher(new Map(), [
+      {
+        source: "wakatime",
+        sourceKey: "quiet",
+        displayName: "Quiet Dev",
+        email: null,
+        avatarUrl: null,
+        profileUrl: null,
+      },
+    ]);
+    const { command, identities } = await createCommand({ wakaTime });
+
+    // when
+    await command.run({ now: NOW });
+
+    // then
+    expect(identities.keys()).toEqual(["wakatime:quiet"]);
   });
 
   it("should carry on when WakaTime is unreachable", async () => {
@@ -399,6 +490,10 @@ describe("CaptureRepositorySnapshots", () => {
       collectors: new Map(),
       sonar: null,
       wakaTime: null,
+      wakaTimeWindow: { historyDays: 30, aiDays: 0 },
+      jira: null,
+      confluence: null,
+      identities: new RecordingIdentityObserver(),
       settings: settings(),
       logger,
     });

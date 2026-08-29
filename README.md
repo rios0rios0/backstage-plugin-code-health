@@ -41,7 +41,10 @@ rather than showing an empty dashboard.
 - **Insights**: the landing tab, with the fleet-level figures and charts — delivery cadence, top contributors, most active repositories, review load, quality-gate and branch-policy breakdowns, test-coverage distribution, and the documentation and catalog-API gaps
 - **Catalog links**: repository rows and contributors link through to their catalog entity, and a contributor matched to a `User` shows that entity's name and picture
 - **Sonar integration** through the community `sonarqube` backend plugin, so its token stays where that plugin already keeps it
-- **WakaTime integration**: 30-day coding time and daily average per contributor
+- **One row per person, not per account**: commits arrive under a commit e-mail or a login, coding time under a WakaTime username, tickets under an Atlassian account id. The **Identities** tab links them, so a contributor row adds up — and because links are applied when a row is built, correcting one fixes last March's numbers too
+- **WakaTime integration**: coding time, active days, language and editor breakdowns, branches touched, files opened, and — where WakaTime's editor plugins report them — **AI token counts and the share of lines written by AI rather than typed**. It is the only source here that measures effort rather than output, and the only one that can see the difference between a line typed and a line accepted from a completion
+- **Jira integration**: tickets created and closed, interactions, story points estimated and finished, cycle and lead time, throughput, bug ratio, rework, and the open backlog by priority and age
+- **Confluence integration**: pages created and edited, words written, comments, attachments, spaces contributed to, stale-page counts, and page views on Premium sites. One Atlassian credential lights up both products
 - **Documentation audit**: which repositories publish TechDocs, which already write documentation nobody wired up, and which have none
 - **Catalog API audit**: repositories shipping an OpenAPI, AsyncAPI, GraphQL or protobuf definition that declare no `spec.providesApis`
 - **A year of history**: pick any rolling window from the last hour to the last 365 days, today so far, or any single calendar month
@@ -179,7 +182,7 @@ a full year. Raising `backfillChunk` to `P7D` brings that under a day. The dashb
 throughout: the actor collects the recent window before it starts walking backwards, so the last day
 is answerable from the first run and wider ranges unlock as the backfill advances.
 
-### Sonar and WakaTime
+### Sonar, WakaTime and Atlassian
 
 ```yaml
 codeHealth:
@@ -187,16 +190,78 @@ codeHealth:
     # Requires @backstage-community/plugin-sonarqube-backend and a
     # `sonarqube.org/project-key` annotation on the entity.
     enabled: true
+
   wakaTime:
+    # Optional. Without it the key's own account is measured, which is what a
+    # small team on personal plans wants.
     organization: 'my-org'
     apiKey: ${WAKATIME_API_KEY}
+    historyDays: 30
+    # Token counts and AI-versus-human authorship. Off by default: coding time
+    # for a whole window costs one request per member, while these cost one per
+    # member per day.
+    includeAiMetrics: false
+
+  # One credential, both products.
+  atlassian:
+    baseUrl: 'https://acme.atlassian.net'
+    email: ${ATLASSIAN_EMAIL}
+    apiToken: ${ATLASSIAN_API_TOKEN}
+    historyDays: 90
+    jira:
+      enabled: true
+    confluence:
+      enabled: true
 ```
+
+Every integration is absent by default, and the frontend asks the backend which ones are configured
+before it draws anything. That is why a column for a switched-off integration is never built rather
+than being built and left empty: an integration configured this morning has collected nothing until
+the nightly pass, and a dashboard that hides its columns until then looks broken rather than new.
 
 Sonar measures are read from the `sonarqube` backend plugin over Backstage's internal
 service-to-service channel, so its token is not duplicated here. That plugin exposes a current
 summary per entity and no measures-history passthrough, so **Sonar history cannot be backfilled**:
 the trend starts at the first snapshot after installation. The same is true of compliance checks and
-README badges — no provider reports what they looked like last March.
+README badges — no provider reports what they looked like last March. WakaTime and Jira *can* be
+backfilled and are stored a day at a time, so a range picked over a past month gets a real answer
+rather than a trailing window relabelled with that month's dates.
+
+Jira and Confluence scope themselves to a repository through annotations on its catalog entity:
+
+```yaml
+metadata:
+  annotations:
+    jira/project-key: PLAT
+    confluence.io/space-key: ENG
+    # Only needed when the WakaTime project is not named after the repository.
+    wakatime.com/project: platform-gateway
+```
+
+Each integration has its own reference, covering exactly what is measured, how each number is
+derived, what the provider cannot answer and why:
+
+- [WakaTime](plugins/code-health-backend/docs/wakatime.md)
+- [Jira](plugins/code-health-backend/docs/jira.md)
+- [Confluence](plugins/code-health-backend/docs/confluence.md)
+
+### Identities — making a contributor row a person
+
+Every system identifies people differently, and only a shared e-mail address joins any two of them
+on its own. The **Identities** tab lists every account the plugin has seen, which catalog `User` it
+resolved to, and a ranked list of who else it might be.
+
+An account whose address matches a `User` profile is linked automatically — that is the same rule
+the catalog itself uses. Everything weaker (a shared address before the `@`, an identical display
+name, a username that matches the directory address, a partial name match) is *offered* and linked
+only when somebody confirms it. **Nothing is merged on a name resemblance alone**: two people who
+share a surname would silently become one contributor, and a merge nobody asked for is far harder to
+notice than a row that stayed separate. A manual link is never overwritten by the automatic rule.
+
+Links are applied when a row is built rather than when a measurement is taken, so correcting one is
+retroactive across every window the plugin has ever collected. An account nobody has linked keeps a
+row of its own — hiding it would hide every bot, every service account, and everybody nobody has got
+round to linking, which are exactly the rows that show the work is not finished.
 
 ### Presentation
 

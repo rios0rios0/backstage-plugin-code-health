@@ -56,9 +56,14 @@ export interface VcsCollector {
    * retroactively, so their history begins at the first snapshot rather than at
    * the retention floor.
    *
-   * Returns the provider-derived part of the payload; Sonar and WakaTime are
-   * layered on afterwards by the snapshot command, because neither is a
-   * property of the version control system.
+   * Returns the provider-derived part of the payload. Sonar, Jira and
+   * Confluence are layered on afterwards by the snapshot command, because none
+   * of them is a property of the version control system.
+   *
+   * Coding time is not layered on here at all. WakaTime measures a person, and
+   * the time a repository received is the sum of what its people logged against
+   * the matching project — which is a question about a window, not about the
+   * day the snapshot was taken, so it is answered on read instead.
    */
   snapshot(
     repository: TrackedRepository,
@@ -80,7 +85,10 @@ export interface SnapshotContext extends CollectorContext {
 }
 
 export interface ProviderSnapshot {
-  readonly payload: Omit<RepositorySnapshotPayload, "sonarMetrics" | "wakaTimeMetrics">;
+  readonly payload: Omit<
+    RepositorySnapshotPayload,
+    "sonarMetrics" | "jiraMetrics" | "confluenceMetrics"
+  >;
   /** Dated facts discovered while snapshotting, such as releases and tags. */
   readonly events: readonly CodeHealthEvent[];
   readonly repositoryFacts?: LearntRepositoryFacts;

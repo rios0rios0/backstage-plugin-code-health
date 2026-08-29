@@ -11,6 +11,8 @@ import {
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
+  codeHealthIdentitiesApiRef,
+  codeHealthIntegrationsApiRef,
   codeHealthRepositoriesApiRef,
   codeHealthTimeSeriesApiRef,
 } from "./api_refs";
@@ -56,10 +58,24 @@ export const codeHealthTimeSeriesApiFactory = createApiFactory({
   factory: (deps) => new CodeHealthBackendClient(deps),
 });
 
+export const codeHealthIntegrationsApiFactory = createApiFactory({
+  api: codeHealthIntegrationsApiRef,
+  deps: clientDeps,
+  factory: (deps) => new CodeHealthBackendClient(deps),
+});
+
+export const codeHealthIdentitiesApiFactory = createApiFactory({
+  api: codeHealthIdentitiesApiRef,
+  deps: clientDeps,
+  factory: (deps) => new CodeHealthBackendClient(deps),
+});
+
 export const codeHealthApis: AnyApiFactory[] = [
   codeHealthConfigApiFactory,
   codeHealthRepositoriesApiFactory,
   codeHealthContributorsApiFactory,
   codeHealthCoverageApiFactory,
   codeHealthTimeSeriesApiFactory,
+  codeHealthIntegrationsApiFactory,
+  codeHealthIdentitiesApiFactory,
 ];

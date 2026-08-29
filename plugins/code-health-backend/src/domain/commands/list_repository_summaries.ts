@@ -2,6 +2,9 @@ import type {
   ApiExposure,
   DocumentationStatus,
   RepositorySummary,
+  WakaTimeDayTotal,
+  WakaTimeMetrics,
+  WakaTimeProjectMetrics,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
   buildApiExposure,
@@ -11,6 +14,7 @@ import {
 import { aggregateActivity } from "../entities/activity";
 import type { CodeHealthEvent } from "../entities/code_health_event";
 import { toDay } from "../entities/day";
+import type { ContributorMetricRow } from "../repositories/code_health_store";
 import type {
   RepositoryFileFacts,
   RepositorySnapshotPayload,
@@ -41,9 +45,78 @@ const unsnapshotted = (repository: TrackedRepository): RepositorySnapshotPayload
   complianceStatus: null,
   badgeStatus: null,
   sonarMetrics: null,
-  wakaTimeMetrics: null,
+  jiraMetrics: null,
+  confluenceMetrics: null,
   repositoryFiles: null,
 });
+
+/**
+ * WakaTime spells a project however the editor plugin derived it from a working
+ * directory, and a catalog spells a repository however somebody named the
+ * entity. Folding case and separators is what lets `code-health` match
+ * `Code_Health` without claiming the two are the same string.
+ */
+const normalizeProject = (value: string): string =>
+  value.trim().toLowerCase().replace(/[\s._-]+/gu, "-");
+
+interface ProjectTotals {
+  readonly name: string;
+  totalSeconds: number;
+  readonly contributors: Set<string>;
+  readonly daily: Map<string, number>;
+}
+
+/**
+ * Sums the coding time logged against each WakaTime project in the window.
+ *
+ * Built from the same per-person day rows the contributors tab reads, so the
+ * two views can never disagree about how many hours a week held. The project
+ * breakdown inside each row is what carries the attribution; WakaTime does not
+ * report a project total for an organisation anywhere else.
+ */
+export const aggregateWakaTimeProjects = (
+  rows: readonly ContributorMetricRow<WakaTimeMetrics>[],
+): Map<string, ProjectTotals> => {
+  const byProject = new Map<string, ProjectTotals>();
+
+  for (const row of rows) {
+    for (const project of row.payload.projects) {
+      const key = normalizeProject(project.name);
+      const totals = byProject.get(key) ?? {
+        name: project.name,
+        totalSeconds: 0,
+        contributors: new Set<string>(),
+        daily: new Map<string, number>(),
+      };
+
+      totals.totalSeconds += project.totalSeconds;
+      // Only somebody who actually logged time counts. A member with a WakaTime
+      // seat and a quiet week is not a contributor to this repository.
+      if (project.totalSeconds > 0) totals.contributors.add(row.contributorKey);
+      totals.daily.set(row.day, (totals.daily.get(row.day) ?? 0) + project.totalSeconds);
+      byProject.set(key, totals);
+    }
+  }
+
+  return byProject;
+};
+
+const toProjectMetrics = (
+  totals: ProjectTotals,
+  window: { from: string; to: string },
+): WakaTimeProjectMetrics => {
+  const daily: WakaTimeDayTotal[] = [...totals.daily.entries()]
+    .map(([day, totalSeconds]) => ({ day, totalSeconds }))
+    .sort((left, right) => left.day.localeCompare(right.day));
+
+  return {
+    projectName: totals.name,
+    window,
+    totalSeconds: totals.totalSeconds,
+    contributors: totals.contributors.size,
+    daily,
+  };
+};
 
 /**
  * Grades documentation from the catalog entry and the repository together.
@@ -85,6 +158,26 @@ const apiExposureOf = (
   });
 };
 
+/**
+ * The WakaTime project this repository is tracked as.
+ *
+ * The annotation wins where a catalog entity carries one; otherwise the
+ * repository's own name is matched, which is what WakaTime's editor plugins
+ * derive a project name from in the overwhelming majority of setups. A
+ * repository nothing matched reports null rather than zero — "nobody here has
+ * WakaTime installed" and "the project is called something else" are different
+ * problems, and a zero would hide both behind the same cell.
+ */
+const wakaTimeOf = (
+  repository: TrackedRepository,
+  byProject: ReadonlyMap<string, ProjectTotals>,
+  window: { from: string; to: string },
+): WakaTimeProjectMetrics | null => {
+  const name = repository.catalogFacts.wakaTimeProject ?? repository.name;
+  const totals = byProject.get(normalizeProject(name));
+  return totals === undefined ? null : toProjectMetrics(totals, window);
+};
+
 export class ListRepositorySummaries {
   constructor(private readonly store: CodeHealthStore) {}
 
@@ -97,11 +190,19 @@ export class ListRepositorySummaries {
    * than as it is now.
    */
   async run(input: { from: Date; to: Date }): Promise<RepositorySummary[]> {
-    const [tracked, events, snapshots] = await Promise.all([
+    const window = { from: toDay(input.from), to: toDay(input.to) };
+
+    const [tracked, events, snapshots, wakaTimeRows] = await Promise.all([
       this.store.listTrackedRepositories(),
       this.store.listEvents({ from: input.from, to: input.to }),
-      this.store.listLatestSnapshots({ day: toDay(input.to) }),
+      this.store.listLatestSnapshots({ day: window.to }),
+      this.store.listContributorMetrics<WakaTimeMetrics>({
+        source: "wakatime",
+        ...window,
+      }),
     ]);
+
+    const wakaTimeByProject = aggregateWakaTimeProjects(wakaTimeRows);
 
     const eventsByRepository = new Map<string, CodeHealthEvent[]>();
     for (const event of events) {
@@ -144,7 +245,19 @@ export class ListRepositorySummaries {
         documentation: documentationOf(repository, files, payload.isArchived),
         apiExposure: apiExposureOf(repository, files, payload.isArchived),
         badgeStatus: payload.badgeStatus,
-        wakaTimeMetrics: payload.wakaTimeMetrics,
+        wakaTimeMetrics: wakaTimeOf(repository, wakaTimeByProject, window),
+        // Both come from the snapshot rather than from the window's events:
+        // neither product exposes what a project looked like on an arbitrary
+        // past day, so the figure is the most recent one taken at or before it.
+        //
+        // `?? null` for the same reason `repositoryFiles` needs it above: a
+        // payload written before these fields existed carries no key, and the
+        // store parses stored JSON with a cast rather than a validation. Left
+        // undefined it survives every `=== null` guard downstream and reaches
+        // code that dereferences it — and picking any range that predates the
+        // upgrade reproduces that permanently, not just once after it.
+        jiraMetrics: payload.jiraMetrics ?? null,
+        confluenceMetrics: payload.confluenceMetrics ?? null,
         activity: repositoryEvents
           ? aggregateActivity(repositoryEvents)
           : EMPTY_REPOSITORY_ACTIVITY,
@@ -152,3 +265,4 @@ export class ListRepositorySummaries {
     });
   }
 }
+

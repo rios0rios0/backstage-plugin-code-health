@@ -45,6 +45,8 @@ export class RepositoryBuilder {
       documentation: null,
       apiExposure: null,
       wakaTimeMetrics: null,
+      jiraMetrics: null,
+      confluenceMetrics: null,
       activity: EMPTY_REPOSITORY_ACTIVITY,
     };
   }

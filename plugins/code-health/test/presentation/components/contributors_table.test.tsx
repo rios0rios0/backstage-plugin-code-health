@@ -1,7 +1,11 @@
+import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { render as renderBare, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ContributorsTable } from "../../../src/presentation/components/contributors_table";
-import { ContributorBuilder } from "../../builders/contributor_builder";
+import {
+  ContributorBuilder,
+  WakaTimeBuilder,
+} from "../../builders/contributor_builder";
 
 // A contributor linked to a catalog user renders a router `Link`, so these mount
 // inside a router — which is how the app renders the table.
@@ -184,13 +188,16 @@ describe("ContributorsTable", () => {
     expect(approvalRateEl.getAttribute("data-tone")).toBe("poor");
   });
 
-  it("should show WakaTime columns when any contributor has wakaTimeMetrics", () => {
+  it("should show the WakaTime columns when the integration is configured", () => {
     // given
+    // Driven by configuration, not by the data: a WakaTime that was switched on
+    // this morning has collected nothing until the nightly pass, and hiding its
+    // columns until then makes a working install look broken.
     const contributors = [
-      {
-        ...ContributorBuilder.create().withDisplayName("alice").build(),
-        wakaTimeMetrics: { totalSeconds: 3600, dailyAverageSeconds: 1800 },
-      },
+      ContributorBuilder.create()
+        .withDisplayName("alice")
+        .withWakaTimeMetrics(WakaTimeBuilder.create().withTotalSeconds(3600).build())
+        .build(),
     ];
 
     // when
@@ -199,15 +206,18 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
+        capabilities={{ ...NO_INTEGRATIONS, wakatime: true }}
       />,
     );
 
     // then
-    expect(screen.getByText("Total Time (30d)")).toBeInTheDocument();
-    expect(screen.getByText("Daily Avg")).toBeInTheDocument();
+    expect(screen.getByText("Coding time")).toBeInTheDocument();
+    expect(screen.getByText("Active days")).toBeInTheDocument();
+    expect(screen.getByText("Branches")).toBeInTheDocument();
+    expect(screen.getByText("1h")).toBeInTheDocument();
   });
 
-  it("should hide WakaTime columns when no contributor has wakaTimeMetrics", () => {
+  it("should show the WakaTime columns even before anything was collected", () => {
     // given
     const contributors = [ContributorBuilder.create().build()];
 
@@ -217,12 +227,99 @@ describe("ContributorsTable", () => {
         contributors={contributors}
         totalCount={1}
         isLoading={false}
+        capabilities={{ ...NO_INTEGRATIONS, wakatime: true }}
       />,
     );
 
     // then
-    expect(screen.queryByText("Total Time (30d)")).not.toBeInTheDocument();
-    expect(screen.queryByText("Daily Avg")).not.toBeInTheDocument();
+    expect(screen.getByText("Coding time")).toBeInTheDocument();
+    // And the cells read as unmeasured rather than as zero hours worked.
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
+  });
+
+  it("should show the AI columns only once a row actually carries them", () => {
+    // given
+    // The AI figures are collected separately and opting out of them is a
+    // supported way to run WakaTime, so a screen of em dashes would read as a
+    // fault rather than as a choice.
+    const withAi = ContributorBuilder.create()
+      .withDisplayName("alice")
+      .withWakaTimeMetrics(
+        WakaTimeBuilder.create()
+          .withAi({ inputTokens: 1200, outputTokens: 300, linesAddedByAi: 30, linesAddedByHuman: 70 })
+          .build(),
+      )
+      .build();
+    const withoutAi = ContributorBuilder.create()
+      .withDisplayName("bob")
+      .withWakaTimeMetrics(WakaTimeBuilder.create().build())
+      .build();
+    const capabilities = { ...NO_INTEGRATIONS, wakatime: true };
+
+    // when
+    const { rerender } = render(
+      <ContributorsTable
+        contributors={[withoutAi]}
+        totalCount={1}
+        isLoading={false}
+        capabilities={capabilities}
+      />,
+    );
+
+    // then
+    expect(screen.queryByText("AI tokens")).not.toBeInTheDocument();
+
+    // when
+    rerender(
+      <ContributorsTable
+        contributors={[withAi]}
+        totalCount={1}
+        isLoading={false}
+        capabilities={capabilities}
+      />,
+    );
+
+    // then
+    expect(screen.getByText("AI tokens")).toBeInTheDocument();
+    expect(screen.getByText("1.5k")).toBeInTheDocument();
+    expect(screen.getByText("30%")).toBeInTheDocument();
+  });
+
+  it("should hide the WakaTime columns when the integration is not configured", () => {
+    // given
+    const contributors = [
+      ContributorBuilder.create()
+        .withWakaTimeMetrics(WakaTimeBuilder.create().build())
+        .build(),
+    ];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(screen.queryByText("Coding time")).not.toBeInTheDocument();
+  });
+
+  it("should name the systems merged onto one row", () => {
+    // given
+    // A total nobody can trace back to its sources is a number nobody trusts.
+    const contributor = ContributorBuilder.create()
+      .withDisplayName("alice")
+      .withIdentities([
+        { source: "vcs", sourceKey: "alice@example.com", displayName: "Alice" },
+        { source: "wakatime", sourceKey: "alice", displayName: null },
+      ])
+      .build();
+
+    // when
+    render(
+      <ContributorsTable contributors={[contributor]} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(screen.getByText("vcs · wakatime")).toBeInTheDocument();
   });
 
   it("should render contributor count", () => {
@@ -297,16 +394,27 @@ describe("ContributorsTable", () => {
     const tracked = ContributorBuilder.create().withDisplayName("tracked").build();
     const untracked = ContributorBuilder.create().withDisplayName("untracked").build();
     const contributors = [
-      { ...tracked, wakaTimeMetrics: { totalSeconds: 9000, dailyAverageSeconds: 1800 } },
+      {
+        ...tracked,
+        wakaTimeMetrics: WakaTimeBuilder.create().withTotalSeconds(9000).build(),
+      },
       untracked,
     ];
 
     // when
-    render(<ContributorsTable {...defaultProps} contributors={contributors} totalCount={2} />);
+    render(
+      <ContributorsTable
+        {...defaultProps}
+        contributors={contributors}
+        totalCount={2}
+        capabilities={{ ...NO_INTEGRATIONS, wakatime: true }}
+      />,
+    );
 
     // then
     expect(screen.getByText("2h 30m")).toBeInTheDocument();
-    expect(screen.getByText("30m")).toBeInTheDocument();
+    // The untracked row reads as unmeasured, never as zero hours worked.
+    expect(screen.getAllByText("-").length).toBeGreaterThan(0);
   });
 
   it("should page through more contributors than fit on one page", () => {

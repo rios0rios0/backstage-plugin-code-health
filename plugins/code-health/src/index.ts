@@ -4,6 +4,8 @@ export {
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
+  codeHealthIdentitiesApiRef,
+  codeHealthIntegrationsApiRef,
   codeHealthRepositoriesApiRef,
 } from "./main/api_refs";
 
@@ -13,6 +15,8 @@ export type {
   ContributorService,
   CoverageService,
   DashboardService,
+  IdentityService,
+  IntegrationsService,
 } from "./domain/services/dashboard_service";
 
 /**
@@ -26,8 +30,17 @@ export type {
   CIState,
   ComplianceColor,
   ComplianceStatus,
+  ConfluenceContributorMetrics,
+  ConfluenceSpaceMetrics,
+  ContributorIdentity,
   ContributorSummary,
   CoverageInfo,
+  IdentityRow,
+  IdentitySource,
+  IntegrationCapabilities,
+  IntegrationId,
+  JiraContributorMetrics,
+  JiraRepositoryMetrics,
   Platform,
   QualityGateStatus,
   Release,
@@ -35,6 +48,9 @@ export type {
   RepositorySummary,
   SonarMetrics,
   Tag,
+  WakaTimeAiMetrics,
+  WakaTimeBreakdownItem,
   WakaTimeMetrics,
+  WakaTimeProjectMetrics,
   WorkflowStatus,
 } from "@rios0rios0/backstage-plugin-code-health-common";

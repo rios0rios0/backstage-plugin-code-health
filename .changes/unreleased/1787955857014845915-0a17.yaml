@@ -1,0 +1,3 @@
+kind: 'Added'
+body: 'added a `/api/code-health/v1/capabilities` route and a matching `codeHealthIntegrationsApiRef`, so the dashboard asks the backend which optional integrations are configured before it draws anything. Inferring it from whether any row happened to carry a value could not tell a switched-off integration from one that is on and has not collected yet — the two want completely different words on the screen — and it made a freshly configured install look broken until the first nightly pass. Every integration column group is now a factory the table calls only when its flag is set, so nothing is built for an integration that is off'
+time: '2026-08-28T22:24:17.014793465Z'

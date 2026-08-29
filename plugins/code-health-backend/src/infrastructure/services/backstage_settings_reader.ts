@@ -3,8 +3,21 @@ import {
   type SchedulerServiceTaskScheduleDefinition,
 } from "@backstage/backend-plugin-api";
 import type { Config } from "@backstage/config";
+import type { ConfluenceSettings } from "../../domain/entities/confluence_settings";
+import {
+  DEFAULT_CONFLUENCE_MAX_ANALYTICS_LOOKUPS,
+  DEFAULT_CONFLUENCE_MAX_PAGES_FOR_VOLUME,
+  DEFAULT_CONFLUENCE_MAX_PAGES_PER_RUN,
+  DEFAULT_CONFLUENCE_STALE_AFTER_DAYS,
+} from "../../domain/entities/confluence_settings";
 import { parseChunkDays } from "../../domain/entities/day";
 import {
+  DEFAULT_JIRA_MAX_ISSUES_PER_PROJECT,
+  jiraSettingsFrom,
+} from "../../domain/entities/jira_settings";
+import {
+  DEFAULT_ATLASSIAN_HISTORY_DAYS,
+  DEFAULT_ATLASSIAN_MAX_RESULTS_PER_RUN,
   DEFAULT_BACKFILL_CHUNK,
   DEFAULT_CONCURRENCY_PER_HOST,
   DEFAULT_DISCOVERY_SCHEDULE,
@@ -13,7 +26,9 @@ import {
   DEFAULT_REQUEST_BUDGET_PER_RUN,
   DEFAULT_RETENTION_DAYS,
   DEFAULT_SNAPSHOT_SCHEDULE,
+  DEFAULT_WAKATIME_AI_DAYS_PER_RUN,
   DEFAULT_WAKATIME_BASE_URL,
+  DEFAULT_WAKATIME_HISTORY_DAYS,
   type CodeHealthSettings,
   type EntityFilter,
 } from "../../domain/entities/ingestion_settings";
@@ -38,6 +53,47 @@ const readPositiveNumber = (
   return Math.floor(value);
 };
 
+/** Trailing slashes are stripped so a path can always be appended verbatim. */
+const readBaseUrl = (config: Config | undefined, key: string): string | null => {
+  const value = config?.getOptionalString(key)?.trim();
+  return value === undefined || value === "" ? null : value.replace(/\/+$/u, "");
+};
+
+const readStringList = (config: Config | undefined, key: string): readonly string[] => {
+  const value = config?.getOptionalStringArray(key);
+  return value === undefined ? [] : value.filter((entry) => entry.trim() !== "");
+};
+
+/**
+ * The cost caps the Confluence sweep obeys.
+ *
+ * Read as their own block because they bound work rather than describing a
+ * credential: a site with fifty thousand pages and a site with fifty want very
+ * different ceilings, and neither wants the Jira ones.
+ */
+const readConfluenceSettings = (config: Config | undefined): ConfluenceSettings => ({
+  staleAfterDays: readPositiveNumber(
+    config,
+    "staleAfterDays",
+    DEFAULT_CONFLUENCE_STALE_AFTER_DAYS,
+  ),
+  maxPagesPerRun: readPositiveNumber(
+    config,
+    "maxPagesPerRun",
+    DEFAULT_CONFLUENCE_MAX_PAGES_PER_RUN,
+  ),
+  maxPagesForVolume: readPositiveNumber(
+    config,
+    "maxPagesForVolume",
+    DEFAULT_CONFLUENCE_MAX_PAGES_FOR_VOLUME,
+  ),
+  maxAnalyticsLookups: readPositiveNumber(
+    config,
+    "maxAnalyticsLookups",
+    DEFAULT_CONFLUENCE_MAX_ANALYTICS_LOOKUPS,
+  ),
+});
+
 const readEntityFilters = (config: Config | undefined): readonly EntityFilter[] => {
   const filters = config?.getOptional("catalog.entityFilter");
   if (!Array.isArray(filters) || filters.length === 0) return DEFAULT_ENTITY_FILTERS;
@@ -59,6 +115,7 @@ const readEntityFilters = (config: Config | undefined): readonly EntityFilter[] 
 export const readCodeHealthSettings = (rootConfig: Config): CodeHealthSettings => {
   const config = rootConfig.getOptionalConfig("codeHealth");
   const ingestion = config?.getOptionalConfig("ingestion");
+  const atlassian = config?.getOptionalConfig("atlassian");
 
   return {
     ingestion: {
@@ -91,8 +148,69 @@ export const readCodeHealthSettings = (rootConfig: Config): CodeHealthSettings =
     },
     wakaTime: {
       organization: config?.getOptionalString("wakaTime.organization") ?? null,
+      dashboard: config?.getOptionalString("wakaTime.dashboard") ?? null,
       apiKey: config?.getOptionalString("wakaTime.apiKey") ?? null,
-      baseUrl: config?.getOptionalString("wakaTime.baseUrl") ?? DEFAULT_WAKATIME_BASE_URL,
+      baseUrl: readBaseUrl(config, "wakaTime.baseUrl") ?? DEFAULT_WAKATIME_BASE_URL,
+      historyDays: readPositiveNumber(
+        config?.getOptionalConfig("wakaTime"),
+        "historyDays",
+        DEFAULT_WAKATIME_HISTORY_DAYS,
+      ),
+      includeAiMetrics: config?.getOptionalBoolean("wakaTime.includeAiMetrics") ?? false,
+      aiDaysPerRun: readPositiveNumber(
+        config?.getOptionalConfig("wakaTime"),
+        "aiDaysPerRun",
+        DEFAULT_WAKATIME_AI_DAYS_PER_RUN,
+      ),
     },
+    atlassian: {
+      baseUrl: readBaseUrl(config, "atlassian.baseUrl"),
+      email: config?.getOptionalString("atlassian.email") ?? null,
+      apiToken: config?.getOptionalString("atlassian.apiToken") ?? null,
+      maxResultsPerRun: readPositiveNumber(
+        atlassian,
+        "maxResultsPerRun",
+        DEFAULT_ATLASSIAN_MAX_RESULTS_PER_RUN,
+      ),
+      historyDays: readPositiveNumber(
+        atlassian,
+        "historyDays",
+        DEFAULT_ATLASSIAN_HISTORY_DAYS,
+      ),
+      jira: {
+        // Defaulted on rather than off: configuring the site is the whole of the
+        // work, and an operator who pastes an Atlassian token wants both
+        // products. Switching one off is the exception, so it is the flag.
+        enabled: config?.getOptionalBoolean("atlassian.jira.enabled") ?? true,
+        storyPointsField: config?.getOptionalString("atlassian.jira.storyPointsField") ?? null,
+      },
+      confluence: {
+        enabled: config?.getOptionalBoolean("atlassian.confluence.enabled") ?? true,
+        spaceKeys: readStringList(config, "atlassian.confluence.spaceKeys"),
+      },
+    },
+    jira: jiraSettingsFrom(
+      {
+        historyDays: readPositiveNumber(
+          atlassian,
+          "historyDays",
+          DEFAULT_ATLASSIAN_HISTORY_DAYS,
+        ),
+        jira: {
+          enabled: config?.getOptionalBoolean("atlassian.jira.enabled") ?? true,
+          storyPointsField:
+            config?.getOptionalString("atlassian.jira.storyPointsField") ?? null,
+        },
+      },
+      {
+        filter: config?.getOptionalString("atlassian.jira.filter") ?? null,
+        maxIssuesPerProject: readPositiveNumber(
+          atlassian?.getOptionalConfig("jira"),
+          "maxIssuesPerProject",
+          DEFAULT_JIRA_MAX_ISSUES_PER_PROJECT,
+        ),
+      },
+    ),
+    confluence: readConfluenceSettings(atlassian?.getOptionalConfig("confluence")),
   };
 };

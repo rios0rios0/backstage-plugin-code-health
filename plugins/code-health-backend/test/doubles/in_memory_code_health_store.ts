@@ -1,10 +1,17 @@
 import type {
   EventKind,
-  WakaTimeMetrics,
+  IdentitySource,
+  IntegrationId,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthEvent } from "../../src/domain/entities/code_health_event";
 import { eventId } from "../../src/domain/entities/code_health_event";
 import { addDays, daysBetween, toDay, type Day } from "../../src/domain/entities/day";
+import {
+  identityKey,
+  type IdentityLinkRecord,
+  type IdentityRecord,
+  type IdentityRef,
+} from "../../src/domain/entities/identity";
 import type { IngestionState } from "../../src/domain/entities/ingestion_state";
 import type { RepositorySnapshot } from "../../src/domain/entities/repository_snapshot";
 import type {
@@ -13,10 +20,12 @@ import type {
 } from "../../src/domain/entities/tracked_repository";
 import type {
   CodeHealthStore,
+  ContributorMetricRow,
   CoverageCounts,
   RecordChunkRequest,
   TrackedRepositoryWithState,
 } from "../../src/domain/repositories/code_health_store";
+import type { ObservedIdentity } from "../../src/domain/services/identity_resolver";
 
 const chunkKey = (repositoryId: string, kind: EventKind, day: Day) =>
   `${repositoryId}:${kind}:${day}`;
@@ -35,7 +44,12 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
   private events = new Map<string, CodeHealthEvent>();
   private chunks = new Map<string, Date>();
   private snapshots = new Map<string, RepositorySnapshot>();
-  private contributorMetrics = new Map<string, { day: Day; metrics: WakaTimeMetrics }>();
+  private contributorMeasures = new Map<
+    string,
+    { source: IntegrationId; day: Day; contributorKey: string; payload: unknown }
+  >();
+  private identities = new Map<string, IdentityRecord>();
+  private identityLinks = new Map<string, IdentityLinkRecord>();
 
   /** Number of `commitIngestion` calls, so tests can assert on write volume. */
   commitCount = 0;
@@ -191,25 +205,111 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
     this.snapshots.set(`${snapshot.repositoryId}:${snapshot.day}`, snapshot);
   }
 
-  async saveContributorMetrics(options: {
+  async saveContributorMetrics<T>(options: {
+    source: IntegrationId;
     day: Day;
     capturedAt: Date;
-    metrics: ReadonlyMap<string, WakaTimeMetrics>;
+    metrics: ReadonlyMap<string, T>;
   }): Promise<void> {
-    for (const [key, metrics] of options.metrics) {
-      this.contributorMetrics.set(`${options.day}:${key}`, { day: options.day, metrics });
+    for (const [contributorKey, payload] of options.metrics) {
+      this.contributorMeasures.set(`${options.source}:${options.day}:${contributorKey}`, {
+        source: options.source,
+        day: options.day,
+        contributorKey,
+        payload,
+      });
     }
   }
 
-  async listLatestContributorMetrics(day: Day): Promise<Map<string, WakaTimeMetrics>> {
-    const latest = new Map<string, WakaTimeMetrics>();
-    for (const [key, entry] of [...this.contributorMetrics.entries()].sort(([a], [b]) =>
-      a.localeCompare(b),
-    )) {
-      if (entry.day > day) continue;
-      latest.set(key.split(":").slice(1).join(":"), entry.metrics);
+  async listContributorMetrics<T>(options: {
+    source: IntegrationId;
+    from: Day;
+    to: Day;
+  }): Promise<ContributorMetricRow<T>[]> {
+    return [...this.contributorMeasures.values()]
+      .filter(
+        (row) =>
+          row.source === options.source && row.day >= options.from && row.day <= options.to,
+      )
+      .sort((left, right) => left.day.localeCompare(right.day))
+      .map((row) => ({
+        day: row.day,
+        contributorKey: row.contributorKey,
+        payload: row.payload as T,
+      }));
+  }
+
+  async listLatestContributorMetrics<T>(options: {
+    source: IntegrationId;
+    day: Day;
+  }): Promise<Map<string, T>> {
+    const latest = new Map<string, T>();
+    for (const row of [...this.contributorMeasures.values()]
+      .filter((candidate) => candidate.source === options.source && candidate.day <= options.day)
+      .sort((left, right) => left.day.localeCompare(right.day))) {
+      latest.set(row.contributorKey, row.payload as T);
     }
     return latest;
+  }
+
+  async listContributorMetricDays(options: {
+    source: IntegrationId;
+    from: Day;
+    to: Day;
+  }): Promise<Day[]> {
+    const days = new Set(
+      [...this.contributorMeasures.values()]
+        .filter(
+          (row) =>
+            row.source === options.source && row.day >= options.from && row.day <= options.to,
+        )
+        .map((row) => row.day),
+    );
+    return [...days].sort();
+  }
+
+  async recordObservedIdentities(options: {
+    identities: readonly ObservedIdentity[];
+    now: Date;
+  }): Promise<void> {
+    for (const identity of options.identities) {
+      const key = identityKey(identity);
+      const existing = this.identities.get(key);
+      this.identities.set(key, {
+        ...identity,
+        // Mirrors the real store's merge: everything refreshes except the first
+        // sighting, which is the one field that has to survive being seen again.
+        firstSeenAt: existing?.firstSeenAt ?? options.now,
+        lastSeenAt: options.now,
+      });
+    }
+  }
+
+  async listIdentities(options?: {
+    sources?: readonly IdentitySource[];
+  }): Promise<IdentityRecord[]> {
+    const wanted = options?.sources === undefined ? null : new Set(options.sources);
+    return [...this.identities.values()]
+      .filter((identity) => wanted === null || wanted.has(identity.source))
+      .sort(
+        (left, right) =>
+          left.source.localeCompare(right.source) ||
+          left.sourceKey.localeCompare(right.sourceKey),
+      );
+  }
+
+  async listIdentityLinks(): Promise<IdentityLinkRecord[]> {
+    return [...this.identityLinks.values()];
+  }
+
+  async saveIdentityLink(link: IdentityLinkRecord): Promise<void> {
+    const existing = this.identityLinks.get(identityKey(link));
+    if (existing?.origin === "manual" && link.origin !== "manual") return;
+    this.identityLinks.set(identityKey(link), link);
+  }
+
+  async deleteIdentityLink(identity: IdentityRef): Promise<void> {
+    this.identityLinks.delete(identityKey(identity));
   }
 
   async listLatestSnapshots(options: {
