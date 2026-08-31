@@ -87,6 +87,8 @@ plugins/code-health-common/                              shared types
 - **Provider tokens must not leak** into logs, error messages, cached responses, or the frontend bundle. Rate-limit handling and pagination need explicit bounds — this plugin fans out across every repository in the catalogue.
 - **Material UI v4 and React 18** are pinned to match the Backstage peer ranges. Upgrading either in one package only will break the workspace build.
 - **`code-health-common` is the only place shared types belong.** Duplicating a type across the frontend and backend guarantees drift.
+- **A contributor row is a person, not an account.** `PersonDirectory` resolves accounts to people through the link table on *read*. Code that keys a contributor by account, resolves the link at collection time, or overwrites a manual link with the automatic e-mail rule breaks the retroactive-correction guarantee — treat it as a Critical finding. Only an e-mail match links automatically; anything weaker is a suggestion applied on confirmation.
+- **Integration columns and cards are gated on `/v1/capabilities`, not on whether a row carries data.** Each column group and Insights card is a factory called only when its flag is set. Inferring a switched-off integration from empty data is the bug this design exists to prevent; a change that gates on data (except the WakaTime AI group, which is gated on data by design) is a finding.
 - `knip.json` guards against dead code and unused dependencies; a new `knip` ignore entry needs a justification.
 
 ### Commands a reviewer should be able to quote
