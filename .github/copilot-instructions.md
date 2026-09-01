@@ -15,6 +15,13 @@ application's `integrations` configuration, ingests a year of history in a rate-
 job, and stores it in the Backstage database. The browser talks only to `/api/code-health` and holds
 no credential.
 
+Four optional integrations enrich that history and are absent unless configured: **Sonar** (through
+the community backend plugin), **WakaTime** (coding time and AI token counts), and **Jira** and
+**Confluence** (one Atlassian credential lights up both). Each identifies people under its own
+account system, which is why a contributor row is a *person* rather than an account and why the
+**Identities** tab exists. `PersonDirectory` resolves accounts to people through a link table on
+*read*, so correcting a link is retroactive across every window ever collected.
+
 All three packages share one version and are bumped together.
 
 ## Bootstrap
@@ -52,6 +59,9 @@ its five layers.
 plugins/code-health-backend/src/
   domain/entities|commands|repositories|services/
   infrastructure/repositories|services|http|controllers/
+  infrastructure/services/collectors/                 Azure DevOps and GitHub
+  infrastructure/services/atlassian/                  one client, the Jira and Confluence enrichers
+  infrastructure/services/wakatime_enricher.ts
   plugin.ts
 
 plugins/code-health/src/
@@ -77,9 +87,10 @@ plugins/code-health/src/
   no line count anywhere in its REST API. `ContributorSummary.churnUnit` carries which unit a row
   was measured in, so a view renders the figure it has instead of a zero. Do not infer the unit from
   which number is non-zero: that misreads a real quiet week as a missing measurement.
-- **Insights is the landing tab**, at `/`. Contributors is `/contributors` and repositories is
-  `/repositories`. It leads because it is the only tab that answers a question about the fleet
-  rather than about one row of it.
+- **Insights is the landing tab**, at `/`. Contributors is `/contributors`, repositories is
+  `/repositories`, and Identities is last at `/identities`. Insights leads because it is the only
+  tab that answers a question about the fleet rather than about one row of it; Identities sits last
+  because it is maintenance, not a measurement.
 - **The documentation and API grades need both halves of the evidence.** The catalog half comes from
   discovery, the repository half from the daily snapshot, so both read `null` — "not measured" —
   until a snapshot exists. Grading on half of it reports gaps that are not there.
@@ -88,6 +99,20 @@ plugins/code-health/src/
   the metric incomparable between them.
 - **A day is recorded as fetched only when a window covers it end to end.**
 - **Cursors move only after the window is committed.**
+- **A contributor row is a person, not an account.** `PersonDirectory` resolves accounts through the
+  link table on *read*, never at collection time, so correcting a link is retroactive. An unlinked
+  account keeps its own row under `<source>:<sourceKey>` rather than being hidden.
+- **Only an e-mail match links an account automatically** — the same rule the catalog uses for a
+  `User`. Anything weaker is *offered* as a ranked suggestion and applied only on confirmation, and
+  a manual link is never overwritten by the automatic rule (the store enforces this, not the caller).
+- **Integration columns are gated on configuration, not on data.** `/v1/capabilities` reports which
+  integrations the backend was configured with, and each column group is a factory called only when
+  its flag is set. Inferring presence from whether a row carries a value cannot tell a switched-off
+  integration from one that is on and has not collected yet. The one exception is the WakaTime AI
+  column group, gated on data too, because opting out of the AI figures is a supported way to run it.
+- **Jira is stored per day, Confluence per window, WakaTime a day at a time.** Their history is
+  re-read each run, and a repository's coding time is derived on read from its people's project time
+  rather than stored on the snapshot.
 - **Sonar, compliance and badge history cannot be backfilled**; those series start at installation.
 - **The bump desynchronises `yarn.lock`.** `.autobump.yaml` moves the caret range the frontend and
   backend declare on `-common`, and that string is a resolution descriptor in the lockfile, so every

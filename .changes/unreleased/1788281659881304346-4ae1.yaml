@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'refreshed `.github/copilot-instructions.md` and `.github/skills/code-review/SKILL.md` to cover the WakaTime, Jira, Confluence and Sonar integrations and the Identities/`PersonDirectory` model, which had landed in `CLAUDE.md` only: a contributor row is a person resolved on read, only an e-mail match links automatically, integration columns are gated on `/v1/capabilities`, and the `/identities` tab sits last'
+time: '2026-09-01T16:54:19.881238137Z'
