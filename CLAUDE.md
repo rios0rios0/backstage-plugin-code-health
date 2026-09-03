@@ -267,25 +267,23 @@ Releasing is [AutoBump](https://github.com/rios0rios0/autobump)'s job: `autobump
 `[Unreleased]`, derives the version, moves the entries under a dated heading, writes that version to
 all four `package.json` files, regenerates `yarn.lock`, branches `chore/bump-x.x.x`, and opens the PR.
 
-**Requires AutoBump 3.0.0, and one edit to your own `~/.autobump.yaml`.** The `local` subcommand is
-gone, and `refresh_commands` was replaced by `refresh: true`:
+**Requires AutoBump with project-layer refresh** (rios0rios0/autobump#348). Nothing to configure:
+`refresh: true` lives in this repository's `.autobump.yaml`, under `languages.typescript`, beside
+the pattern that makes it necessary.
 
-```yaml
-# ~/.autobump.yaml -- replace the old block
-languages:
-  typescript:
-    refresh: true
-```
+That is a change from 3.0.0, where `refresh` was read from a project's own file only when it was
+`false` and an enable had to come from your `~/.autobump.yaml`. Releases 2.3.0, 3.0.0 and 4.0.0 all
+predate the change and each shipped a stale `yarn.lock` that had to be repaired by hand.
 
-**Delete the old `refresh_commands` block when you do.** The operator's configuration is decoded
-strictly in 3.0.0, and it recognises the removed key by name — so leaving it there does not degrade
-the release, it aborts every one, with a message naming the replacement. (A *project* file, by
-contrast, is lenient: an unknown key there is ignored. That asymmetry is why the refresh is
-configured in your file and not in this repository's.)
+**If you still carry a `refresh_commands` block in `~/.autobump.yaml`, delete it.** The operator's
+configuration is decoded strictly and recognises the removed key by name — leaving it there does not
+degrade the release, it aborts every one, with a message naming the replacement. A *project* file,
+by contrast, is lenient: an unknown key there is ignored.
 
 1. No `-c` is needed any more. AutoBump reads the operator's configuration from `$HOME` only; the
    working directory is not searched, so this file can no longer be mistaken for it. It is the last
-   of four configuration layers and is merged on top of the operator's rather than replacing it.
+   of four configuration layers and is merged on top of the operator's rather than replacing it —
+   which is also why a `refresh: false` in your own file still wins over the `true` set here.
 2. `.autobump.yaml` exists because AutoBump's TypeScript defaults know one version file. Here that is
    the private workspace root, which is never published, so `plugins/*/package.json` is appended.
    Without it a release ships three packages still claiming the previous version, and
@@ -310,17 +308,19 @@ every release so the three published packages install as a matched set. That exa
 
     "@rios0rios0/backstage-plugin-code-health-common@npm:^X.Y.Z, @rios0rios0/backstage-plugin-code-health-common@workspace:plugins/code-health-common":
 
-AutoBump rewrites version files with regular expressions and does not run a package manager, so the
-lockfile is left behind. Every CI job then starts with `yarn install --immutable`, which refuses:
+AutoBump rewrites version files with regular expressions, and without a refresh it does not run a
+package manager, so the lockfile is left behind. Every CI job then starts with
+`yarn install --immutable`, which refuses:
 
 ```
 YN0028: The lockfile would have been modified by this install, which is explicitly forbidden.
 ```
 
 The whole gate goes red, and so would `delivery-publish` after a merge — the release is blocked, not
-merely noisy. `2.3.0` hit this.
+merely noisy. `2.3.0`, `3.0.0` and `4.0.0` each hit it: `3.0.0` was repaired by a follow-up
+commit on the bump branch (`96149eb`), and `4.0.0` by #99.
 
-**The fix is `refresh: true` under `languages.typescript` in the operator's `~/.autobump.yaml`**,
+**The fix is `refresh: true` under `languages.typescript` in this repository's `.autobump.yaml`**,
 which regenerates `yarn.lock` inside the bump commit:
 
 ```yaml
@@ -329,26 +329,36 @@ languages:
     refresh: true
 ```
 
+It is set there rather than in the operator's file because the staleness is a fact about this
+workspace's build — caused by the second `version_files` pattern three lines below it — not a
+preference of whoever happens to be releasing. Anyone who releases this repository gets it.
+
 AutoBump owns the command: it detects Yarn from `packageManager` in `package.json` and runs
 `yarn install --mode=update-lockfile`, which skips the link step entirely, so no package lifecycle
 script runs. It also passes `YARN_IGNORE_PATH=1`, because Yarn's launcher would otherwise exec
 whatever `yarnPath` in a repository's own `.yarnrc.yml` names.
 
-**It cannot be turned on from this repository's `.autobump.yaml`, and that is deliberate.** The key
-used to be `refresh_commands` and it carried the argv — an executable run with the release
+**It is turned on from this repository's `.autobump.yaml`, and that took two changes to AutoBump.**
+The key used to be `refresh_commands` and it carried the argv — an executable run with the release
 credentials — so AutoBump could not honour one from a repository it had merely discovered.
-`rios0rios0/autobump#338` replaced the argv with a flag and built-in recipes, which closes half of
-that: what runs is now a compile-time constant. The other half is *whether* anything runs at all, and
-that stayed with the operator, because a package manager resolving a lockfile still executes what
-the cloned repository supplies. A project file may write `refresh: false` to switch the refresh
-**off** — off can only ever remove an action — but never on.
+`rios0rios0/autobump#338` replaced the argv with a flag and built-in recipes, which closed half of
+that: what runs is now a compile-time constant. The other half was *whether* anything runs at all,
+and that stayed with the operator — a project file could write `refresh: false` to switch the
+refresh **off**, never on.
 
-So the setting lives in your configuration, and applies to every TypeScript project you release.
-That is harmless for the ones that do not need it: the refresh is a no-op for a project with no
-lockfile, and rewrites nothing for one already in step.
+`rios0rios0/autobump#348` closed the second half by distinguishing *which* restricted layer is
+speaking rather than treating all three as one population. The defaults AutoBump fetches over the
+network still cannot turn a refresh on; a repository's own committed, reviewed file can, because a
+stale lockfile is a fact about that repository's build and the repository is the party that knows
+it. The argv stays AutoBump's either way, so the flag says only whether the command runs.
 
-On an AutoBump that predates 3.0.0, or if the refresh is ever turned off, the lockfile has to be
-regenerated by hand after AutoBump has opened the PR and checked you back out to `main`:
+So the setting lives here, beside the `version_files` pattern that makes it necessary, and holds for
+everyone who releases this repository rather than only for whoever remembered to configure it. You
+keep the veto: your own configuration is a later layer, so `refresh: false` there still wins.
+
+On an AutoBump that predates `rios0rios0/autobump#348`, or if the refresh is ever turned off, the
+lockfile has to be regenerated by hand after AutoBump has opened the PR and checked you back out to
+`main`:
 
 ```bash
 git fetch origin && git checkout chore/bump-X.Y.Z
