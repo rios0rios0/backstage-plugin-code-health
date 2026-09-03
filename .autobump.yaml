@@ -4,12 +4,6 @@
 # published copy, the operator's own file, then this one -- so everything here is merged on
 # top of what AutoBump already carries rather than replacing it.
 #
-# The lockfile refresh is NOT configured here, deliberately. `refresh` is read from a
-# project's own file only when it is `false`: a repository may switch the refresh off, never
-# on, because turning it on starts a package manager inside a repository AutoBump may merely
-# have discovered. Whoever releases this repository sets `refresh: true` under
-# `languages.typescript` in their own `~/.autobump.yaml` -- see CLAUDE.md > Release.
-#
 # AutoBump's TypeScript defaults know exactly one version file, `package.json`. In this
 # workspace that file is the private root, which is never published; the three packages under
 # `plugins/` are what npm actually receives, and `delivery-publish` compares the release tag
@@ -23,12 +17,32 @@
 # ship as one release and a caret range does not cross a major, so leaving it behind publishes
 # two packages whose only sibling dependency cannot resolve to anything that exists.
 #
+# `refresh: true` is what keeps `yarn.lock` in step with that second pattern. The range is
+# also a *resolution descriptor* the lockfile keys on, so moving it desynchronises the two and
+# the next `yarn install --immutable` answers YN0028 -- which is every CI job on the bump PR,
+# and `delivery-publish` after a merge. AutoBump regenerates the lockfile inside the bump
+# commit with `yarn install --mode=update-lockfile`; it owns that command, so this line says
+# only whether to run it, never what to run.
+#
+# It lives here rather than in the operator's `~/.autobump.yaml` because the staleness is a
+# fact about this repository's build, not a preference of whoever is releasing it -- so it
+# belongs with the pattern that causes it, and holds for everyone who releases this
+# repository. Requires AutoBump with project-layer refresh (rios0rios0/autobump#348);
+# releases 2.3.0, 3.0.0 and 4.0.0 predate it and each needed the lockfile repaired by hand
+# (4.0.0's is still outstanding -- see PR #99).
+#
+# UNTIL #348 IS RELEASED this line does nothing: 3.0.2 is the latest tag and was cut before
+# it, and on 3.0.2 a project file's `refresh: true` is warned about and dropped. Whoever
+# releases must keep the same line in their own ~/.autobump.yaml as an interim step. Both
+# go once a release carries #348. See CLAUDE.md > Release.
+#
 # Release with:
 #
 #   autobump .
 #
 languages:
   typescript:
+    refresh: true
     version_files:
       - path: 'plugins/*/package.json'
         patterns:
