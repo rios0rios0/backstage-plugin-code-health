@@ -28,7 +28,13 @@
 # fact about this repository's build, not a preference of whoever is releasing it -- so it
 # belongs with the pattern that causes it, and holds for everyone who releases this
 # repository. Requires AutoBump with project-layer refresh (rios0rios0/autobump#348);
-# releases 2.3.0, 3.0.0 and 4.0.0 predate it and each needed the lockfile repaired by hand.
+# releases 2.3.0, 3.0.0 and 4.0.0 predate it and each needed the lockfile repaired by hand
+# (4.0.0's is still outstanding -- see PR #99).
+#
+# UNTIL #348 IS RELEASED this line does nothing: 3.0.2 is the latest tag and was cut before
+# it, and on 3.0.2 a project file's `refresh: true` is warned about and dropped. Whoever
+# releases must keep the same line in their own ~/.autobump.yaml as an interim step. Both
+# go once a release carries #348. See CLAUDE.md > Release.
 #
 # Release with:
 #

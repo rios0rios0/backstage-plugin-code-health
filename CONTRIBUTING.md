@@ -125,12 +125,15 @@ Requires AutoBump 3.0.0 or newer. No `-c` is needed: AutoBump reads your own con
 `$HOME`, and this repository's `.autobump.yaml` is the last of four configuration layers, merged on
 top of yours rather than mistaken for it.
 
-Your `~/.autobump.yaml` needs `refresh: true` under `languages.typescript`, and the old
-`refresh_commands` block deleted — 3.0.0 recognises the removed key by name and aborts rather than
-ignoring it. The refresh regenerates `yarn.lock` inside the bump commit: the bump moves a caret range
-that is also a resolution descriptor in the lockfile, and without it every CI job's
-`yarn install --immutable` answers `YN0028`. See `CLAUDE.md` > Release for why that setting is yours
-rather than this repository's.
+`refresh: true` under `languages.typescript` now lives in this repository's own `.autobump.yaml`,
+beside the pattern that makes it necessary. The refresh regenerates `yarn.lock` inside the bump
+commit: the bump moves a caret range that is also a resolution descriptor in the lockfile, and
+without it every CI job's `yarn install --immutable` answers `YN0028`.
+
+**Interim, until `rios0rios0/autobump#348` is released:** on 3.0.2 — the latest tag, cut before that
+PR — a project file's `refresh: true` is warned about and dropped, so you still need the same line in
+your own `~/.autobump.yaml`. Delete the old `refresh_commands` block if you have one: 3.0.0 onwards
+recognises the removed key by name and aborts rather than ignoring it. See `CLAUDE.md` > Release.
 
 `.autobump.yaml` adds `plugins/*/package.json` to the version files AutoBump knows about. Its
 TypeScript defaults cover only the root `package.json`, which in this workspace is private and never
