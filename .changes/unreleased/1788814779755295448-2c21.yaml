@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'refreshed `CLAUDE.md` to list the `20260825000000_catalog_facts.js` migration in the backend architecture table, which had documented only the `init` and `identities` migrations even though the catalog-derived columns it adds are the ones that back the documentation and API grades described in the same file'
+time: '2026-09-07T20:59:39.755221802Z'
