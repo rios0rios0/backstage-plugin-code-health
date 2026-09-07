@@ -62,6 +62,7 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 |---|---|
 | `src/plugin.ts` | `createBackendPlugin`, DI wiring, the three scheduled tasks |
 | `migrations/20260810000000_init.js` | The whole schema, portable Knex only |
+| `migrations/20260825000000_catalog_facts.js` | The catalog-derived columns on the repository row that the documentation and API grades read, added by discovery |
 | `migrations/20260901000000_identities.js` | The person directory and the per-source measures table |
 | `src/infrastructure/repositories/knex_code_health_store.ts` | Persistence; commits events, fetched days and cursors in one transaction |
 | `src/infrastructure/http/provider_gateway.ts` | The single door every provider request passes through |
