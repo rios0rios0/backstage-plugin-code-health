@@ -46,7 +46,7 @@ a wire contract that only makes sense as one release.
    ```
 6. Add a changelog fragment — never edit `CHANGELOG.md`, which is generated from them:
    ```bash
-   chlog new --kind Added --body "added the thing that was not there before"
+   chlog new --kind Added --body 'added the thing that was not there before'
    ```
 7. Commit following the [commit conventions](https://github.com/rios0rios0/guide/wiki/Git-Flow)
 8. Open a pull request against `main`
@@ -109,7 +109,7 @@ Provider access sits behind two ports, so a new forge is an implementation and a
    else in the ingestion path needs editing
 5. Extend `AnnotationRepositoryResolver` so catalog entities for that forge resolve
 6. Add tests following the [testing guide](https://github.com/rios0rios0/guide/wiki/Tests)
-7. Add a changelog fragment: `chlog new --kind Added --body "added support for <platform>"`
+7. Add a changelog fragment: `chlog new --kind Added --body 'added support for <platform>'`
 
 ## Releasing
 
