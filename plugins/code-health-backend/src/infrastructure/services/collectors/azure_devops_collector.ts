@@ -5,6 +5,14 @@ import type {
   CodeHealthEvent,
   EventOutcome,
 } from "../../../domain/entities/code_health_event";
+import {
+  attributeMergedWork,
+  isGitMergeMessage,
+  type CollectedBuild,
+  type CollectedCommit,
+  type MergedPullRequest,
+  type MergeStrategy,
+} from "../../../domain/entities/merge_attribution";
 import type { RepositoryFileFacts } from "../../../domain/entities/repository_snapshot";
 import type { TrackedRepository } from "../../../domain/entities/tracked_repository";
 import type { CredentialsResolver } from "../../../domain/services/credentials_resolver";
@@ -45,6 +53,9 @@ const PAGE_SIZE = 200;
 /** Guards against an unbounded loop if a page ever fails to advance. */
 const MAX_PAGES = 25;
 
+/** Commit ids looked up per `commitsbatch` request. */
+const COMMIT_BATCH = 100;
+
 /**
  * Reviewer votes, as Azure DevOps encodes them.
  * 10 approved, 5 approved with suggestions, 0 no vote, -5 waiting, -10 rejected.
@@ -78,6 +89,22 @@ const PULL_REQUEST_OUTCOMES: ReadonlyMap<string, EventOutcome> = new Map([
 ]);
 
 /**
+ * What each Azure DevOps completion does to the commit it lands, in the terms
+ * attribution works in.
+ *
+ * `rebase` rewrites the pull request's commits onto the target with their
+ * authors intact; `rebaseMerge` does the same and then adds a merge commit on
+ * top. Neither leaves anything to re-attribute, but the merge commit of the
+ * second carries no work and is dropped like any other.
+ */
+const MERGE_STRATEGIES: ReadonlyMap<string, MergeStrategy> = new Map([
+  ["squash", "squash"],
+  ["rebase", "linear"],
+  ["rebaseMerge", "merge_commit"],
+  ["noFastForward", "merge_commit"],
+]);
+
+/**
  * Normalised author identity, so the same person is one contributor row.
  *
  * The e-mail is preferred and lowercased: Azure DevOps reports display names
@@ -85,12 +112,40 @@ const PULL_REQUEST_OUTCOMES: ReadonlyMap<string, EventOutcome> = new Map([
  * display name is not unique in the first place.
  */
 const identityKey = (identity: AdoIdentityNode | undefined): string | null => {
-  const value = identity?.uniqueName ?? identity?.email ?? identity?.displayName;
+  const value =
+    identity?.uniqueName ?? identity?.email ?? identity?.displayName ?? identity?.name;
   return value ? value.toLowerCase() : null;
 };
 
 const identityName = (identity: AdoIdentityNode | undefined): string | null =>
-  identity?.displayName ?? identity?.uniqueName ?? identity?.email ?? null;
+  identity?.displayName ?? identity?.name ?? identity?.uniqueName ?? identity?.email ?? null;
+
+/**
+ * How a completed pull request landed, and whether its own commits have to be
+ * fetched to be seen at all.
+ *
+ * Only a plain merge hides them: the commits keep the dates they were written
+ * on, so the branch history for the day of the merge never returns them, and
+ * the day they were written was fetched before they were on the branch. A
+ * squash puts one new commit on the branch, a rebase puts rewritten ones there,
+ * and both are dated at the merge.
+ *
+ * With no completion options at all the completion was a plain merge, which is
+ * what Azure DevOps does when nothing says otherwise; `squashMerge` is the
+ * boolean `mergeStrategy` replaced. A strategy this plugin does not know keeps
+ * whatever the provider stamped, because guessing either way could lose work.
+ */
+const completionOf = (
+  node: AdoPullRequestNode,
+): { strategy: MergeStrategy; fetchesCommits: boolean } => {
+  const options = node.completionOptions;
+  const raw =
+    options?.mergeStrategy ?? (options?.squashMerge === true ? "squash" : "noFastForward");
+  return {
+    strategy: MERGE_STRATEGIES.get(raw) ?? "linear",
+    fetchesCommits: raw === "noFastForward",
+  };
+};
 
 /**
  * Repository-relative path of an item.
@@ -107,6 +162,18 @@ const isoOrNull = (value: string | undefined): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const chunked = <T>(items: readonly T[], size: number): T[][] =>
+  Array.from({ length: Math.ceil(items.length / size) }, (_unused, index) =>
+    items.slice(index * size, (index + 1) * size),
+  );
+
+interface CollectedPullRequests {
+  readonly events: CodeHealthEvent[];
+  readonly merged: MergedPullRequest[];
+  /** Completed with a plain merge, so their commits have to be asked for. */
+  readonly needingCommits: number[];
+}
+
 export interface AzureDevOpsCollectorOptions {
   readonly gateway: ProviderGateway;
   readonly credentials: CredentialsResolver;
@@ -119,8 +186,14 @@ export interface AzureDevOpsCollectorOptions {
  * Every endpoint used here accepts a date range, so one window costs a fixed
  * number of requests regardless of how much history exists — four plus
  * pagination, against the five *per repository per dashboard load* the browser
- * used to issue. The organisation-wide project and repository enumeration is
- * gone entirely: the catalog already knows which repositories exist.
+ * used to issue — plus one or two per pull request completed with a plain
+ * merge, whose commits the branch history never returns. The organisation-wide
+ * project and repository enumeration is gone entirely: the catalog already
+ * knows which repositories exist.
+ *
+ * What the provider reports is not what is stored: merged work is credited to
+ * whoever did it rather than to whoever completed the pull request, see
+ * `attributeMergedWork`.
  */
 export class AzureDevOpsCollector implements VcsCollector {
   readonly platform: Platform = "azure-devops";
@@ -145,8 +218,22 @@ export class AzureDevOpsCollector implements VcsCollector {
       this.collectBuilds(repository, repositoryId, window, headers, context),
     ]);
 
+    const constituents = await this.collectPullRequestCommits(
+      repository,
+      repositoryId,
+      closed.needingCommits,
+      headers,
+      context,
+    );
+
+    const attributed = attributeMergedWork({
+      commits: [...commits, ...constituents],
+      builds,
+      pullRequests: closed.merged,
+    });
+
     return {
-      events: [...commits, ...opened, ...closed, ...builds],
+      events: [...attributed.commits, ...opened.events, ...closed.events, ...attributed.builds],
       repositoryFacts: {
         defaultBranch: defaultBranch ?? repository.defaultBranch,
         externalId: repositoryNode?.id ?? repository.externalId,
@@ -385,6 +472,25 @@ export class AzureDevOpsCollector implements VcsCollector {
     return JSON.parse(response.body) as T;
   }
 
+  private async postJson<T>(
+    url: string,
+    body: unknown,
+    headers: Record<string, string>,
+    context: CollectorContext,
+  ): Promise<T> {
+    const response = await this.options.gateway.request(
+      {
+        url,
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        ...(context.signal === undefined ? {} : { signal: context.signal }),
+      },
+      context.budget,
+    );
+    return JSON.parse(response.body) as T;
+  }
+
   /**
    * Resolves the repository once per window, which is also where the GUID and
    * the default branch come from. Both are needed by the calls below and
@@ -411,6 +517,49 @@ export class AzureDevOpsCollector implements VcsCollector {
     }
   }
 
+  /**
+   * A commit as the provider reported it. Attribution happens afterwards.
+   *
+   * Whether it is a merge commit comes from its parents when the payload has
+   * them and from its message otherwise: no list endpoint here fills the
+   * parents in, and the message is the only other evidence on offer.
+   */
+  private commitOf(repository: TrackedRepository, node: AdoCommitNode): CollectedCommit | null {
+    const occurredAt = isoOrNull(node.author?.date ?? node.committer?.date);
+    if (!node.commitId || !occurredAt) return null;
+
+    const counts = node.changeCounts;
+    const changedFiles =
+      counts === undefined
+        ? null
+        : (counts.Add ?? 0) + (counts.Edit ?? 0) + (counts.Delete ?? 0);
+
+    return {
+      event: {
+        repositoryId: repository.id,
+        kind: "commit",
+        externalId: node.commitId,
+        occurredAt,
+        actorKey: identityKey(node.author),
+        actorName: identityName(node.author),
+        actorAvatarUrl: node.author?.imageUrl ?? null,
+        outcome: null,
+        // Azure DevOps reports changed *files*, never lines. Filling
+        // additions and deletions from that would put a different unit behind
+        // the same name and make the two platforms silently incomparable.
+        additions: null,
+        deletions: null,
+        changedFiles,
+        payload: {
+          messageHeadline: node.comment ?? null,
+          url: node.remoteUrl ?? null,
+        },
+      },
+      isMerge:
+        node.parents === undefined ? isGitMergeMessage(node.comment) : node.parents.length >= 2,
+    };
+  }
+
   private async collectCommits(
     repository: TrackedRepository,
     repositoryId: string,
@@ -418,9 +567,9 @@ export class AzureDevOpsCollector implements VcsCollector {
     window: CollectionWindow,
     headers: Record<string, string>,
     context: CollectorContext,
-  ): Promise<CodeHealthEvent[]> {
+  ): Promise<CollectedCommit[]> {
     const branch = defaultBranch ?? repository.defaultBranch;
-    const events: CodeHealthEvent[] = [];
+    const commits: CollectedCommit[] = [];
 
     for (let page = 0; page < MAX_PAGES; page += 1) {
       const parameters = new URLSearchParams({
@@ -440,41 +589,14 @@ export class AzureDevOpsCollector implements VcsCollector {
       const nodes = body.value ?? [];
 
       for (const node of nodes) {
-        const occurredAt = isoOrNull(node.author?.date ?? node.committer?.date);
-        if (!node.commitId || !occurredAt) continue;
-
-        const counts = node.changeCounts;
-        const changedFiles =
-          counts === undefined
-            ? null
-            : (counts.Add ?? 0) + (counts.Edit ?? 0) + (counts.Delete ?? 0);
-
-        events.push({
-          repositoryId: repository.id,
-          kind: "commit",
-          externalId: node.commitId,
-          occurredAt,
-          actorKey: identityKey(node.author),
-          actorName: identityName(node.author),
-          actorAvatarUrl: node.author?.imageUrl ?? null,
-          outcome: null,
-          // Azure DevOps reports changed *files*, never lines. Filling
-          // additions and deletions from that would put a different unit behind
-          // the same name and make the two platforms silently incomparable.
-          additions: null,
-          deletions: null,
-          changedFiles,
-          payload: {
-            messageHeadline: node.comment ?? null,
-            url: node.remoteUrl ?? null,
-          },
-        });
+        const commit = this.commitOf(repository, node);
+        if (commit) commits.push(commit);
       }
 
       if (nodes.length < PAGE_SIZE) break;
     }
 
-    return events;
+    return commits;
   }
 
   private async collectPullRequests(
@@ -484,8 +606,10 @@ export class AzureDevOpsCollector implements VcsCollector {
     headers: Record<string, string>,
     context: CollectorContext,
     range: "created" | "closed",
-  ): Promise<CodeHealthEvent[]> {
+  ): Promise<CollectedPullRequests> {
     const events: CodeHealthEvent[] = [];
+    const merged: MergedPullRequest[] = [];
+    const needingCommits: number[] = [];
 
     for (let page = 0; page < MAX_PAGES; page += 1) {
       const parameters = new URLSearchParams({
@@ -546,30 +670,142 @@ export class AzureDevOpsCollector implements VcsCollector {
             status: node.status ?? null,
             createdAt: createdAt?.toISOString() ?? null,
             closedAt: closedAt?.toISOString() ?? null,
+            mergeCommitSha: node.lastMergeCommit?.commitId ?? null,
+            mergeStrategy: node.completionOptions?.mergeStrategy ?? null,
           },
         });
 
         if (range === "closed") {
           events.push(...this.reviewEvents(repository, node, occurredAt));
         }
+
+        if (range === "closed" && outcome === "merged") {
+          const completion = completionOf(node);
+          merged.push({
+            externalId: String(node.pullRequestId),
+            mergeCommitId: node.lastMergeCommit?.commitId ?? null,
+            strategy: completion.strategy,
+            author: {
+              actorKey: identityKey(node.createdBy),
+              actorName: identityName(node.createdBy),
+              actorAvatarUrl: node.createdBy?.imageUrl ?? null,
+            },
+          });
+          if (completion.fetchesCommits) needingCommits.push(node.pullRequestId);
+        }
       }
 
       if (nodes.length < PAGE_SIZE) break;
     }
 
-    return events;
+    return { events, merged, needingCommits };
   }
 
+  /**
+   * The commits the pull requests completed with a plain merge brought in.
+   *
+   * They keep the dates they were written on, so they are stored where they
+   * happened. The pull request's commit list carries no change counts, which
+   * are what the churn column is made of, so the same commits are read back
+   * through `commitsbatch` — which does — unless the list already had them.
+   */
+  private async collectPullRequestCommits(
+    repository: TrackedRepository,
+    repositoryId: string,
+    pullRequestIds: readonly number[],
+    headers: Record<string, string>,
+    context: CollectorContext,
+  ): Promise<CollectedCommit[]> {
+    const refs: AdoCommitNode[] = [];
+
+    for (const pullRequestId of pullRequestIds) {
+      let continuationToken: string | null = null;
+
+      for (let page = 0; page < MAX_PAGES; page += 1) {
+        const parameters = new URLSearchParams({
+          "api-version": API_VERSION,
+          $top: String(PAGE_SIZE),
+        });
+        if (continuationToken) parameters.set("continuationToken", continuationToken);
+
+        const url =
+          `${this.projectUrl(repository)}/_apis/git/repositories/` +
+          `${encodeURIComponent(repositoryId)}/pullrequests/${pullRequestId}/commits` +
+          `?${parameters.toString()}`;
+
+        const response = await this.options.gateway.request(
+          { url, headers, ...(context.signal === undefined ? {} : { signal: context.signal }) },
+          context.budget,
+        );
+        const body = JSON.parse(response.body) as AdoListResponse<AdoCommitNode>;
+        const nodes = body.value ?? [];
+        refs.push(...nodes);
+
+        continuationToken = response.header("x-ms-continuationtoken");
+        if (!continuationToken || nodes.length === 0) break;
+      }
+    }
+
+    const counted = await this.withChangeCounts(repository, repositoryId, refs, headers, context);
+    return counted.flatMap((node) => {
+      const commit = this.commitOf(repository, node);
+      return commit === null ? [] : [commit];
+    });
+  }
+
+  private async withChangeCounts(
+    repository: TrackedRepository,
+    repositoryId: string,
+    refs: readonly AdoCommitNode[],
+    headers: Record<string, string>,
+    context: CollectorContext,
+  ): Promise<AdoCommitNode[]> {
+    const missing = refs.filter((ref) => ref.changeCounts === undefined && ref.commitId);
+    if (missing.length === 0) return [...refs];
+
+    const counts = new Map<string, AdoCommitNode["changeCounts"]>();
+    for (const batch of chunked(missing, COMMIT_BATCH)) {
+      const body = await this.postJson<AdoListResponse<AdoCommitNode>>(
+        `${this.projectUrl(repository)}/_apis/git/repositories/` +
+          `${encodeURIComponent(repositoryId)}/commitsbatch?api-version=${API_VERSION}`,
+        { ids: batch.map((ref) => ref.commitId) },
+        headers,
+        context,
+      );
+      for (const node of body.value ?? []) {
+        if (node.commitId && node.changeCounts) counts.set(node.commitId, node.changeCounts);
+      }
+    }
+
+    return refs.map((ref) => {
+      const changeCounts = ref.commitId === undefined ? undefined : counts.get(ref.commitId);
+      return changeCounts === undefined ? ref : { ...ref, changeCounts };
+    });
+  }
+
+  /**
+   * Reviews, from the votes on a closed pull request.
+   *
+   * A reviewer who never voted did not review: Azure DevOps lists everyone a
+   * policy or a person added, and most of them never look. The author's own
+   * vote is not a review either, whatever a policy allows. Group reviewers
+   * exist to carry a required-reviewer policy and never cast a vote a person
+   * is accountable for.
+   */
   private reviewEvents(
     repository: TrackedRepository,
     node: AdoPullRequestNode,
     occurredAt: Date,
   ): CodeHealthEvent[] {
+    const author = identityKey(node.createdBy);
+
     return (node.reviewers ?? [])
-      // Group reviewers exist to carry a required-reviewer policy and never
-      // cast a vote a person is accountable for.
       .filter((reviewer) => reviewer.isContainer !== true)
-      .filter((reviewer) => identityKey(reviewer) !== null)
+      .filter((reviewer) => (reviewer.vote ?? 0) !== 0)
+      .filter((reviewer) => {
+        const key = identityKey(reviewer);
+        return key !== null && key !== author;
+      })
       .map((reviewer) => ({
         repositoryId: repository.id,
         kind: "pr_review" as const,
@@ -592,8 +828,8 @@ export class AzureDevOpsCollector implements VcsCollector {
     window: CollectionWindow,
     headers: Record<string, string>,
     context: CollectorContext,
-  ): Promise<CodeHealthEvent[]> {
-    const events: CodeHealthEvent[] = [];
+  ): Promise<CollectedBuild[]> {
+    const builds: CollectedBuild[] = [];
     let continuationToken: string | null = null;
 
     for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -625,25 +861,29 @@ export class AzureDevOpsCollector implements VcsCollector {
         const occurredAt = isoOrNull(node.finishTime ?? node.startTime ?? node.queueTime);
         if (node.id === undefined || !occurredAt) continue;
 
-        events.push({
-          repositoryId: repository.id,
-          kind: "build",
-          externalId: String(node.id),
-          occurredAt,
-          actorKey: identityKey(node.requestedFor),
-          actorName: identityName(node.requestedFor),
-          actorAvatarUrl: node.requestedFor?.imageUrl ?? null,
-          outcome: BUILD_OUTCOMES.get(node.result ?? "") ?? null,
-          additions: null,
-          deletions: null,
-          changedFiles: null,
-          payload: {
-            buildNumber: node.buildNumber ?? null,
-            definition: node.definition?.name ?? null,
-            sourceBranch: node.sourceBranch ?? null,
-            status: node.status ?? null,
-            result: node.result ?? null,
+        builds.push({
+          event: {
+            repositoryId: repository.id,
+            kind: "build",
+            externalId: String(node.id),
+            occurredAt,
+            actorKey: identityKey(node.requestedFor),
+            actorName: identityName(node.requestedFor),
+            actorAvatarUrl: node.requestedFor?.imageUrl ?? null,
+            outcome: BUILD_OUTCOMES.get(node.result ?? "") ?? null,
+            additions: null,
+            deletions: null,
+            changedFiles: null,
+            payload: {
+              buildNumber: node.buildNumber ?? null,
+              definition: node.definition?.name ?? null,
+              sourceBranch: node.sourceBranch ?? null,
+              commitSha: node.sourceVersion ?? null,
+              status: node.status ?? null,
+              result: node.result ?? null,
+            },
           },
+          commitId: node.sourceVersion ?? null,
         });
       }
 
@@ -651,6 +891,6 @@ export class AzureDevOpsCollector implements VcsCollector {
       if (!continuationToken || nodes.length === 0) break;
     }
 
-    return events;
+    return builds;
   }
 }

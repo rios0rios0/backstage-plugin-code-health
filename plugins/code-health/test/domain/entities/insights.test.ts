@@ -239,7 +239,7 @@ describe("computeKpis", () => {
     const repositories = [
       RepositoryBuilder.create()
         .withId("a")
-        .withActivity({ builds: 8, buildsSucceeded: 6 })
+        .withActivity({ builds: 8, buildsSucceeded: 6, buildsFailed: 2 })
         .build(),
       RepositoryBuilder.create()
         .withId("b")
@@ -252,6 +252,38 @@ describe("computeKpis", () => {
 
     // then
     expect(kpis.buildSuccessRate).toBe(80);
+  });
+
+  it("should leave cancelled and unfinished runs out of the build success rate", () => {
+    // given
+    // A run cancelled because a newer push superseded it is neither a success
+    // nor a failure, and on a workflow that cancels in-progress runs it would
+    // otherwise be most of the denominator.
+    const repositories = [
+      RepositoryBuilder.create()
+        .withId("a")
+        .withActivity({ builds: 10, buildsSucceeded: 3, buildsFailed: 1 })
+        .build(),
+    ];
+
+    // when
+    const kpis = computeKpis(repositories, []);
+
+    // then
+    expect(kpis.buildSuccessRate).toBe(75);
+  });
+
+  it("should report no build rate when no run reached a verdict", () => {
+    // given
+    const repositories = [
+      RepositoryBuilder.create().withId("a").withActivity({ builds: 3 }).build(),
+    ];
+
+    // when
+    const kpis = computeKpis(repositories, []);
+
+    // then
+    expect(kpis.buildSuccessRate).toBeNull();
   });
 
   it("should report no build rate when nothing ran", () => {

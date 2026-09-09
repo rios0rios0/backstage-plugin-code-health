@@ -73,17 +73,45 @@ export interface ContributorSummary {
   readonly churnUnit: ChurnUnit;
   readonly pullRequestsOpened: number;
   readonly pullRequestsMerged: number;
-  /** Pull requests this contributor reviewed, whatever the vote. */
+  /**
+   * Other people's pull requests this contributor reviewed, whatever the vote.
+   *
+   * A vote on one's own pull request is not a review, and on Azure DevOps a
+   * reviewer who was added and never voted did not review either.
+   */
   readonly reviewsGiven: number;
   readonly reviewsApproved: number;
   readonly reviewsRejected: number;
   /** `reviewsApproved / reviewsGiven` as a percentage, or 0 with no reviews. */
   readonly prApprovalRate: number;
+  /**
+   * Pipeline runs credited to this person, whatever their outcome.
+   *
+   * A run is credited to the author of the change it built: the pull request
+   * whose merge produced the commit, else the commit's own author, else whoever
+   * the provider says requested it. It is never credited to somebody merely for
+   * pressing the merge button.
+   */
   readonly pipelineRuns: number;
   readonly pipelineRunsSucceeded: number;
-  /** `pipelineRunsSucceeded / pipelineRuns` as a percentage, or 0 with no runs. */
+  readonly pipelineRunsFailed: number;
+  /**
+   * `pipelineRunsSucceeded / (pipelineRunsSucceeded + pipelineRunsFailed)` as a
+   * percentage, or 0 with no run that reached a verdict. Cancelled, skipped and
+   * still-running runs are left out of both sides: a run superseded by a newer
+   * push is not a failure.
+   */
   readonly pipelineSuccessRate: number;
+  /** Repositories any of this person's events landed in, reviews included. */
   readonly repositories: number;
+  /**
+   * Sonar measures summed over the repositories this person committed to or
+   * merged into in the window, or null with none measured.
+   *
+   * Sonar measures a project, not a person: nothing here claims the bugs are
+   * theirs, only that this is what the code they changed looks like. Reviewing
+   * or building in a repository does not count as changing its code.
+   */
   readonly sonarMetrics: SonarMetrics | null;
   readonly wakaTimeMetrics: WakaTimeMetrics | null;
   readonly jiraMetrics: JiraContributorMetrics | null;

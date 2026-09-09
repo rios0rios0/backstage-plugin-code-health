@@ -64,6 +64,8 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `migrations/20260810000000_init.js` | The whole schema, portable Knex only |
 | `migrations/20260825000000_catalog_facts.js` | The catalog-derived columns on the repository row that the documentation and API grades read, added by discovery |
 | `migrations/20260901000000_identities.js` | The person directory and the per-source measures table |
+| `migrations/20260909000000_reattribute_merged_work.js` | Sends every tracked repository's cursors back to a fresh install and drops what the walk re-collects, because the rows before it credit the merger |
+| `src/domain/entities/merge_attribution.ts` | The one place merged work is credited to whoever did it: squash to the author, merge commit dropped, build to the author of what it built |
 | `src/infrastructure/repositories/knex_code_health_store.ts` | Persistence; commits events, fetched days and cursors in one transaction |
 | `src/infrastructure/http/provider_gateway.ts` | The single door every provider request passes through |
 | `src/domain/commands/discover_repositories.ts` | Catalog → tracked repositories |
@@ -77,6 +79,7 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/infrastructure/services/atlassian/` | One client, the Jira enricher and the Confluence enricher |
 | `src/infrastructure/controllers/code_health_router.ts` | The read API, the capabilities probe and the identity links |
 | `docs/wakatime.md`, `docs/jira.md`, `docs/confluence.md` | What each integration measures, and what its provider cannot answer |
+| `docs/attribution.md` | Who a commit, a build and a review belong to, per provider field, and what neither provider can answer |
 
 ### Frontend (`plugins/code-health`)
 
@@ -187,6 +190,40 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 - **Sonar, compliance and badge history cannot be backfilled.** No provider reports what they looked
   like last March, and the `sonarqube` plugin exposes no measures-history passthrough. Those series
   begin at the first snapshot after installation, and the UI has to say so.
+- **Merged work is credited to whoever did it, never to whoever merged it.** Both providers stamp
+  the merger on everything a merge produces — the squash commit Azure DevOps authors as whoever
+  pressed *Complete*, the merge commit GitHub authors as the merger and loads with the whole pull
+  request's diff, the post-merge pipeline run both report as requested by the merger. Read at face
+  value, the person who completes most pull requests looks like the author of everything.
+  `attributeMergedWork` is the single place the correction lives, and both collectors feed it:
+  a squash commit goes to the pull request's author; a merge commit is dropped, whether a pull
+  request produced it or a `git merge` did, because its diff is the sum of the commits it joins; a
+  rebase is left alone; a build follows the commit it built. These figures are read as a measure
+  of people, so a collector that stores what the provider stamped is a bug, not a simplification.
+- **The commits a merge commit brought in are fetched from the pull request.** They keep the dates
+  they were written on, so the branch history for the day of the merge never returns them, and the
+  day they were written was fetched before they were on the branch. Dropping the merge commit
+  without this would make the work vanish from everybody's row. They are stored under their own
+  dates and deduplicated by identifier against the history; a squash or a rebase needs none of it.
+- **Azure DevOps reports no parent count on any list endpoint**, so a commit no pull request names
+  is recognised as a merge commit by its message — only the forms git writes itself. Its own
+  `Merged PR 123:` subject is written on squash commits too and proves nothing; the pull request's
+  `completionOptions` decides, with no options meaning the plain merge Azure DevOps performs by
+  default, and an unrecognised strategy keeping the stamp rather than guessing.
+- **A review is a vote on somebody else's pull request.** The author's own vote is not one, and an
+  Azure DevOps reviewer who was added and never voted did not review anything.
+- **The pipeline success rate divides by the runs that reached a verdict.** A run cancelled because
+  a newer push superseded it, or skipped by a path filter, is neither a success nor a failure, and
+  under a workflow that cancels in-progress runs it would otherwise be most of the denominator.
+- **Sonar on a contributor row sums over the repositories the person committed to or merged into.**
+  Sonar measures a project; reviewing or building in a repository does not put a hand on its code,
+  and counting either put every repository's bugs on the row of whoever reviews the most — which is
+  usually the person who also merges the most. Every Sonar heading on the table says so.
+- **Upgrading re-walks the history, once.** The rows stored before the attribution fix are wrong in
+  exactly the way it corrects and cannot be repaired in place, because the facts it needs were never
+  stored. The migration resets every *tracked* repository's cursors and removes what the walk
+  re-collects; releases and tags stay, and a repository that left the catalog keeps its history
+  because nothing would ever put it back.
 
 ## Conventions
 

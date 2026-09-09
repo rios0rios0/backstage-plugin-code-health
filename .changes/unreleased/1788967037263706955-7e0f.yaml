@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed what counts as a review: a vote cast on somebody else''s pull request. The author''s own vote no longer counts, on either provider, because it is not a review and counting it let an author pad their figures by replying to their reviewers; and on Azure DevOps a reviewer who was added and never voted no longer counts either, because that API lists everyone a policy or a person added and most of them never look'
+time: '2026-09-09T15:17:17.263626061Z'

@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed the display name of an Azure DevOps commit author, which was read from the identity-service shape and fell through to the e-mail address: git''s own metadata on a commit carries `name` and `email`, and the `name` is now read'
+time: '2026-09-09T15:17:17.272608259Z'

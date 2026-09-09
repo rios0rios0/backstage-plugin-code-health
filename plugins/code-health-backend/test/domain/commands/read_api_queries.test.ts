@@ -261,6 +261,103 @@ describe("ListContributorSummaries", () => {
     });
   });
 
+  it("should not carry the Sonar metrics of a repository somebody only reviewed or built in", async () => {
+    // given
+    // Sonar measures a project. Reviewing its pull requests or triggering its
+    // pipeline does not put a hand on its code, and counting either put every
+    // repository's bugs on the row of whoever reviews the most.
+    const { store, discovered } = await seed(2);
+    const [committed, reviewed] = discovered;
+    const metrics = (bugs: number) => ({
+      bugs,
+      codeSmells: 0,
+      securityHotspots: 0,
+      vulnerabilities: 0,
+      coverage: 50,
+      duplications: 0,
+      technicalDebt: "1h",
+      technicalDebtMinutes: 60,
+      qualityGateStatus: "OK" as const,
+    });
+    for (const [repository, bugs] of [
+      [committed, 3],
+      [reviewed, 40],
+    ] as const) {
+      await store.saveSnapshot({
+        repositoryId: repository.id,
+        day: "2026-08-10",
+        capturedAt: NOW,
+        payload: aSnapshotPayload({ sonarMetrics: metrics(bugs) }),
+      });
+    }
+    await store.commitIngestion({
+      repositoryId: committed.id,
+      events: [commit(committed.id, "2026-08-09T10:00:00.000Z").build()],
+      chunk: { repositoryId: committed.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+    await store.commitIngestion({
+      repositoryId: reviewed.id,
+      events: [
+        EventBuilder.review("approved").withRepository(reviewed.id).withActor("dev@example.com").at("2026-08-09T11:00:00.000Z").build(),
+        EventBuilder.build("succeeded").withRepository(reviewed.id).withActor("dev@example.com").at("2026-08-09T12:00:00.000Z").build(),
+      ],
+      chunk: { repositoryId: reviewed.id, kinds: ["pr_review", "build"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
+
+    // then
+    expect(contributor?.sonarMetrics?.bugs).toBe(3);
+    // The review and the run still make it a repository the person was active in.
+    expect(contributor?.repositories).toBe(2);
+  });
+
+  it("should carry the Sonar metrics of a repository somebody merged a pull request into", async () => {
+    // given
+    // A merged pull request is code landing, whether or not its commits fell
+    // inside the window.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.saveSnapshot({
+      repositoryId: repository.id,
+      day: "2026-08-10",
+      capturedAt: NOW,
+      payload: aSnapshotPayload({
+        sonarMetrics: {
+          bugs: 5,
+          codeSmells: 0,
+          securityHotspots: 0,
+          vulnerabilities: 0,
+          coverage: 50,
+          duplications: 0,
+          technicalDebt: "1h",
+          technicalDebtMinutes: 60,
+          qualityGateStatus: "OK",
+        },
+      }),
+    });
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [
+        EventBuilder.pullRequest("merged").withRepository(repository.id).withActor("dev@example.com").at("2026-08-09T11:00:00.000Z").build(),
+      ],
+      chunk: { repositoryId: repository.id, kinds: ["pull_request"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
+
+    // then
+    expect(contributor?.sonarMetrics?.bugs).toBe(5);
+  });
+
   it("should report no Sonar metrics when the contributor's repositories have none", async () => {
     // given
     // The annotation is optional, so most repositories have no Sonar project and
@@ -569,8 +666,11 @@ describe("ListContributorSummaries", () => {
     });
   });
 
-  it("should compute a pipeline success rate", async () => {
+  it("should compute a pipeline success rate over the runs that reached a verdict", async () => {
     // given
+    // A run cancelled because a newer push superseded it, or one still in
+    // progress, is neither a success nor a failure; counting it against
+    // somebody turns a busy afternoon into a bad success rate.
     const { store, discovered } = await seed();
     const [repository] = discovered;
     await store.commitIngestion({
@@ -578,6 +678,8 @@ describe("ListContributorSummaries", () => {
       events: [
         EventBuilder.build("succeeded").withRepository(repository.id).withActor("d@example.com").at("2026-08-09T10:00:00.000Z").build(),
         EventBuilder.build("failed").withRepository(repository.id).withActor("d@example.com").at("2026-08-09T11:00:00.000Z").build(),
+        EventBuilder.build("canceled").withRepository(repository.id).withActor("d@example.com").at("2026-08-09T12:00:00.000Z").build(),
+        EventBuilder.build(null).withRepository(repository.id).withActor("d@example.com").at("2026-08-09T13:00:00.000Z").build(),
       ],
       chunk: { repositoryId: repository.id, kinds: ["build"], days: [], ingestedAt: NOW },
       status: "active",
@@ -588,7 +690,12 @@ describe("ListContributorSummaries", () => {
     const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
 
     // then
-    expect(contributor.pipelineSuccessRate).toBe(50);
+    expect(contributor).toMatchObject({
+      pipelineRuns: 4,
+      pipelineRunsSucceeded: 1,
+      pipelineRunsFailed: 1,
+      pipelineSuccessRate: 50,
+    });
   });
 
   it("should floor net lines at zero", async () => {

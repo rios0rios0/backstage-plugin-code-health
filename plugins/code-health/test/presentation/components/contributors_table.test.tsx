@@ -535,8 +535,42 @@ describe("ContributorsTable churn and pull request columns", () => {
       screen.getByRole("img", { name: /the share they approved/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("img", { name: /pipeline runs requested for this person/ }),
+      screen.getByRole("img", { name: /never to whoever pressed the merge button/ }),
     ).toBeInTheDocument();
+  });
+
+  it("should show the pipeline counts over the runs that reached a verdict", () => {
+    // given
+    // Cancelled and skipped runs are neither, so the denominator is not the
+    // number of runs.
+    const contributors = [
+      ContributorBuilder.create().withPipelineRuns({ runs: 10, succeeded: 6, failed: 2 }).build(),
+    ];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(screen.getByText("(6/8)")).toBeInTheDocument();
+  });
+
+  it("should say on every Sonar heading that the figure is the repository's, not the person's", () => {
+    // given
+    const contributors = [ContributorBuilder.create().build()];
+
+    // when
+    render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    // Seven Sonar columns, one explanation each: a number in a "Bugs" column
+    // on a row carrying a name reads as that person's bugs.
+    expect(
+      screen.getAllByRole("img", { name: /Sonar measures a repository, not a person/ }),
+    ).toHaveLength(7);
   });
 });
 
@@ -560,7 +594,9 @@ describe("ContributorsTable header tooltips", () => {
     const helps = screen
       .getAllByRole("img")
       .filter((element) => element.tagName.toLowerCase() === "svg");
-    expect(helps).toHaveLength(5);
+    // Five rate and count columns, and the seven Sonar columns that share one
+    // explanation.
+    expect(helps).toHaveLength(12);
     for (const help of helps) {
       expect(help).toHaveAttribute("tabindex", "0");
       expect(help).not.toHaveAttribute("aria-hidden", "true");

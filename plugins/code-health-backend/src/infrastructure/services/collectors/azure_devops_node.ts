@@ -5,9 +5,18 @@
  * instead of throwing mid-window.
  */
 
+/**
+ * A person, in the two shapes Azure DevOps uses for one.
+ *
+ * Identity-service references — a pull request's creator, a reviewer, whoever
+ * a build was requested for — carry `displayName` and `uniqueName`. A commit's
+ * author and committer are git's own metadata and carry `name` and `email`
+ * instead, so both pairs are declared and each reader takes whichever is there.
+ */
 export interface AdoIdentityNode {
   readonly displayName?: string;
   readonly uniqueName?: string;
+  readonly name?: string;
   readonly email?: string;
   readonly imageUrl?: string;
   readonly id?: string;
@@ -24,6 +33,11 @@ export interface AdoCommitNode {
     readonly Edit?: number;
     readonly Delete?: number;
   };
+  /**
+   * Parent commit ids. Declared because the model carries it, read when it is
+   * there; none of the list endpoints this plugin uses is known to fill it in.
+   */
+  readonly parents?: readonly string[];
 }
 
 export interface AdoReviewerNode {
@@ -43,6 +57,21 @@ export interface AdoPullRequestNode {
   readonly closedDate?: string;
   readonly mergeStatus?: string;
   readonly createdBy?: AdoIdentityNode;
+  /**
+   * The commit the completion put on the target branch. For a squash it is the
+   * one commit carrying the whole pull request; for a merge it is the merge
+   * commit. Which of the two it is comes from `completionOptions`.
+   */
+  readonly lastMergeCommit?: { readonly commitId?: string } | null;
+  /**
+   * How the pull request was completed. `mergeStrategy` is the current field;
+   * `squashMerge` is the boolean it replaced and is still set on older
+   * completions.
+   */
+  readonly completionOptions?: {
+    readonly mergeStrategy?: string;
+    readonly squashMerge?: boolean;
+  } | null;
   readonly reviewers?: readonly AdoReviewerNode[];
   readonly repository?: { readonly id?: string; readonly name?: string };
 }
@@ -56,6 +85,8 @@ export interface AdoBuildNode {
   readonly startTime?: string;
   readonly finishTime?: string;
   readonly sourceBranch?: string;
+  /** The commit the build ran against, which is what decides whose build it was. */
+  readonly sourceVersion?: string;
   readonly requestedFor?: AdoIdentityNode;
   readonly definition?: { readonly id?: number; readonly name?: string };
 }

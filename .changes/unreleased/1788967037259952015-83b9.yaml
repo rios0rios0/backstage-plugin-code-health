@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'changed the Sonar figures on a contributor row to sum over the repositories the person committed to or merged a pull request into, rather than every repository any event of theirs landed in. Sonar measures a project, not a person; reviewing a repository''s pull requests or triggering its pipeline does not put a hand on its code, and counting either put every repository''s bugs and debt on the row of whoever reviews the most — usually the person who also merges the most. Every Sonar heading on the table now says what the figure is'
+time: '2026-09-09T15:17:17.259864032Z'

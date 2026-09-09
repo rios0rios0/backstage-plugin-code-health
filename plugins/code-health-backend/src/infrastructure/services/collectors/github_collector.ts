@@ -5,6 +5,13 @@ import type {
   CodeHealthEvent,
   EventOutcome,
 } from "../../../domain/entities/code_health_event";
+import {
+  attributeMergedWork,
+  type CollectedBuild,
+  type CollectedCommit,
+  type MergedPullRequest,
+  type MergeStrategy,
+} from "../../../domain/entities/merge_attribution";
 import type { TrackedRepository } from "../../../domain/entities/tracked_repository";
 import type { CredentialsResolver } from "../../../domain/services/credentials_resolver";
 import type {
@@ -24,7 +31,11 @@ import type {
 } from "./github_snapshot_query";
 import { SNAPSHOT_QUERY } from "./github_snapshot_query";
 import type {
+  GithubCommitNode,
   GithubHistoryResponse,
+  GithubPullRequestCommitsNode,
+  GithubPullRequestCommitsPageResponse,
+  GithubPullRequestCommitsResponse,
   GithubPullRequestNode,
   GithubRateLimitNode,
   GithubSearchResponse,
@@ -37,6 +48,13 @@ const PAGE_SIZE = 100;
 
 /** Guards against an unbounded loop if a cursor ever fails to advance. */
 const MAX_PAGES = 25;
+
+/**
+ * Pull requests looked up per `nodes(ids:)` document. Each one is a connection
+ * of its own inside the document, and keeping the batch modest keeps a single
+ * reply well under the size GitHub is happy to serve.
+ */
+const PULL_REQUEST_BATCH = 50;
 
 const RUN_OUTCOMES: ReadonlyMap<string, EventOutcome> = new Map([
   ["success", "succeeded"],
@@ -53,6 +71,25 @@ const REVIEW_OUTCOMES: ReadonlyMap<string, EventOutcome> = new Map([
   ["DISMISSED", "no_vote"],
   ["PENDING", "waiting"],
 ]);
+
+/**
+ * Everything the plugin reads off a commit, shared by the branch history and
+ * the pull-request commit lookup so the two cannot drift apart.
+ *
+ * `parents` is asked for with `first: 1` because GitHub wants a page size on
+ * every connection; only `totalCount` is read, and one is all it takes to tell
+ * a merge commit from the rest.
+ */
+const COMMIT_FIELDS = `
+              oid
+              messageHeadline
+              committedDate
+              additions
+              deletions
+              changedFilesIfAvailable
+              url
+              author { name email avatarUrl user { login avatarUrl url } }
+              parents(first: 1) { totalCount }`;
 
 /**
  * `rateLimit` is requested on every document so the gateway can pace itself
@@ -72,15 +109,7 @@ query CodeHealthHistory($owner: String!, $name: String!, $since: GitTimestamp!, 
         ... on Commit {
           history(first: 100, since: $since, until: $until, after: $cursor) {
             pageInfo { hasNextPage endCursor }
-            nodes {
-              oid
-              messageHeadline
-              committedDate
-              additions
-              deletions
-              changedFilesIfAvailable
-              url
-              author { name email avatarUrl user { login avatarUrl url } }
+            nodes {${COMMIT_FIELDS}
             }
           }
         }
@@ -89,6 +118,11 @@ query CodeHealthHistory($owner: String!, $name: String!, $since: GitTimestamp!, 
   }
 }`;
 
+/**
+ * `mergeCommit` and its parent count are what decide whose work a merged pull
+ * request is. GitHub reports the merge method nowhere: a merge commit has two
+ * parents, and a squash or a rebase has one.
+ */
 const PULL_REQUEST_QUERY = `
 query CodeHealthPullRequests($search: String!, $cursor: String) {
   rateLimit { limit remaining resetAt cost }
@@ -96,6 +130,7 @@ query CodeHealthPullRequests($search: String!, $cursor: String) {
     pageInfo { hasNextPage endCursor }
     nodes {
       ... on PullRequest {
+        id
         number
         title
         state
@@ -103,8 +138,65 @@ query CodeHealthPullRequests($search: String!, $cursor: String) {
         closedAt
         mergedAt
         author { login avatarUrl url }
+        mergeCommit { oid parents(first: 1) { totalCount } }
         reviews(first: 50) {
           nodes { id state submittedAt author { login avatarUrl url } }
+        }
+      }
+    }
+  }
+}`;
+
+/**
+ * The commits a pull request brought in, for the ones merged with a merge
+ * commit.
+ *
+ * Those commits keep the dates they were written on, which is days before the
+ * merge in the normal case, so the branch history for the day of the merge
+ * never contains them — and the day they were written was fetched before they
+ * were on the branch. Asking the pull request for them is the only way they
+ * are ever seen.
+ */
+const PULL_REQUEST_COMMITS_QUERY = `
+query CodeHealthPullRequestCommits($ids: [ID!]!) {
+  rateLimit { limit remaining resetAt cost }
+  nodes(ids: $ids) {
+    ... on PullRequest {
+      id
+      number
+      commits(first: 100) {
+        totalCount
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          commit {${COMMIT_FIELDS}
+          }
+        }
+      }
+    }
+  }
+}`;
+
+/**
+ * The pages after the first of one pull request's commits.
+ *
+ * A pull request carrying more than a hundred commits is rare, but the ones
+ * beyond the first page are not on the branch under any date that will be
+ * walked again: a day is fetched once, and these were written on days already
+ * fetched. Stopping at the first page would lose them for good.
+ */
+const PULL_REQUEST_COMMITS_PAGE_QUERY = `
+query CodeHealthPullRequestCommitsPage($id: ID!, $cursor: String!) {
+  rateLimit { limit remaining resetAt cost }
+  node(id: $id) {
+    ... on PullRequest {
+      id
+      number
+      commits(first: 100, after: $cursor) {
+        totalCount
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          commit {${COMMIT_FIELDS}
+          }
         }
       }
     }
@@ -146,6 +238,17 @@ const authorKey = (node: {
 const searchDate = (instant: Date): string => instant.toISOString().slice(0, 10);
 
 /**
+ * How the pull request landed, read off the commit its merge produced.
+ *
+ * Two parents is a merge commit. One parent is a squash or a rebase, and on
+ * GitHub the two need no telling apart: a squash commit is authored by the pull
+ * request's author already, and a rebase keeps every commit's own author, so in
+ * both cases the commit says who did the work.
+ */
+const strategyOf = (node: GithubPullRequestNode): MergeStrategy =>
+  (node.mergeCommit?.parents?.totalCount ?? 1) >= 2 ? "merge_commit" : "linear";
+
+/**
  * File paths inside one tree, prefixed with the directory it was read from.
  *
  * Only blobs are kept: an empty `docs/` directory is not documentation, and
@@ -155,6 +258,18 @@ const filesIn = (tree: GithubTree | null | undefined, prefix = ""): string[] =>
   (tree?.entries ?? [])
     .filter((entry) => entry.type === "blob" && entry.name)
     .map((entry) => (prefix === "" ? `${entry.name}` : `${prefix}/${entry.name}`));
+
+const chunked = <T>(items: readonly T[], size: number): T[][] =>
+  Array.from({ length: Math.ceil(items.length / size) }, (_unused, index) =>
+    items.slice(index * size, (index + 1) * size),
+  );
+
+interface CollectedPullRequests {
+  readonly events: CodeHealthEvent[];
+  readonly merged: MergedPullRequest[];
+  /** The commits merge-commit pull requests brought in, see {@link PULL_REQUEST_COMMITS_QUERY}. */
+  readonly commits: CollectedCommit[];
+}
 
 export interface GithubCollectorOptions {
   readonly gateway: ProviderGateway;
@@ -174,6 +289,9 @@ export interface GithubCollectorOptions {
  * `pullRequests` connection has no date filter at all. Workflow runs come from
  * REST, because GraphQL exposes check suites only per commit — asking there
  * would mean one request per commit rather than one per window.
+ *
+ * What the provider reports is not what is stored: merged work is credited to
+ * whoever did it rather than to whoever merged it, see `attributeMergedWork`.
  */
 export class GithubCollector implements VcsCollector {
   readonly platform: Platform = "github";
@@ -199,8 +317,14 @@ export class GithubCollector implements VcsCollector {
       this.collectWorkflowRuns(repository, window, headers, context),
     ]);
 
+    const attributed = attributeMergedWork({
+      commits: [...history.commits, ...pullRequests.commits],
+      builds: runs,
+      pullRequests: pullRequests.merged,
+    });
+
     return {
-      events: [...history.events, ...pullRequests, ...runs],
+      events: [...attributed.commits, ...pullRequests.events, ...attributed.builds],
       repositoryFacts: history.facts,
     };
   }
@@ -368,13 +492,41 @@ export class GithubCollector implements VcsCollector {
     });
   }
 
+  /** A commit as the provider reported it. Attribution happens afterwards. */
+  private commitOf(
+    repository: TrackedRepository,
+    node: GithubCommitNode,
+    occurredAt: Date,
+  ): CollectedCommit {
+    return {
+      event: {
+        repositoryId: repository.id,
+        kind: "commit",
+        externalId: node.oid ?? "",
+        occurredAt,
+        actorKey: authorKey(node.author ?? {}),
+        actorName: node.author?.user?.login ?? node.author?.name ?? null,
+        actorAvatarUrl: node.author?.user?.avatarUrl ?? node.author?.avatarUrl ?? null,
+        outcome: null,
+        additions: node.additions ?? null,
+        deletions: node.deletions ?? null,
+        changedFiles: node.changedFilesIfAvailable ?? null,
+        payload: {
+          messageHeadline: node.messageHeadline ?? null,
+          url: node.url ?? null,
+        },
+      },
+      isMerge: (node.parents?.totalCount ?? 1) >= 2,
+    };
+  }
+
   private async collectCommits(
     repository: TrackedRepository,
     window: CollectionWindow,
     headers: Record<string, string>,
     context: CollectorContext,
-  ): Promise<{ events: CodeHealthEvent[]; facts: CollectedFacts["repositoryFacts"] }> {
-    const events: CodeHealthEvent[] = [];
+  ): Promise<{ commits: CollectedCommit[]; facts: CollectedFacts["repositoryFacts"] }> {
+    const commits: CollectedCommit[] = [];
     let cursor: string | null = null;
     let facts: CollectedFacts["repositoryFacts"];
 
@@ -410,24 +562,7 @@ export class GithubCollector implements VcsCollector {
       for (const node of history?.nodes ?? []) {
         const occurredAt = isoOrNull(node?.committedDate);
         if (!node?.oid || !occurredAt) continue;
-
-        events.push({
-          repositoryId: repository.id,
-          kind: "commit",
-          externalId: node.oid,
-          occurredAt,
-          actorKey: authorKey(node.author ?? {}),
-          actorName: node.author?.user?.login ?? node.author?.name ?? null,
-          actorAvatarUrl: node.author?.user?.avatarUrl ?? node.author?.avatarUrl ?? null,
-          outcome: null,
-          additions: node.additions ?? null,
-          deletions: node.deletions ?? null,
-          changedFiles: node.changedFilesIfAvailable ?? null,
-          payload: {
-            messageHeadline: node.messageHeadline ?? null,
-            url: node.url ?? null,
-          },
-        });
+        commits.push(this.commitOf(repository, node, occurredAt));
       }
 
       if (!history?.pageInfo?.hasNextPage) break;
@@ -435,7 +570,7 @@ export class GithubCollector implements VcsCollector {
       if (!cursor) break;
     }
 
-    return { events, facts };
+    return { commits, facts };
   }
 
   private async collectPullRequests(
@@ -443,7 +578,7 @@ export class GithubCollector implements VcsCollector {
     window: CollectionWindow,
     headers: Record<string, string>,
     context: CollectorContext,
-  ): Promise<CodeHealthEvent[]> {
+  ): Promise<CollectedPullRequests> {
     const slug = `${repository.owner}/${repository.name}`;
     const range = `${searchDate(window.from)}..${searchDate(window.to)}`;
 
@@ -466,7 +601,26 @@ export class GithubCollector implements VcsCollector {
       ),
     ]);
 
-    return [...opened, ...closed];
+    // Only a merge commit hides the pull request's commits from the branch
+    // history; a squash or a rebase puts commits dated at the merge on it, and
+    // those the history already returns.
+    const needingCommits = closed.merged
+      .filter((entry) => entry.strategy === "merge_commit")
+      .map((entry) => entry.nodeId)
+      .filter((id): id is string => id !== null);
+
+    const commits = await this.collectPullRequestCommits(
+      repository,
+      needingCommits,
+      headers,
+      context,
+    );
+
+    return {
+      events: [...opened.events, ...closed.events],
+      merged: closed.merged,
+      commits,
+    };
   }
 
   private async searchPullRequests(
@@ -476,8 +630,12 @@ export class GithubCollector implements VcsCollector {
     window: CollectionWindow,
     headers: Record<string, string>,
     context: CollectorContext,
-  ): Promise<CodeHealthEvent[]> {
+  ): Promise<{
+    events: CodeHealthEvent[];
+    merged: (MergedPullRequest & { nodeId: string | null })[];
+  }> {
     const events: CodeHealthEvent[] = [];
+    const merged: (MergedPullRequest & { nodeId: string | null })[] = [];
     let cursor: string | null = null;
 
     for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -489,7 +647,25 @@ export class GithubCollector implements VcsCollector {
 
       for (const node of body.data?.search?.nodes ?? []) {
         if (!node?.number) continue;
-        events.push(...this.pullRequestEvents(repository, node, range, window));
+        const pullRequestEvents = this.pullRequestEvents(repository, node, range, window);
+        events.push(...pullRequestEvents);
+
+        // Only a pull request whose closing landed in this window decides
+        // attribution; one merged earlier decided it in the window it was
+        // merged in.
+        if (range === "closed" && node.mergedAt && pullRequestEvents.length > 0) {
+          merged.push({
+            externalId: String(node.number),
+            nodeId: node.id ?? null,
+            mergeCommitId: node.mergeCommit?.oid ?? null,
+            strategy: strategyOf(node),
+            author: {
+              actorKey: node.author?.login?.toLowerCase() ?? null,
+              actorName: node.author?.login ?? null,
+              actorAvatarUrl: node.author?.avatarUrl ?? null,
+            },
+          });
+        }
       }
 
       const pageInfo = body.data?.search?.pageInfo;
@@ -498,7 +674,81 @@ export class GithubCollector implements VcsCollector {
       if (!cursor) break;
     }
 
-    return events;
+    return { events, merged };
+  }
+
+  /**
+   * The commits of the pull requests that were merged with a merge commit.
+   *
+   * Their dates are the dates they were written on, not the date of the merge,
+   * so they are stored where they happened and counted in the window they
+   * happened in. The commit the history returned for the same identifier, if
+   * any, is the same commit, and the two are deduplicated downstream.
+   *
+   * The first page of every pull request comes back in one document per
+   * batch; a pull request with more commits than that is walked to its end one
+   * page at a time, because nothing else will ever return those commits.
+   */
+  private async collectPullRequestCommits(
+    repository: TrackedRepository,
+    nodeIds: readonly string[],
+    headers: Record<string, string>,
+    context: CollectorContext,
+  ): Promise<CollectedCommit[]> {
+    const commits: CollectedCommit[] = [];
+
+    for (const ids of chunked(nodeIds, PULL_REQUEST_BATCH)) {
+      const body = await this.graphql<GithubPullRequestCommitsResponse>(
+        { query: PULL_REQUEST_COMMITS_QUERY, variables: { ids } },
+        headers,
+        context,
+      );
+
+      for (const node of body.data?.nodes ?? []) {
+        commits.push(...this.commitsIn(repository, node));
+        commits.push(...(await this.remainingPullRequestCommits(repository, node, headers, context)));
+      }
+    }
+
+    return commits;
+  }
+
+  private commitsIn(
+    repository: TrackedRepository,
+    node: GithubPullRequestCommitsNode | null | undefined,
+  ): CollectedCommit[] {
+    const commits: CollectedCommit[] = [];
+    for (const entry of node?.commits?.nodes ?? []) {
+      const commit = entry?.commit;
+      const occurredAt = isoOrNull(commit?.committedDate);
+      if (!commit?.oid || !occurredAt) continue;
+      commits.push(this.commitOf(repository, commit, occurredAt));
+    }
+    return commits;
+  }
+
+  private async remainingPullRequestCommits(
+    repository: TrackedRepository,
+    first: GithubPullRequestCommitsNode | null | undefined,
+    headers: Record<string, string>,
+    context: CollectorContext,
+  ): Promise<CollectedCommit[]> {
+    const commits: CollectedCommit[] = [];
+    let pageInfo = first?.commits?.pageInfo;
+    const id = first?.id;
+
+    for (let page = 1; page < MAX_PAGES && id && pageInfo?.hasNextPage && pageInfo.endCursor; page += 1) {
+      const body = await this.graphql<GithubPullRequestCommitsPageResponse>(
+        { query: PULL_REQUEST_COMMITS_PAGE_QUERY, variables: { id, cursor: pageInfo.endCursor } },
+        headers,
+        context,
+      );
+      const node = body.data?.node;
+      commits.push(...this.commitsIn(repository, node));
+      pageInfo = node?.commits?.pageInfo;
+    }
+
+    return commits;
   }
 
   private pullRequestEvents(
@@ -516,6 +766,7 @@ export class GithubCollector implements VcsCollector {
     if (!occurredAt || occurredAt < window.from || occurredAt >= window.to) return [];
 
     const closedOutcome: EventOutcome = node.mergedAt ? "merged" : "abandoned";
+    const authorLogin = node.author?.login?.toLowerCase() ?? null;
 
     const events: CodeHealthEvent[] = [
       {
@@ -523,7 +774,7 @@ export class GithubCollector implements VcsCollector {
         kind: "pull_request",
         externalId: range === "created" ? String(node.number) : `${node.number}:closed`,
         occurredAt,
-        actorKey: node.author?.login?.toLowerCase() ?? null,
+        actorKey: authorLogin,
         actorName: node.author?.login ?? null,
         actorAvatarUrl: node.author?.avatarUrl ?? null,
         outcome: range === "created" ? "open" : closedOutcome,
@@ -536,6 +787,7 @@ export class GithubCollector implements VcsCollector {
           state: node.state ?? null,
           createdAt: createdAt?.toISOString() ?? null,
           closedAt: closedAt?.toISOString() ?? null,
+          mergeCommitSha: node.mergeCommit?.oid ?? null,
         },
       },
     ];
@@ -545,6 +797,10 @@ export class GithubCollector implements VcsCollector {
     for (const review of node.reviews?.nodes ?? []) {
       const login = review?.author?.login;
       if (!review?.id || !login) continue;
+      // Commenting on your own pull request is not reviewing it, and counting
+      // it would let an author pad their review figures by replying to their
+      // reviewers.
+      if (login.toLowerCase() === authorLogin) continue;
 
       events.push({
         repositoryId: repository.id,
@@ -570,8 +826,8 @@ export class GithubCollector implements VcsCollector {
     window: CollectionWindow,
     headers: Record<string, string>,
     context: CollectorContext,
-  ): Promise<CodeHealthEvent[]> {
-    const events: CodeHealthEvent[] = [];
+  ): Promise<CollectedBuild[]> {
+    const builds: CollectedBuild[] = [];
 
     for (let page = 1; page <= MAX_PAGES; page += 1) {
       const parameters = new URLSearchParams({
@@ -606,45 +862,49 @@ export class GithubCollector implements VcsCollector {
 
       const runs = body.workflow_runs ?? [];
       for (const run of runs) {
-        const event = this.runEvent(repository, run, window);
-        if (event) events.push(event);
+        const build = this.runOf(repository, run, window);
+        if (build) builds.push(build);
       }
 
       if (runs.length < PAGE_SIZE) break;
     }
 
-    return events;
+    return builds;
   }
 
-  private runEvent(
+  private runOf(
     repository: TrackedRepository,
     run: GithubWorkflowRunNode,
     window: CollectionWindow,
-  ): CodeHealthEvent | null {
+  ): CollectedBuild | null {
     const occurredAt = isoOrNull(run.updated_at ?? run.run_started_at ?? run.created_at);
     if (run.id === undefined || !occurredAt) return null;
     // `created:` filters by calendar day, so trim to the real window bounds.
     if (occurredAt < window.from || occurredAt >= window.to) return null;
 
     return {
-      repositoryId: repository.id,
-      kind: "build",
-      externalId: String(run.id),
-      occurredAt,
-      actorKey: run.actor?.login?.toLowerCase() ?? null,
-      actorName: run.actor?.login ?? null,
-      actorAvatarUrl: run.actor?.avatar_url ?? null,
-      outcome: RUN_OUTCOMES.get(run.conclusion ?? "") ?? null,
-      additions: null,
-      deletions: null,
-      changedFiles: null,
-      payload: {
-        workflow: run.name ?? null,
-        branch: run.head_branch ?? null,
-        status: run.status ?? null,
-        conclusion: run.conclusion ?? null,
-        url: run.html_url ?? null,
+      event: {
+        repositoryId: repository.id,
+        kind: "build",
+        externalId: String(run.id),
+        occurredAt,
+        actorKey: run.actor?.login?.toLowerCase() ?? null,
+        actorName: run.actor?.login ?? null,
+        actorAvatarUrl: run.actor?.avatar_url ?? null,
+        outcome: RUN_OUTCOMES.get(run.conclusion ?? "") ?? null,
+        additions: null,
+        deletions: null,
+        changedFiles: null,
+        payload: {
+          workflow: run.name ?? null,
+          branch: run.head_branch ?? null,
+          commitSha: run.head_sha ?? null,
+          status: run.status ?? null,
+          conclusion: run.conclusion ?? null,
+          url: run.html_url ?? null,
+        },
       },
+      commitId: run.head_sha ?? null,
     };
   }
 }

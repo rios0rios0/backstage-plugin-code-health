@@ -47,7 +47,15 @@ interface Accumulator {
   reviewsRejected: number;
   pipelineRuns: number;
   pipelineRunsSucceeded: number;
+  pipelineRunsFailed: number;
+  /** Every repository any event put this person in. */
   repositories: Set<string>;
+  /**
+   * The repositories this person changed the code of — committed to, or had a
+   * pull request merged into. A review or a pipeline run is activity in a
+   * repository, but it is not authorship of what Sonar measures there.
+   */
+  codeRepositories: Set<string>;
   wakaTime: WakaTimeMetrics[];
   jira: JiraContributorMetrics[];
   confluence: ConfluenceContributorMetrics[];
@@ -83,7 +91,9 @@ const empty = (): Accumulator => ({
   reviewsRejected: 0,
   pipelineRuns: 0,
   pipelineRunsSucceeded: 0,
+  pipelineRunsFailed: 0,
   repositories: new Set(),
+  codeRepositories: new Set(),
   wakaTime: [],
   jira: [],
   confluence: [],
@@ -108,6 +118,7 @@ const applyEvent = (accumulator: Accumulator, event: CodeHealthEvent): void => {
 
   switch (event.kind) {
     case "commit":
+      accumulator.codeRepositories.add(event.repositoryId);
       accumulator.commits += 1;
       accumulator.linesAdded += event.additions ?? 0;
       accumulator.linesDeleted += event.deletions ?? 0;
@@ -119,7 +130,10 @@ const applyEvent = (accumulator: Accumulator, event: CodeHealthEvent): void => {
       break;
     case "pull_request":
       if (event.outcome === "open") accumulator.pullRequestsOpened += 1;
-      if (event.outcome === "merged") accumulator.pullRequestsMerged += 1;
+      if (event.outcome === "merged") {
+        accumulator.pullRequestsMerged += 1;
+        accumulator.codeRepositories.add(event.repositoryId);
+      }
       break;
     case "pr_review":
       accumulator.reviewsGiven += 1;
@@ -134,6 +148,7 @@ const applyEvent = (accumulator: Accumulator, event: CodeHealthEvent): void => {
     case "build":
       accumulator.pipelineRuns += 1;
       if (event.outcome === "succeeded") accumulator.pipelineRunsSucceeded += 1;
+      if (event.outcome === "failed") accumulator.pipelineRunsFailed += 1;
       break;
     default:
       break;
@@ -141,13 +156,21 @@ const applyEvent = (accumulator: Accumulator, event: CodeHealthEvent): void => {
 };
 
 /**
- * Sonar health of the repositories a contributor touched in the window.
+ * Sonar health of the repositories a contributor changed the code of in the
+ * window.
  *
  * This is deliberately *not* an attribution: SonarQube measures projects, not
  * people, and nothing here claims the bugs are theirs. It answers "what does the
  * code this person worked on look like", which is the only honest reading of a
  * per-project measure on a per-person row — and it is why two people on the same
  * repository see the same figures.
+ *
+ * "Worked on" means committed to or merged into, not reviewed or built.
+ * Reviewing a repository's pull requests does not put a hand on its code, and
+ * a pipeline run says nothing about who wrote what it ran; counting either put
+ * every repository's bugs and debt on the row of whoever reviews the most —
+ * usually the person who also merges the most — which reads as though they
+ * wrote every defect in the fleet.
  *
  * Counts are summed because a person spanning three repositories carries all
  * three. Percentages are averaged rather than summed, since adding coverage
@@ -427,12 +450,17 @@ export class ListContributorSummaries {
           prApprovalRate: computeRate(totals.reviewsApproved, totals.reviewsGiven),
           pipelineRuns: totals.pipelineRuns,
           pipelineRunsSucceeded: totals.pipelineRunsSucceeded,
+          pipelineRunsFailed: totals.pipelineRunsFailed,
+          // Over the runs that reached a verdict. A run cancelled because a
+          // newer push superseded it, or skipped by a path filter, is neither a
+          // success nor a failure, and counting it against somebody turns a
+          // busy afternoon into a bad success rate.
           pipelineSuccessRate: computeRate(
             totals.pipelineRunsSucceeded,
-            totals.pipelineRuns,
+            totals.pipelineRunsSucceeded + totals.pipelineRunsFailed,
           ),
           repositories: totals.repositories.size,
-          sonarMetrics: aggregateSonar(totals.repositories, sonarByRepository),
+          sonarMetrics: aggregateSonar(totals.codeRepositories, sonarByRepository),
           wakaTimeMetrics: mergeWakaTimeMetrics(totals.wakaTime),
           jiraMetrics: mergeJiraContributorMetrics(totals.jira),
           confluenceMetrics: mergeConfluence(totals.confluence),

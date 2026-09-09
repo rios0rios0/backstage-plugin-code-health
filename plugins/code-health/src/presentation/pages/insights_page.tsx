@@ -212,8 +212,8 @@ export const InsightsPage = ({
                   <StatTile
                     label="Build success"
                     value={formatPercent(kpis.buildSuccessRate)}
-                    caption="of pipeline runs"
-                    help="Succeeded runs as a share of all pipeline runs in the window."
+                    caption="of decided runs"
+                    help="Succeeded runs as a share of the runs that reached a verdict in the window. Cancelled, skipped and still-running runs are neither a success nor a failure and are left out."
                   />
                 </Grid>
                 <Grid item xs={6} sm={4} md={2}>
