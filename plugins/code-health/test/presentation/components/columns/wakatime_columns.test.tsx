@@ -1,7 +1,7 @@
 import { renderInTestApp } from "@backstage/test-utils";
+import type { RepositorySummary } from "@rios0rios0/backstage-plugin-code-health-common";
 import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
-import { fireEvent, render as renderBare, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { fireEvent, screen } from "@testing-library/react";
 import { ContributorsTable } from "../../../../src/presentation/components/contributors_table";
 import { RepositoryTable } from "../../../../src/presentation/components/repository_table";
 import { rootRouteRef } from "../../../../src/routes";
@@ -17,13 +17,24 @@ import {
 } from "../../../builders/contributor_builder";
 import { RepositoryBuilder } from "../../../builders/repository_builder";
 
-const render = (ui: React.ReactElement) => renderBare(<MemoryRouter>{ui}</MemoryRouter>);
-
 const wakatimeOn = { ...NO_INTEGRATIONS, wakatime: true };
 
-// The contributors table resolves each person's page through `useRouteRef`,
-// which needs a mounted route ref rather than only a router. The repository
-// table below has no such link and still renders bare.
+/**
+ * Both tables send each name to the plugin's own detail pages, which they
+ * resolve with `useRouteRef` — so each needs a Backstage app around it rather
+ * than a bare router.
+ */
+const renderRepositories = (repositories: RepositorySummary[]) =>
+  renderInTestApp(
+    <RepositoryTable
+      repositories={repositories}
+      totalCount={repositories.length}
+      isLoading={false}
+      capabilities={wakatimeOn}
+    />,
+    { mountedRoutes: { "/": rootRouteRef } },
+  );
+
 const renderContributors = (contributors: ReturnType<ContributorBuilder["build"]>[]) =>
   renderInTestApp(
     <ContributorsTable
@@ -268,7 +279,7 @@ describe("hasAiMetrics", () => {
 });
 
 describe("wakaTimeRepositoryColumns", () => {
-  it("should show the project's time and how many people logged it", () => {
+  it("should show the project's time and how many people logged it", async () => {
     // given
     const repository = {
       ...RepositoryBuilder.create().withName("gateway").build(),
@@ -282,21 +293,14 @@ describe("wakaTimeRepositoryColumns", () => {
     };
 
     // when
-    render(
-      <RepositoryTable
-        repositories={[repository]}
-        totalCount={1}
-        isLoading={false}
-        capabilities={wakatimeOn}
-      />,
-    );
+    await renderRepositories([repository]);
 
     // then
     expect(screen.getByText("2h")).toBeInTheDocument();
     expect(screen.getByText("3 people")).toBeInTheDocument();
   });
 
-  it("should say `person` for a single contributor", () => {
+  it("should say `person` for a single contributor", async () => {
     // given
     const repository = {
       ...RepositoryBuilder.create().withName("gateway").build(),
@@ -310,34 +314,20 @@ describe("wakaTimeRepositoryColumns", () => {
     };
 
     // when
-    render(
-      <RepositoryTable
-        repositories={[repository]}
-        totalCount={1}
-        isLoading={false}
-        capabilities={wakatimeOn}
-      />,
-    );
+    await renderRepositories([repository]);
 
     // then
     expect(screen.getByText("1 person")).toBeInTheDocument();
   });
 
-  it("should leave a repository nothing matched empty rather than at zero", () => {
+  it("should leave a repository nothing matched empty rather than at zero", async () => {
     // given
     // "Nobody here has WakaTime installed" and "the project is called something
     // else" are different problems, and a zero would hide both.
     const repository = RepositoryBuilder.create().withName("unmatched").build();
 
     // when
-    render(
-      <RepositoryTable
-        repositories={[repository]}
-        totalCount={1}
-        isLoading={false}
-        capabilities={wakatimeOn}
-      />,
-    );
+    await renderRepositories([repository]);
 
     // then
     expect(wakaTimeRepositoryColumns()).toHaveLength(1);

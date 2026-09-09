@@ -22,7 +22,11 @@ import { RepositoryBuilder } from "../builders/repository_builder";
 import { StubAdministrationService } from "../doubles/stub_administration_service";
 import { StubAppThemeApi } from "../doubles/stub_app_theme_api";
 import { StubOwnershipService } from "../doubles/stub_ownership_service";
-import { aContributorTrend, StubTrendService } from "../doubles/stub_trend_service";
+import {
+  aContributorTrend,
+  aRepositoryTrend,
+  StubTrendService,
+} from "../doubles/stub_trend_service";
 import { StubIdentityService } from "../doubles/stub_identity_service";
 import { StubIntegrationsService } from "../doubles/stub_integrations_service";
 import { StubContributorService } from "../doubles/stub_contributor_service";
@@ -76,9 +80,9 @@ const renderRouter = async (
           plugin. It is not decoration: `TabbedLayout` reads the splat parameter
           to decide which tab is selected, so a router rendered bare resolves
           its content from the location but reports the first tab selected
-          whatever is on screen. The detail pages also resolve their links
-          through `useRouteRef`, which needs the mounted route ref below to
-          resolve a sub route against and throws without one. */}
+          whatever is on screen. The detail pages and both tables also resolve
+          their links through `useRouteRef`, which needs the mounted route ref
+          below to resolve a sub route against and throws without one. */}
       <Routes>
         <Route path="/*" element={<Router />} />
       </Routes>
@@ -179,6 +183,27 @@ describe("Router", () => {
     // why it travels in the query string rather than in a path segment.
     expect(trendService.contributorCalls[0].key).toBe("user:default/jane");
     expect(screen.getByRole("tab", { name: "Contributors" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("should open a repository's page under the repositories tab", async () => {
+    // given
+    // `TabbedLayout` matches each tab as `<path>/*`, so the detail route resolves
+    // relative to the tab and the tab stays selected while a repository is open.
+    const trendService = new StubTrendService().withRepositoryTrend(
+      aRepositoryTrend({
+        summary: RepositoryBuilder.create().withId("repo-1").withName("gateway").build(),
+      }),
+    );
+
+    // when
+    await renderRouter({ trendService, path: "/repositories/repo-1" });
+
+    // then
+    expect(await screen.findByText("user/gateway")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Repositories" })).toHaveAttribute(
       "aria-selected",
       "true",
     );

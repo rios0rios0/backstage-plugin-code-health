@@ -1,11 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
+import { useRouteRef } from "@backstage/core-plugin-api";
 import Box from "@material-ui/core/Box";
 import Checkbox from "@material-ui/core/Checkbox";
 import FormControlLabel from "@material-ui/core/FormControlLabel";
 import Link from "@material-ui/core/Link";
 import Paper from "@material-ui/core/Paper";
+import Tooltip from "@material-ui/core/Tooltip";
 import Typography from "@material-ui/core/Typography";
 import { makeStyles } from "@material-ui/core/styles";
+import HelpOutlineIcon from "@material-ui/icons/HelpOutline";
+import LaunchIcon from "@material-ui/icons/Launch";
 import type { ColumnDef, ColumnFiltersState, SortingState } from "@tanstack/react-table";
 import {
   getCoreRowModel,
@@ -16,13 +20,21 @@ import {
 } from "@tanstack/react-table";
 import type {
   IntegrationCapabilities,
+  RepositoryHealthScore,
   RepositorySummary,
+  ScoreBand,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
   catalogEntityPath,
+  computeRepositoryHealthScore,
   NO_INTEGRATIONS,
+  parseEntityRef,
+  scoreBand,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import { Link as RouterLink } from "react-router-dom";
+import type { StatusTone } from "../../domain/entities/insights";
+import { repositoryDetailRouteRef } from "../../routes";
+import { useChartPalette } from "./charts/chart_palette";
 import { BadgeStatusCell } from "./badge_status_cell";
 import { ComplianceBadge } from "./compliance_badge";
 import { DataTable, PaginationControls } from "./data_table";
@@ -144,23 +156,50 @@ const DefaultBranchCell = ({ branch }: { branch: string }) => {
 const MetricCell = ({ value }: { value: string | number | null }) =>
   value === null ? <EmptyCell /> : <Typography variant="body2">{value}</Typography>;
 
+const useHealthStyles = makeStyles((theme) => ({
+  // Icon-only on purpose: the cell's text is the repository's name, and a second
+  // word beside it would read as part of that name in a dense table.
+  catalogIcon: {
+    fontSize: theme.typography.pxToRem(14),
+    color: theme.palette.text.secondary,
+    display: "block",
+  },
+  score: { fontVariantNumeric: "tabular-nums", fontWeight: 500 },
+  helpIcon: {
+    fontSize: theme.typography.pxToRem(13),
+    marginLeft: theme.spacing(0.5),
+    verticalAlign: "middle",
+    color: theme.palette.text.secondary,
+  },
+  componentRow: { display: "block" },
+}));
+
 const RepositoryNameCell = ({ repository }: { repository: RepositorySummary }) => {
-  // The name goes to the catalog entity rather than to the provider: that page is
-  // where a reader can act on the repository — owner, docs, dependencies, the
-  // other entity tabs — and it carries the provider URL itself through its source
-  // location, so nothing is lost by not linking there twice.
+  const classes = useHealthStyles();
+  // The name now opens the plugin's own page for the repository: that is where
+  // its history, its health score and the people working on it live, and it is
+  // the drill-down a reader clicking a row is asking for. The catalog entity —
+  // where the owner, docs and other entity tabs are — stays one click away as a
+  // secondary icon, because following it leaves the plugin.
+  const detailPath = useRouteRef(repositoryDetailRouteRef)({ id: repository.id });
   const entityPath = catalogEntityPath(repository.entityRef);
 
   return (
     <Box>
       <Box display="flex" alignItems="center" gridGap={8}>
-        {entityPath === null ? (
-          // A reference the catalog cannot address degrades to plain text rather
-          // than to a link that would 404.
-          <Typography variant="body2">{repository.fullName}</Typography>
-        ) : (
-          <Link component={RouterLink} to={entityPath} title="Open in the catalog">
-            {repository.fullName}
+        <Link component={RouterLink} to={detailPath} title="Open the repository's history">
+          {repository.fullName}
+        </Link>
+        {entityPath === null ? null : (
+          // A reference the catalog cannot address loses this link rather than
+          // rendering one that would 404.
+          <Link
+            component={RouterLink}
+            to={entityPath}
+            title="Open in the catalog"
+            aria-label={`Open ${repository.fullName} in the catalog`}
+          >
+            <LaunchIcon className={classes.catalogIcon} />
           </Link>
         )}
         {repository.isArchived && <StateChip tone="warning" label="archived" />}
@@ -175,12 +214,124 @@ const RepositoryNameCell = ({ repository }: { repository: RepositorySummary }) =
   );
 };
 
+/**
+ * The owner's name as the catalog spells it, linked to the entity that owns it.
+ *
+ * A reference the catalog cannot address degrades to an empty cell rather than
+ * to a link that would 404 — the same rule the repository name follows.
+ */
+const OwnerCell = ({ ownerRef }: { ownerRef: string | null }) => {
+  const parsed = ownerRef === null ? null : parseEntityRef(ownerRef);
+  const path = ownerRef === null ? null : catalogEntityPath(ownerRef);
+
+  if (parsed === null || path === null) return <EmptyCell />;
+
+  return (
+    <Link component={RouterLink} to={path} title={ownerRef ?? undefined}>
+      <Typography variant="body2" component="span">
+        {parsed.name}
+      </Typography>
+    </Link>
+  );
+};
+
+/** The name a `spec.owner` reference goes under, for sorting and filtering. */
+const ownerNameOf = (ownerRef: string | null): string =>
+  ownerRef === null ? "" : (parseEntityRef(ownerRef)?.name ?? "");
+
+/** Which of the reserved status colours each band borrows. */
+const HEALTH_BAND_TONES: Readonly<Record<ScoreBand, StatusTone>> = {
+  good: "good",
+  fair: "warning",
+  poor: "critical",
+  unknown: "unknown",
+};
+
+const HEALTH_HELP =
+  "How well a repository is looked after, as one number: its Sonar gate, coverage, defects, duplication and debt; its default-branch build and build success rate; its branch and build policy; its documentation; and how its pull requests were reviewed and landed. Every part is absolute, and a part that could not be measured is left out rather than scored as zero — hover a score for the workings.";
+
+const HealthHeader = () => {
+  const classes = useHealthStyles();
+
+  return (
+    <>
+      Health
+      <Tooltip title={HEALTH_HELP}>
+        <HelpOutlineIcon className={classes.helpIcon} aria-label="What the health score is" />
+      </Tooltip>
+    </>
+  );
+};
+
+/**
+ * The score, coloured by its band, with its workings behind a tooltip.
+ *
+ * The workings travel with the number wherever it goes: a bare 62 on a row is a
+ * verdict nobody can act on, and the components' sentences are what turn it back
+ * into a list of things somebody can fix.
+ */
+const HealthScoreCell = ({ score }: { score: RepositoryHealthScore }) => {
+  const classes = useHealthStyles();
+  const palette = useChartPalette();
+
+  if (score.value === null) return <EmptyCell />;
+
+  const band = scoreBand(score.value);
+
+  return (
+    <Tooltip
+      title={
+        <>
+          {score.components.map((component) => (
+            <Typography key={component.id} variant="caption" className={classes.componentRow}>
+              {`${component.label}: ${component.detail}`}
+            </Typography>
+          ))}
+        </>
+      }
+    >
+      <Typography
+        variant="body2"
+        className={classes.score}
+        style={{ color: palette.status[HEALTH_BAND_TONES[band]] }}
+        data-band={band}
+      >
+        {score.value}
+      </Typography>
+    </Tooltip>
+  );
+};
+
+/**
+ * Unmeasured rows sort below every measured one.
+ *
+ * Sorting has to put them somewhere, and below is the only place that does not
+ * claim something: above the worst-scoring repository would read as a top
+ * ranking, and interleaving them at zero would read as a failing grade. The
+ * cell itself stays empty, so nothing on screen ever says minus one.
+ */
+const UNMEASURED_HEALTH = -1;
+
 const columns: ColumnDef<RepositorySummary>[] = [
   {
     accessorKey: "fullName",
     header: "Repository",
     cell: ({ row }) => <RepositoryNameCell repository={row.original} />,
     filterFn: "includesString",
+  },
+  {
+    id: "owner",
+    accessorFn: (row) => ownerNameOf(row.ownerRef),
+    header: "Owner",
+    cell: ({ row }) => <OwnerCell ownerRef={row.original.ownerRef} />,
+    filterFn: "includesString",
+  },
+  {
+    id: "health",
+    accessorFn: (row) => computeRepositoryHealthScore(row).value ?? UNMEASURED_HEALTH,
+    header: () => <HealthHeader />,
+    cell: ({ row }) => <HealthScoreCell score={computeRepositoryHealthScore(row.original)} />,
+    enableColumnFilter: false,
   },
   {
     accessorKey: "defaultBranch",

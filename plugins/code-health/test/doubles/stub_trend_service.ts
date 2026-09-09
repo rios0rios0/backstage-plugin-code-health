@@ -1,10 +1,14 @@
 import type {
   GetContributorTrendResponse,
   GetRepositoryTrendResponse,
+  RepositorySummary,
+  RepositoryTrendPoint,
   TimeSeriesBucket,
   TimeWindow,
 } from "@rios0rios0/backstage-plugin-code-health-common";
+import { computeRepositoryHealthScore } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { TrendService } from "../../src/domain/services/dashboard_service";
+import { RepositoryBuilder } from "../builders/repository_builder";
 
 const WINDOW: TimeWindow = { from: "2026-06-09T00:00:00.000Z", to: "2026-09-09T00:00:00.000Z" };
 
@@ -19,6 +23,38 @@ export const aContributorTrend = (
   points: [],
   ...overrides,
 });
+
+/**
+ * One bucket of a repository's history.
+ *
+ * The score is derived from the summary rather than passed in, because that is
+ * what the backend does: two figures that disagree would let a test assert a
+ * combination the API can never produce.
+ */
+export const aRepositoryTrendPoint = (
+  day: string,
+  summary: RepositorySummary,
+): RepositoryTrendPoint => ({
+  day,
+  summary,
+  score: computeRepositoryHealthScore(summary),
+});
+
+export const aRepositoryTrend = (
+  overrides: Partial<GetRepositoryTrendResponse> = {},
+): GetRepositoryTrendResponse => {
+  const summary = overrides.summary ?? RepositoryBuilder.create().build();
+
+  return {
+    id: summary.id,
+    window: WINDOW,
+    bucket: "week",
+    score: computeRepositoryHealthScore(summary),
+    points: [],
+    ...overrides,
+    summary,
+  };
+};
 
 export class StubTrendService implements TrendService {
   private contributorResult: GetContributorTrendResponse = aContributorTrend();
