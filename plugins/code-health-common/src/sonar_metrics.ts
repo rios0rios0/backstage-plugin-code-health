@@ -1,5 +1,14 @@
 export type QualityGateStatus = "OK" | "ERROR" | "NONE";
 
+/**
+ * The coverage a repository has to reach before it stops being a finding.
+ *
+ * Eighty percent is SonarQube's own default "coverage on new code" gate, so
+ * it is the number a team already sees on its quality gate rather than a
+ * second target invented here. Both scores and the Insights tab read it.
+ */
+export const SONAR_COVERAGE_TARGET = 80;
+
 export interface SonarMetrics {
   readonly bugs: number;
   readonly codeSmells: number;

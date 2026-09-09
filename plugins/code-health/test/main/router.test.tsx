@@ -3,17 +3,23 @@ import { renderInTestApp, TestApiProvider } from "@backstage/test-utils";
 import { screen, waitFor } from "@testing-library/react";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../src/domain/entities/code_health_config";
 import {
+  codeHealthAdministrationApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
   codeHealthIdentitiesApiRef,
   codeHealthIntegrationsApiRef,
+  codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
   codeHealthTimeSeriesApiRef,
+  codeHealthTrendsApiRef,
 } from "../../src/main/api_refs";
 import { Router } from "../../src/main/router";
 import { RepositoryBuilder } from "../builders/repository_builder";
+import { StubAdministrationService } from "../doubles/stub_administration_service";
 import { StubAppThemeApi } from "../doubles/stub_app_theme_api";
+import { StubOwnershipService } from "../doubles/stub_ownership_service";
+import { StubTrendService } from "../doubles/stub_trend_service";
 import { StubIdentityService } from "../doubles/stub_identity_service";
 import { StubIntegrationsService } from "../doubles/stub_integrations_service";
 import { StubContributorService } from "../doubles/stub_contributor_service";
@@ -29,6 +35,9 @@ const renderRouter = async (
     timeSeriesService?: StubTimeSeriesService;
     integrationsService?: StubIntegrationsService;
     identityService?: StubIdentityService;
+    trendService?: StubTrendService;
+    ownershipService?: StubOwnershipService;
+    administrationService?: StubAdministrationService;
     /** Which tab to land on. Defaults to the root, which is Insights. */
     path?: string;
   } = {},
@@ -39,6 +48,10 @@ const renderRouter = async (
   const timeSeriesService = overrides.timeSeriesService ?? new StubTimeSeriesService();
   const integrationsService = overrides.integrationsService ?? new StubIntegrationsService();
   const identityService = overrides.identityService ?? new StubIdentityService();
+  const trendService = overrides.trendService ?? new StubTrendService();
+  const ownershipService = overrides.ownershipService ?? new StubOwnershipService();
+  const administrationService =
+    overrides.administrationService ?? new StubAdministrationService();
 
   await renderInTestApp(
     <TestApiProvider
@@ -51,6 +64,9 @@ const renderRouter = async (
         [codeHealthTimeSeriesApiRef, timeSeriesService],
         [codeHealthIntegrationsApiRef, integrationsService],
         [codeHealthIdentitiesApiRef, identityService],
+        [codeHealthTrendsApiRef, trendService],
+        [codeHealthOwnershipApiRef, ownershipService],
+        [codeHealthAdministrationApiRef, administrationService],
       ]}
     >
       <Router />
@@ -65,6 +81,9 @@ const renderRouter = async (
     timeSeriesService,
     integrationsService,
     identityService,
+    trendService,
+    ownershipService,
+    administrationService,
   };
 };
 

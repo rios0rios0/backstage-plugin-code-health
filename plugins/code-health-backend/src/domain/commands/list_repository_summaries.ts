@@ -225,6 +225,9 @@ export class ListRepositorySummaries {
       return {
         id: repository.id,
         entityRef: repository.entityRef,
+        // TODO(ownership): read from `repository.catalogFacts.ownerRef` once
+        // discovery stores the entity's `spec.owner` on the repository row.
+        ownerRef: null,
         platform: repository.platform,
         name: repository.name,
         fullName: repositoryFullName(repository),

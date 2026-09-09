@@ -2,7 +2,10 @@ import { ContentHeader, WarningPanel } from "@backstage/core-components";
 import Box from "@material-ui/core/Box";
 import type { IntegrationCapabilities } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthConfig } from "../../domain/entities/code_health_config";
-import type { ContributorService } from "../../domain/services/dashboard_service";
+import type {
+  ContributorService,
+  DashboardService,
+} from "../../domain/services/dashboard_service";
 import { BackfillProgress } from "../components/backfill_progress";
 import { ContributorsTable } from "../components/contributors_table";
 import { DashboardToolbar } from "../components/dashboard_toolbar";
@@ -13,6 +16,8 @@ import { useTimeRange } from "../hooks/use_time_range";
 
 interface ContributorsPageProps {
   contributorService: ContributorService;
+  /** For the repository ranking shown above the table. */
+  dashboardService: DashboardService;
   coverage: UseCoverageResult;
   config: CodeHealthConfig;
   capabilities: IntegrationCapabilities;

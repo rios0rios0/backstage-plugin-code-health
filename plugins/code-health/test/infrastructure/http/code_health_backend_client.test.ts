@@ -110,6 +110,101 @@ describe("CodeHealthBackendClient", () => {
     expect(fetchApi.calls[0].url).toContain("/v1/refresh");
   });
 
+  it("should encode a person key into the trend path and pass the bucket", async () => {
+    // given
+    // A linked person's key is `user:default/jane`; spliced in raw, the slash
+    // would make the path name a different route.
+    const fetchApi = new StubFetchApi().withResponses({ body: { points: [] } });
+    const { client } = createClient(fetchApi);
+
+    // when
+    const trend = await client.getContributorTrend("user:default/jane", WINDOW, "week");
+
+    // then
+    expect(trend).toEqual({ points: [] });
+    expect(fetchApi.calls[0].url).toContain("/v1/contributors/user%3Adefault%2Fjane/trend?");
+    expect(fetchApi.queryOf(0).get("bucket")).toBe("week");
+    expect(fetchApi.queryOf(0).get("from")).toBe(WINDOW.from);
+  });
+
+  it("should ask for a repository's trend under its id", async () => {
+    // given
+    const fetchApi = new StubFetchApi().withResponses({ body: { id: "repo-1", points: [] } });
+    const { client } = createClient(fetchApi);
+
+    // when
+    const trend = await client.getRepositoryTrend("repo-1", WINDOW, "day");
+
+    // then
+    expect(trend).toEqual({ id: "repo-1", points: [] });
+    expect(fetchApi.calls[0].url).toContain("/v1/repositories/repo-1/trend?");
+    expect(fetchApi.queryOf(0).get("bucket")).toBe("day");
+  });
+
+  it("should ask for the repositories a person owns in a window", async () => {
+    // given
+    const fetchApi = new StubFetchApi().withResponses({
+      body: { window: WINDOW, ownership: { entityRef: null, owners: [] }, items: [] },
+    });
+    const { client } = createClient(fetchApi);
+
+    // when
+    const owned = await client.listOwnedRepositories("vcs:jane", WINDOW);
+
+    // then
+    expect(owned.items).toEqual([]);
+    expect(fetchApi.calls[0].url).toContain("/v1/contributors/vcs%3Ajane/repositories?");
+    expect(fetchApi.queryOf(0).get("to")).toBe(WINDOW.to);
+  });
+
+  it("should read what the caller is allowed to do", async () => {
+    // given
+    const fetchApi = new StubFetchApi().withResponses({
+      body: { canResetIngestion: true, retentionDays: 365 },
+    });
+    const { client } = createClient(fetchApi);
+
+    // when
+    const access = await client.getAccess();
+
+    // then
+    expect(access).toEqual({ canResetIngestion: true, retentionDays: 365 });
+    expect(fetchApi.calls[0].url).toContain("/v1/access");
+  });
+
+  it("should POST the reach of a reset and return what the backend did", async () => {
+    // given
+    const fetchApi = new StubFetchApi().withResponses({
+      body: { repositories: 12, days: 90, triggered: ["code-health.ingest"] },
+    });
+    const { client } = createClient(fetchApi);
+
+    // when
+    const outcome = await client.resetIngestion({ days: 90 });
+
+    // then
+    expect(outcome).toEqual({ repositories: 12, days: 90, triggered: ["code-health.ingest"] });
+    expect(fetchApi.calls[0]).toMatchObject({
+      method: "POST",
+      url: "http://localhost:7007/api/code-health/v1/ingestion/reset",
+      body: JSON.stringify({ days: 90 }),
+    });
+  });
+
+  it("should surface the refusal when a reset is not allowed", async () => {
+    // given
+    const fetchApi = new StubFetchApi().withResponses({
+      status: 403,
+      body: { error: { message: "only an administrator may start the collection over" } },
+    });
+    const { client } = createClient(fetchApi);
+
+    // when / then
+    await expect(client.resetIngestion({ days: 30 })).rejects.toThrow(
+      "only an administrator may start the collection over",
+    );
+  });
+
   it("should surface the message the backend explained the failure with", async () => {
     // given
     // "the requested window is longer than the retention period" tells a user

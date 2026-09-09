@@ -36,6 +36,12 @@ export interface RepositoryActivity {
   readonly builds: number;
   readonly buildsSucceeded: number;
   readonly buildsFailed: number;
+  /**
+   * Votes cast on the repository's pull requests by somebody other than their
+   * author — the same definition a contributor row uses. Kept here so review
+   * coverage can be read per repository rather than only fleet-wide.
+   */
+  readonly reviews: number;
   readonly releases: number;
   readonly tags: number;
 }
@@ -52,6 +58,7 @@ export const EMPTY_REPOSITORY_ACTIVITY: RepositoryActivity = {
   builds: 0,
   buildsSucceeded: 0,
   buildsFailed: 0,
+  reviews: 0,
   releases: 0,
   tags: 0,
 };
@@ -69,6 +76,16 @@ export interface RepositorySummary {
   readonly id: string;
   /** The catalog entity this repository was discovered from. */
   readonly entityRef: string;
+  /**
+   * The entity's `spec.owner` as a full reference — `group:default/platform`,
+   * `user:default/jane` — or null when the entity declares none.
+   *
+   * Read by discovery from the catalog, like the other catalog facts, because
+   * it changes when somebody edits a YAML file rather than on the snapshot's
+   * schedule. It is what ties a repository to the people responsible for it,
+   * which is a different question from who committed to it.
+   */
+  readonly ownerRef: string | null;
   readonly platform: Platform;
   readonly name: string;
   /** `owner/repo` on GitHub, `organization/project/repo` on Azure DevOps. */

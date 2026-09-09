@@ -338,6 +338,7 @@ describe("toCadence", () => {
           builds: 0,
           buildsSucceeded: 0,
           buildsFailed: 0,
+          reviews: 0,
           releases: 0,
           tags: 0,
         },

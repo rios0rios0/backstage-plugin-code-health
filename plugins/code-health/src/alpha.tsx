@@ -6,13 +6,16 @@ import {
 import { compatWrapper, convertLegacyRouteRef } from "@backstage/core-compat-api";
 import AssessmentIcon from "@material-ui/icons/Assessment";
 import {
+  codeHealthAdministrationApiFactory,
   codeHealthConfigApiFactory,
   codeHealthContributorsApiFactory,
   codeHealthCoverageApiFactory,
   codeHealthIdentitiesApiFactory,
   codeHealthIntegrationsApiFactory,
+  codeHealthOwnershipApiFactory,
   codeHealthRepositoriesApiFactory,
   codeHealthTimeSeriesApiFactory,
+  codeHealthTrendsApiFactory,
 } from "./main/apis";
 import { rootRouteRef } from "./routes";
 
@@ -60,6 +63,21 @@ export const codeHealthIdentitiesApi = ApiBlueprint.make({
   params: (defineParams) => defineParams(codeHealthIdentitiesApiFactory),
 });
 
+export const codeHealthTrendsApi = ApiBlueprint.make({
+  name: "trends",
+  params: (defineParams) => defineParams(codeHealthTrendsApiFactory),
+});
+
+export const codeHealthOwnershipApi = ApiBlueprint.make({
+  name: "ownership",
+  params: (defineParams) => defineParams(codeHealthOwnershipApiFactory),
+});
+
+export const codeHealthAdministrationApi = ApiBlueprint.make({
+  name: "administration",
+  params: (defineParams) => defineParams(codeHealthAdministrationApiFactory),
+});
+
 export const codeHealthPage = PageBlueprint.make({
   params: {
     path: "/code-health",
@@ -82,6 +100,9 @@ export default createFrontendPlugin({
     codeHealthTimeSeriesApi,
     codeHealthIntegrationsApi,
     codeHealthIdentitiesApi,
+    codeHealthTrendsApi,
+    codeHealthOwnershipApi,
+    codeHealthAdministrationApi,
     codeHealthPage,
   ],
 });

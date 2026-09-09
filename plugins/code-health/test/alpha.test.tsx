@@ -1,9 +1,12 @@
 import codeHealthFrontendPlugin, {
+  codeHealthAdministrationApi,
   codeHealthCoverageApi,
   codeHealthConfigApi,
   codeHealthContributorsApi,
+  codeHealthOwnershipApi,
   codeHealthPage,
   codeHealthRepositoriesApi,
+  codeHealthTrendsApi,
 } from "../src/alpha";
 
 /**
@@ -28,6 +31,9 @@ describe("alpha entry point", () => {
       codeHealthRepositoriesApi,
       codeHealthContributorsApi,
       codeHealthCoverageApi,
+      codeHealthTrendsApi,
+      codeHealthOwnershipApi,
+      codeHealthAdministrationApi,
     ];
 
     // when
@@ -39,6 +45,9 @@ describe("alpha entry point", () => {
       "ExtensionDefinition{kind=api,name=repositories,attachTo=root@apis}",
       "ExtensionDefinition{kind=api,name=contributors,attachTo=root@apis}",
       "ExtensionDefinition{kind=api,name=coverage,attachTo=root@apis}",
+      "ExtensionDefinition{kind=api,name=trends,attachTo=root@apis}",
+      "ExtensionDefinition{kind=api,name=ownership,attachTo=root@apis}",
+      "ExtensionDefinition{kind=api,name=administration,attachTo=root@apis}",
     ]);
   });
 
@@ -57,6 +66,9 @@ describe("alpha entry point", () => {
       "api:code-health/repositories",
       "api:code-health/contributors",
       "api:code-health/coverage",
+      "api:code-health/trends",
+      "api:code-health/ownership",
+      "api:code-health/administration",
       "page:code-health",
     ] as const;
 

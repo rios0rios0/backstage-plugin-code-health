@@ -8,13 +8,16 @@ import {
 import { CodeHealthBackendClient } from "../infrastructure/http/code_health_backend_client";
 import { readCodeHealthConfig } from "../infrastructure/services/backstage_config_service";
 import {
+  codeHealthAdministrationApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
   codeHealthIdentitiesApiRef,
   codeHealthIntegrationsApiRef,
+  codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
   codeHealthTimeSeriesApiRef,
+  codeHealthTrendsApiRef,
 } from "./api_refs";
 
 const clientDeps = { discoveryApi: discoveryApiRef, fetchApi: fetchApiRef };
@@ -70,6 +73,24 @@ export const codeHealthIdentitiesApiFactory = createApiFactory({
   factory: (deps) => new CodeHealthBackendClient(deps),
 });
 
+export const codeHealthTrendsApiFactory = createApiFactory({
+  api: codeHealthTrendsApiRef,
+  deps: clientDeps,
+  factory: (deps) => new CodeHealthBackendClient(deps),
+});
+
+export const codeHealthOwnershipApiFactory = createApiFactory({
+  api: codeHealthOwnershipApiRef,
+  deps: clientDeps,
+  factory: (deps) => new CodeHealthBackendClient(deps),
+});
+
+export const codeHealthAdministrationApiFactory = createApiFactory({
+  api: codeHealthAdministrationApiRef,
+  deps: clientDeps,
+  factory: (deps) => new CodeHealthBackendClient(deps),
+});
+
 export const codeHealthApis: AnyApiFactory[] = [
   codeHealthConfigApiFactory,
   codeHealthRepositoriesApiFactory,
@@ -78,4 +99,7 @@ export const codeHealthApis: AnyApiFactory[] = [
   codeHealthTimeSeriesApiFactory,
   codeHealthIntegrationsApiFactory,
   codeHealthIdentitiesApiFactory,
+  codeHealthTrendsApiFactory,
+  codeHealthOwnershipApiFactory,
+  codeHealthAdministrationApiFactory,
 ];

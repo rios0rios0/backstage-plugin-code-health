@@ -1,22 +1,34 @@
 export { CodeHealthPage, codeHealthPlugin } from "./plugin";
-export { contributorsRouteRef, rootRouteRef } from "./routes";
 export {
+  contributorDetailRouteRef,
+  contributorsRouteRef,
+  repositoriesRouteRef,
+  repositoryDetailRouteRef,
+  rootRouteRef,
+} from "./routes";
+export {
+  codeHealthAdministrationApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
   codeHealthIdentitiesApiRef,
   codeHealthIntegrationsApiRef,
+  codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthTrendsApiRef,
 } from "./main/api_refs";
 
 export type { CodeHealthConfig } from "./domain/entities/code_health_config";
 export type { TimeRange, TimeRangeId } from "./domain/entities/time_range";
 export type {
+  AdministrationService,
   ContributorService,
   CoverageService,
   DashboardService,
   IdentityService,
   IntegrationsService,
+  OwnershipService,
+  TrendService,
 } from "./domain/services/dashboard_service";
 
 /**
@@ -34,18 +46,32 @@ export type {
   ConfluenceSpaceMetrics,
   ContributorIdentity,
   ContributorSummary,
+  ContributorTrendPoint,
   CoverageInfo,
+  GetAccessResponse,
+  GetContributorTrendResponse,
+  GetRepositoryTrendResponse,
   IdentityRow,
   IdentitySource,
   IntegrationCapabilities,
   IntegrationId,
   JiraContributorMetrics,
   JiraRepositoryMetrics,
+  ListOwnedRepositoriesResponse,
+  OwnershipInfo,
   Platform,
+  ProductivityScore,
   QualityGateStatus,
   Release,
   RepositoryActivity,
+  RepositoryHealthScore,
   RepositorySummary,
+  RepositoryTrendPoint,
+  ResetIngestionRequest,
+  ResetIngestionResponse,
+  Score,
+  ScoreBand,
+  ScoreComponent,
   SonarMetrics,
   Tag,
   WakaTimeAiMetrics,

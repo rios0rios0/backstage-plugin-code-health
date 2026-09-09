@@ -9,21 +9,28 @@ import {
 import { useApi } from "@backstage/core-plugin-api";
 import Box from "@material-ui/core/Box";
 import type { ReactNode } from "react";
+import { Route, Routes } from "react-router-dom";
+import { IngestionResetButton } from "../presentation/components/ingestion_reset_button";
 import { ThemeToggleButton } from "../presentation/components/theme_toggle_button";
 import { useCapabilities } from "../presentation/hooks/use_capabilities";
 import { useCoverage } from "../presentation/hooks/use_coverage";
+import { ContributorDetailPage } from "../presentation/pages/contributor_detail_page";
 import { ContributorsPage } from "../presentation/pages/contributors_page";
 import { DashboardPage } from "../presentation/pages/dashboard_page";
 import { IdentitiesPage } from "../presentation/pages/identities_page";
 import { InsightsPage } from "../presentation/pages/insights_page";
+import { RepositoryDetailPage } from "../presentation/pages/repository_detail_page";
 import {
+  codeHealthAdministrationApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
   codeHealthIdentitiesApiRef,
   codeHealthIntegrationsApiRef,
+  codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
   codeHealthTimeSeriesApiRef,
+  codeHealthTrendsApiRef,
 } from "./api_refs";
 
 /**
@@ -64,6 +71,11 @@ const TabBody = ({ error, children }: { error: string | null; children: ReactNod
  * somebody goes there once after installation and then only when a new account
  * turns up. What it decides, though, shapes every other tab — a contributor row
  * is a person, and it is where a person is defined.
+ *
+ * The Contributors and Repositories tabs each hold a detail page beneath their
+ * table. `TabbedLayout` matches every tab as `<path>/*`, so the nested routes
+ * below resolve relative to the tab and the tab stays selected while a person
+ * or a repository is open.
  */
 export const Router = () => {
   const config = useApi(codeHealthConfigApiRef);
@@ -73,6 +85,9 @@ export const Router = () => {
   const timeSeriesService = useApi(codeHealthTimeSeriesApiRef);
   const integrationsService = useApi(codeHealthIntegrationsApiRef);
   const identityService = useApi(codeHealthIdentitiesApiRef);
+  const trendService = useApi(codeHealthTrendsApiRef);
+  const ownershipService = useApi(codeHealthOwnershipApiRef);
+  const administrationService = useApi(codeHealthAdministrationApiRef);
   const coverage = useCoverage(coverageService);
   // Asked once, alongside the reachability probe, so no view has to decide for
   // itself whether an empty column means "off" or "not collected yet".
@@ -81,6 +96,10 @@ export const Router = () => {
   return (
     <Page themeId="tool">
       <Header title="Code Health" subtitle="Repository health across your catalog">
+        <IngestionResetButton
+          administrationService={administrationService}
+          onReset={coverage.reload}
+        />
         <ThemeToggleButton />
       </Header>
 
@@ -105,23 +124,60 @@ export const Router = () => {
 
           <TabbedLayout.Route path="/contributors" title="Contributors">
             <TabBody error={coverage.error}>
-              <ContributorsPage
-                contributorService={contributorService}
-                coverage={coverage}
-                config={config}
-                capabilities={capabilities}
-              />
+              <Routes>
+                <Route
+                  path="/person"
+                  element={
+                    <ContributorDetailPage
+                      trendService={trendService}
+                      ownershipService={ownershipService}
+                      coverage={coverage}
+                      capabilities={capabilities}
+                    />
+                  }
+                />
+                <Route
+                  path="/*"
+                  element={
+                    <ContributorsPage
+                      contributorService={contributorService}
+                      dashboardService={dashboardService}
+                      coverage={coverage}
+                      config={config}
+                      capabilities={capabilities}
+                    />
+                  }
+                />
+              </Routes>
             </TabBody>
           </TabbedLayout.Route>
 
           <TabbedLayout.Route path="/repositories" title="Repositories">
             <TabBody error={coverage.error}>
-              <DashboardPage
-                dashboardService={dashboardService}
-                coverage={coverage}
-                config={config}
-                capabilities={capabilities}
-              />
+              <Routes>
+                <Route
+                  path="/:id"
+                  element={
+                    <RepositoryDetailPage
+                      trendService={trendService}
+                      contributorService={contributorService}
+                      coverage={coverage}
+                      capabilities={capabilities}
+                    />
+                  }
+                />
+                <Route
+                  path="/*"
+                  element={
+                    <DashboardPage
+                      dashboardService={dashboardService}
+                      coverage={coverage}
+                      config={config}
+                      capabilities={capabilities}
+                    />
+                  }
+                />
+              </Routes>
             </TabBody>
           </TabbedLayout.Route>
 

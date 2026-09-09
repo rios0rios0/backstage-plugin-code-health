@@ -6,6 +6,7 @@ import { ContributorsPage } from "../../../src/presentation/pages/contributors_p
 import { ContributorBuilder } from "../../builders/contributor_builder";
 import { StubContributorService } from "../../doubles/stub_contributor_service";
 import { aCoverageInfo } from "../../doubles/stub_coverage_service";
+import { StubDashboardService } from "../../doubles/stub_dashboard_service";
 
 const coverageResult = (overrides: Partial<UseCoverageResult> = {}): UseCoverageResult => ({
   coverage: aCoverageInfo(),
@@ -19,6 +20,7 @@ const renderPage = (service: StubContributorService, enabled = true) =>
   render(
     <ContributorsPage
       contributorService={service}
+      dashboardService={new StubDashboardService()}
       coverage={coverageResult()}
       config={DEFAULT_CODE_HEALTH_CONFIG}
       capabilities={NO_INTEGRATIONS}

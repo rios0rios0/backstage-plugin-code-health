@@ -9,14 +9,20 @@
 
 export { CODE_HEALTH_API_VERSION, CODE_HEALTH_PLUGIN_ID } from "./api";
 export type {
+  GetAccessResponse,
   GetCapabilitiesResponse,
+  GetContributorTrendResponse,
   GetCoverageResponse,
+  GetRepositoryTrendResponse,
   GetTimeSeriesResponse,
   LinkIdentityRequest,
   ListContributorsResponse,
   ListIdentitiesResponse,
+  ListOwnedRepositoriesResponse,
   ListRepositoriesResponse,
   RefreshResponse,
+  ResetIngestionRequest,
+  ResetIngestionResponse,
   TimeWindow,
 } from "./api";
 
@@ -143,7 +149,47 @@ export type {
 } from "./repository_summary";
 
 export type { QualityGateStatus, SonarMetrics } from "./sonar_metrics";
-export { formatDebt } from "./sonar_metrics";
+export { formatDebt, SONAR_COVERAGE_TARGET } from "./sonar_metrics";
+
+export {
+  combineScore,
+  FAIR_SCORE,
+  formatScoreValue,
+  GOOD_SCORE,
+  measuredComponent,
+  scoreBand,
+  shareOf,
+  unmeasuredComponent,
+} from "./score";
+export type { Score, ScoreBand, ScoreComponent, ScoreComponentDefinition } from "./score";
+
+export {
+  computeProductivityScore,
+  EMPTY_FLEET_REFERENCE,
+  fleetReferenceOf,
+  PRODUCTIVITY_COMPONENTS,
+} from "./productivity_score";
+export type { FleetReference, ProductivityScore } from "./productivity_score";
+
+export {
+  computeRepositoryHealthScore,
+  DEBT_HALF_POINT_MINUTES,
+  DEFECTS_HALF_POINT,
+  DUPLICATION_CEILING_PERCENT,
+  REPOSITORY_HEALTH_COMPONENTS,
+} from "./repository_health_score";
+export type { RepositoryHealthScore } from "./repository_health_score";
+
+export {
+  DEFAULT_TREND_MONTHS,
+  TREND_DAILY_LIMIT_DAYS,
+  TREND_MONTHS,
+  trendBucketFor,
+} from "./trend";
+export type { ContributorTrendPoint, RepositoryTrendPoint } from "./trend";
+
+export { DEFAULT_OWNER_KIND, ownerEntityRef } from "./ownership";
+export type { OwnershipInfo } from "./ownership";
 
 export type { Tag } from "./tag";
 

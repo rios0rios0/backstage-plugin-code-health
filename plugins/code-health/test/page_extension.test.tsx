@@ -5,22 +5,28 @@ import { renderInTestApp, TestApiProvider } from "@backstage/test-utils";
 import { CodeHealthPage } from "../src/plugin";
 import { rootRouteRef } from "../src/routes";
 import {
+  codeHealthAdministrationApiRef,
   codeHealthCoverageApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthIdentitiesApiRef,
   codeHealthIntegrationsApiRef,
+  codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
   codeHealthTimeSeriesApiRef,
+  codeHealthTrendsApiRef,
 } from "../src/main/api_refs";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../src/domain/entities/code_health_config";
+import { StubAdministrationService } from "./doubles/stub_administration_service";
 import { StubAppThemeApi } from "./doubles/stub_app_theme_api";
 import { StubCoverageService } from "./doubles/stub_coverage_service";
 import { StubContributorService } from "./doubles/stub_contributor_service";
 import { StubDashboardService } from "./doubles/stub_dashboard_service";
 import { StubIdentityService } from "./doubles/stub_identity_service";
 import { StubIntegrationsService } from "./doubles/stub_integrations_service";
+import { StubOwnershipService } from "./doubles/stub_ownership_service";
 import { StubTimeSeriesService } from "./doubles/stub_time_series_service";
+import { StubTrendService } from "./doubles/stub_trend_service";
 
 /**
  * Mounts the extension the way a consuming app does — behind a `<Route>` bound
@@ -39,6 +45,9 @@ const renderPage = (coverageService: StubCoverageService) =>
         [codeHealthTimeSeriesApiRef, new StubTimeSeriesService()],
         [codeHealthIntegrationsApiRef, new StubIntegrationsService()],
         [codeHealthIdentitiesApiRef, new StubIdentityService()],
+        [codeHealthTrendsApiRef, new StubTrendService()],
+        [codeHealthOwnershipApiRef, new StubOwnershipService()],
+        [codeHealthAdministrationApiRef, new StubAdministrationService()],
       ]}
     >
       <Routes>
