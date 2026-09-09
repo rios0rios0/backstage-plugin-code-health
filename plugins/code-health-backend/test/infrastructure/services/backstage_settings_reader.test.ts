@@ -2,6 +2,7 @@ import { ConfigReader } from "@backstage/config";
 import type { JsonObject } from "@backstage/types";
 import { integrationCapabilitiesOf } from "../../../src/domain/entities/ingestion_settings";
 import { readCodeHealthSettings } from "../../../src/infrastructure/services/backstage_settings_reader";
+import { RecordingLogger } from "../../doubles/recording_logger";
 
 const read = (data: JsonObject) => readCodeHealthSettings(new ConfigReader(data));
 
@@ -298,5 +299,70 @@ describe("readCodeHealthSettings", () => {
 
     // then
     expect(settings.sonar.enabled).toBe(true);
+  });
+
+  describe("administrators", () => {
+    it("should name nobody by default", () => {
+      // given / when
+      // Resetting drops every collected commit and re-walks the providers, so
+      // an install must not acquire an administrator by upgrading.
+      const settings = read({});
+
+      // then
+      expect(settings.administrators).toEqual([]);
+    });
+
+    it("should default a bare name to a user", () => {
+      // given / when
+      // The list names people far more often than teams, and an operator writes
+      // `jane` rather than `user:default/jane`.
+      const settings = read({ codeHealth: { administrators: ["jane"] } });
+
+      // then
+      expect(settings.administrators).toEqual(["user:default/jane"]);
+    });
+
+    it("should keep a kind-qualified reference and fill in the namespace", () => {
+      // given / when
+      const settings = read({
+        codeHealth: { administrators: ["group:platform", "user:default/jane"] },
+      });
+
+      // then
+      expect(settings.administrators).toEqual([
+        "group:default/platform",
+        "user:default/jane",
+      ]);
+    });
+
+    it("should skip a malformed entry and say which", () => {
+      // given
+      // One typo in a list of five must not take the dashboard down for
+      // everybody, and the warning is what makes the entry that stopped
+      // working findable.
+      const logger = new RecordingLogger();
+
+      // when
+      const settings = readCodeHealthSettings(
+        new ConfigReader({ codeHealth: { administrators: ["user:", "jane"] } }),
+        logger,
+      );
+
+      // then
+      expect(settings.administrators).toEqual(["user:default/jane"]);
+      expect(logger.at("warn")).toEqual([
+        "ignoring `codeHealth.administrators` entry user:: it is not an entity reference",
+      ]);
+    });
+
+    it("should ignore a whitespace entry", () => {
+      // given / when
+      // The config reader refuses an outright empty string itself, but an entry
+      // that is only spaces reaches here.
+      const settings = read({ codeHealth: { administrators: ["  ", "jane"] } });
+
+      // then
+      expect(settings.administrators).toEqual(["user:default/jane"]);
+    });
   });
 });

@@ -3,20 +3,26 @@ import { ScmIntegrations } from "@backstage/integration";
 import { catalogServiceRef } from "@backstage/plugin-catalog-node";
 import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
 import { CODE_HEALTH_PLUGIN_ID } from "@rios0rios0/backstage-plugin-code-health-common";
+import { AuthorizeAdministrator } from "./domain/commands/authorize_administrator";
 import { CaptureRepositorySnapshots } from "./domain/commands/capture_repository_snapshots";
+import { GetContributorTrend } from "./domain/commands/get_contributor_trend";
 import { GetRepositoryTimeSeries } from "./domain/commands/get_repository_time_series";
+import { GetRepositoryTrend } from "./domain/commands/get_repository_trend";
 import { DiscoverRepositories } from "./domain/commands/discover_repositories";
 import { IngestRepositoryHistory } from "./domain/commands/ingest_repository_history";
 import { LinkIdentity } from "./domain/commands/link_identity";
 import { ListContributorSummaries } from "./domain/commands/list_contributor_summaries";
 import { ListIdentities } from "./domain/commands/list_identities";
+import { ListOwnedRepositories } from "./domain/commands/list_owned_repositories";
 import { ListRepositorySummaries } from "./domain/commands/list_repository_summaries";
 import { ReconcileIdentities } from "./domain/commands/reconcile_identities";
+import { ResetIngestion } from "./domain/commands/reset_ingestion";
 import {
   integrationCapabilitiesOf,
   isAtlassianConfigured,
   isWakaTimeConfigured,
 } from "./domain/entities/ingestion_settings";
+import { codeHealthPermissions } from "./domain/entities/permissions";
 import type { VcsCollector } from "./domain/services/vcs_collector";
 import { createCodeHealthRouter } from "./infrastructure/controllers/code_health_router";
 import { ProviderGateway } from "./infrastructure/http/provider_gateway";
@@ -61,7 +67,10 @@ export const codeHealthPlugin = createBackendPlugin({
         httpAuth: coreServices.httpAuth,
         httpRouter: coreServices.httpRouter,
         logger: coreServices.logger,
+        permissions: coreServices.permissions,
+        permissionsRegistry: coreServices.permissionsRegistry,
         scheduler: coreServices.scheduler,
+        userInfo: coreServices.userInfo,
       },
       async init({
         auth,
@@ -72,9 +81,12 @@ export const codeHealthPlugin = createBackendPlugin({
         httpAuth,
         httpRouter,
         logger,
+        permissions,
+        permissionsRegistry,
         scheduler,
+        userInfo,
       }) {
-        const settings = readCodeHealthSettings(config);
+        const settings = readCodeHealthSettings(config, logger);
         const store = await KnexCodeHealthStore.create({ database });
         const integrations = ScmIntegrations.fromConfig(config);
         // Shared by discovery, which reads the tracked entities, by identity
@@ -86,21 +98,46 @@ export const codeHealthPlugin = createBackendPlugin({
         // an ingestion cursor.
         const identityObserver = new StoreIdentityObserver(store);
 
+        // Registered so a host's permission policy, or the RBAC plugin, can
+        // refuse the reset by name. That is the narrowing half of the decision;
+        // `codeHealth.administrators` is the half that makes it restrictive at
+        // all, because a stock Backstage policy allows everything.
+        permissionsRegistry.addPermissions(codeHealthPermissions);
+
+        // Shared by the repositories table and by the ownership route, which
+        // filters the same rows rather than computing a second set that could
+        // disagree with the first.
+        const repositories = new ListRepositorySummaries(store);
+
         httpRouter.use(
           createCodeHealthRouter({
             store,
             httpAuth,
             scheduler,
-            repositories: new ListRepositorySummaries(store),
+            repositories,
             contributors: new ListContributorSummaries({
               store,
               directory: catalogReader,
             }),
             timeSeries: new GetRepositoryTimeSeries(store),
+            contributorTrend: new GetContributorTrend({ store, directory: catalogReader }),
+            repositoryTrend: new GetRepositoryTrend(store),
+            owned: new ListOwnedRepositories(repositories, catalogReader),
             identities: new ListIdentities(store, catalogReader),
             links: new LinkIdentity(store, catalogReader),
+            access: new AuthorizeAdministrator({
+              userInfo,
+              permissions,
+              administrators: settings.administrators,
+            }),
+            reset: new ResetIngestion({
+              store,
+              logger: logger.child({ component: "ingestion-reset" }),
+            }),
+            retentionDays: settings.ingestion.retentionDays,
             capabilities: integrationCapabilitiesOf(settings),
             refreshableTaskIds: [DISCOVERY_TASK_ID, INGESTION_TASK_ID, SNAPSHOT_TASK_ID],
+            ingestionTaskId: INGESTION_TASK_ID,
           }),
         );
         // The frontend probes this before it renders anything, and a probe that

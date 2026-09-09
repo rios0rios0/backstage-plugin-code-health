@@ -15,6 +15,7 @@ export class EntityBuilder {
   private kind = "Component";
   private namespace = "default";
   private type: string | undefined = "service";
+  private owner: string | undefined = "team-a";
   private providesApis: string[] = [];
   private links: { url: string; title?: string; type?: string }[] = [];
 
@@ -75,6 +76,12 @@ export class EntityBuilder {
     return this;
   }
 
+  /** `undefined` builds an entity that declares no owner at all. */
+  withOwner(owner: string | undefined): EntityBuilder {
+    this.owner = owner;
+    return this;
+  }
+
   withProvidesApis(...apis: string[]): EntityBuilder {
     this.providesApis = apis;
     return this;
@@ -98,7 +105,7 @@ export class EntityBuilder {
         ...(this.links.length > 0 ? { links: this.links } : {}),
       },
       spec: {
-        owner: "team-a",
+        ...(this.owner === undefined ? {} : { owner: this.owner }),
         ...(this.type === undefined ? {} : { type: this.type }),
         ...(this.providesApis.length > 0 ? { providesApis: this.providesApis } : {}),
       },

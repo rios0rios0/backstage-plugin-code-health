@@ -1,0 +1,155 @@
+import { NotFoundError } from "@backstage/errors";
+import type {
+  RepositoryHealthScore,
+  RepositorySummary,
+  RepositoryTrendPoint,
+  TimeSeriesBucket,
+  WakaTimeMetrics,
+} from "@rios0rios0/backstage-plugin-code-health-common";
+import { computeRepositoryHealthScore } from "@rios0rios0/backstage-plugin-code-health-common";
+import { bucketEnd, bucketsInWindow } from "../entities/bucket";
+import type { CodeHealthEvent } from "../entities/code_health_event";
+import { startOfDay, toDay, type Day } from "../entities/day";
+import type {
+  RepositorySnapshot,
+  RepositorySnapshotPayload,
+} from "../entities/repository_snapshot";
+import {
+  aggregateWakaTimeProjects,
+  buildRepositorySummary,
+  unsnapshotted,
+} from "../entities/repository_summary_builder";
+import type {
+  CodeHealthStore,
+  ContributorMetricRow,
+} from "../repositories/code_health_store";
+
+export interface RepositoryTrend {
+  readonly summary: RepositorySummary;
+  readonly score: RepositoryHealthScore;
+  readonly points: readonly RepositoryTrendPoint[];
+}
+
+/**
+ * The snapshot this repository carried on each day of the window.
+ *
+ * A day with no snapshot inherits the most recent one before it — the baseline
+ * where that is older than the window, and nothing at all before the first
+ * snapshot ever taken. Sonar, compliance and badge history cannot be
+ * backfilled, so the series genuinely begins at installation, and filling
+ * forward is what keeps the days after it from blinking out whenever the
+ * snapshot task missed a run.
+ */
+const snapshotTimeline = (
+  baseline: RepositorySnapshot | undefined,
+  range: readonly RepositorySnapshot[],
+): ((day: Day) => RepositorySnapshotPayload | null) => {
+  const ascending = [...range].sort((left, right) => left.day.localeCompare(right.day));
+
+  return (day) => {
+    let latest = baseline?.payload ?? null;
+    for (const snapshot of ascending) {
+      if (snapshot.day > day) break;
+      latest = snapshot.payload;
+    }
+    return latest;
+  };
+};
+
+/**
+ * The events of one bucket.
+ *
+ * Compared as instants rather than as day strings, because an event carries a
+ * timestamp and the last day of a bucket runs to the following midnight.
+ */
+const eventsWithin = (
+  events: readonly CodeHealthEvent[],
+  from: Day,
+  to: Day,
+): CodeHealthEvent[] => {
+  const start = startOfDay(from).getTime();
+  const end = startOfDay(to).getTime() + 24 * 60 * 60 * 1000;
+  return events.filter((event) => {
+    const at = event.occurredAt.getTime();
+    return at >= start && at < end;
+  });
+};
+
+/** The per-day WakaTime rows of one bucket, both ends included. */
+const rowsWithin = (
+  rows: readonly ContributorMetricRow<WakaTimeMetrics>[],
+  from: Day,
+  to: Day,
+): ContributorMetricRow<WakaTimeMetrics>[] =>
+  rows.filter((row) => row.day >= from && row.day <= to);
+
+export class GetRepositoryTrend {
+  constructor(private readonly store: CodeHealthStore) {}
+
+  /**
+   * One repository's history, bucketed, beside the row the table shows.
+   *
+   * Each point is the bucket's own events against the state the repository was
+   * in at the end of that bucket, so a health score moves when the quality gate
+   * or the compliance checks moved rather than when the chart was drawn. The
+   * whole-window row on top is built the same way with the window's own end,
+   * which is what makes the headline and the last point agree.
+   */
+  async run(input: {
+    repositoryId: string;
+    from: Date;
+    to: Date;
+    bucket: TimeSeriesBucket;
+  }): Promise<RepositoryTrend> {
+    const from = toDay(input.from);
+    const to = toDay(input.to);
+    const repositoryIds = [input.repositoryId];
+
+    const [tracked, events, wakaTimeRows, [baseline], rangeSnapshots] = await Promise.all([
+      this.store.getTrackedRepository(input.repositoryId),
+      this.store.listEvents({ from: input.from, to: input.to, repositoryIds }),
+      this.store.listContributorMetrics<WakaTimeMetrics>({
+        source: "wakatime",
+        from,
+        to,
+      }),
+      this.store.listLatestSnapshots({ day: from, repositoryIds }),
+      this.store.listSnapshots({ from, to, repositoryIds }),
+    ]);
+
+    // The router has already answered 404 for an untracked id; this covers the
+    // repository that left the catalog between the two reads, and answers the
+    // same way rather than building a row out of nothing.
+    if (tracked === undefined) {
+      throw new NotFoundError(`no repository with id ${input.repositoryId}`);
+    }
+    const repository = tracked.repository;
+    const snapshotAt = snapshotTimeline(baseline, rangeSnapshots);
+
+    const rowFor = (
+      day: Day,
+      bucketEvents: readonly CodeHealthEvent[],
+      window: { from: Day; to: Day },
+    ): RepositorySummary =>
+      buildRepositorySummary(
+        repository,
+        // Null before the first snapshot was ever taken, which is a real state
+        // for a repository discovered this morning: it has counters hours
+        // before it has anything to grade.
+        snapshotAt(day) ?? unsnapshotted(repository),
+        bucketEvents,
+        aggregateWakaTimeProjects(rowsWithin(wakaTimeRows, window.from, window.to)),
+        window,
+      );
+
+    const summary = rowFor(to, events, { from, to });
+
+    const points = bucketsInWindow(input.from, input.to, input.bucket).map((start) => {
+      const last = bucketEnd(start, input.bucket, to);
+      const row = rowFor(last, eventsWithin(events, start, last), { from: start, to: last });
+      return { day: start, summary: row, score: computeRepositoryHealthScore(row) };
+    });
+
+    return { summary, score: computeRepositoryHealthScore(summary), points };
+  }
+}

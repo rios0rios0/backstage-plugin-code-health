@@ -55,6 +55,11 @@ export class DiscoveredRepositoryBuilder {
     return this;
   }
 
+  /** The catalog owner, already normalised the way discovery stores it. */
+  withOwner(ownerRef: string | null): DiscoveredRepositoryBuilder {
+    return this.withCatalogFacts({ ownerRef });
+  }
+
   withSonarProjectKey(sonarProjectKey: string): DiscoveredRepositoryBuilder {
     this.props = { ...this.props, sonarProjectKey };
     return this;

@@ -28,4 +28,20 @@ export interface CatalogReader {
    * every dashboard load.
    */
   findUsersByEmail(emails: readonly string[]): Promise<Map<string, CatalogUser>>;
+
+  /**
+   * Every entity reference a catalog user owns repositories *as*: their own
+   * `User`, the groups they are a member of, and the parents of those groups.
+   *
+   * This is the same expansion Backstage's own identity performs to decide what
+   * somebody owns, and matching it is the point — a repository whose
+   * `spec.owner` names a parent group belongs to everyone underneath it, and a
+   * plugin that compared only the user's direct memberships would tell a team
+   * lead they own nothing while the catalog page says they own forty things.
+   *
+   * A reference the catalog does not hold yields an empty list rather than an
+   * error: a link outlives the person it names, and a stale one is a row that
+   * owns nothing, not a broken request.
+   */
+  listOwnershipRefs(userEntityRef: string): Promise<string[]>;
 }

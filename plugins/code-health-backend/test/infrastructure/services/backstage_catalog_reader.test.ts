@@ -1,7 +1,10 @@
 import type { AuthService } from "@backstage/backend-plugin-api";
 import type { Entity } from "@backstage/catalog-model";
 import type { CatalogService } from "@backstage/plugin-catalog-node";
-import { BackstageCatalogReader } from "../../../src/infrastructure/services/backstage_catalog_reader";
+import {
+  BackstageCatalogReader,
+  MAX_OWNERSHIP_DEPTH,
+} from "../../../src/infrastructure/services/backstage_catalog_reader";
 
 interface RecordedQuery {
   readonly filter: unknown;
@@ -19,8 +22,24 @@ interface RecordedQuery {
 class StubCatalogService {
   readonly queries: RecordedQuery[] = [];
   readonly refQueries: Array<readonly string[]> = [];
+  readonly refFields: Array<readonly string[] | undefined> = [];
+  readonly singleRefQueries: string[] = [];
 
   constructor(private readonly entities: Entity[] = []) {}
+
+  async getEntityByRef(entityRef: string): Promise<Entity | undefined> {
+    this.singleRefQueries.push(entityRef);
+    return this.byRef(entityRef);
+  }
+
+  private byRef(entityRef: string): Entity | undefined {
+    return this.entities.find(
+      (entity) =>
+        `${entity.kind.toLowerCase()}:${entity.metadata.namespace ?? "default"}/${
+          entity.metadata.name
+        }` === entityRef,
+    );
+  }
 
   async getEntities(request: {
     filter?: unknown;
@@ -36,17 +55,11 @@ class StubCatalogService {
     fields?: readonly string[];
   }): Promise<{ items: Array<Entity | undefined> }> {
     this.refQueries.push(request.entityRefs);
+    this.refFields.push(request.fields);
     // Positional, and undefined for a reference the catalog does not hold —
     // which is what the real client does, and the normal case for somebody who
     // has left the organisation since the link was made.
-    return {
-      items: request.entityRefs.map((ref) =>
-        this.entities.find(
-          (entity) =>
-            `user:${entity.metadata.namespace ?? "default"}/${entity.metadata.name}` === ref,
-        ),
-      ),
-    };
+    return { items: request.entityRefs.map((ref) => this.byRef(ref)) };
   }
 
   asCatalogService(): CatalogService {
@@ -357,5 +370,254 @@ describe("BackstageCatalogReader.getUsersByRef", () => {
 
     // then
     expect(users.size).toBe(0);
+  });
+});
+
+/** A `User` or `Group` with the relations the ownership walk follows. */
+const withRelations = (
+  kind: string,
+  name: string,
+  relations: Array<{ type: string; targetRef: string }>,
+): Entity =>
+  ({
+    apiVersion: "backstage.io/v1alpha1",
+    kind,
+    metadata: { name, namespace: "default" },
+    spec: {},
+    relations,
+  }) as Entity;
+
+describe("BackstageCatalogReader.listOwnershipRefs", () => {
+  it("should always include the user's own reference", async () => {
+    // given
+    // A repository owned by a person directly, rather than by their team, is
+    // theirs — and `spec.owner: user:default/jane` is a shape the catalog
+    // accepts.
+    const catalog = new StubCatalogService([withRelations("User", "jane", [])]);
+
+    // when
+    const owned = await readerFor(catalog).listOwnershipRefs("user:default/jane");
+
+    // then
+    expect(owned).toEqual(["user:default/jane"]);
+  });
+
+  it("should include every group the user is a member of", async () => {
+    // given
+    const catalog = new StubCatalogService([
+      withRelations("User", "jane", [
+        { type: "memberOf", targetRef: "group:default/platform" },
+        { type: "memberOf", targetRef: "group:default/payments" },
+      ]),
+      withRelations("Group", "platform", []),
+      withRelations("Group", "payments", []),
+    ]);
+
+    // when
+    const owned = await readerFor(catalog).listOwnershipRefs("user:default/jane");
+
+    // then
+    expect(owned).toEqual([
+      "user:default/jane",
+      "group:default/platform",
+      "group:default/payments",
+    ]);
+  });
+
+  it("should walk up through the parents of those groups", async () => {
+    // given
+    // A repository whose `spec.owner` names a department belongs to everybody
+    // underneath it, which is how the catalog's own ownership page reads it.
+    const catalog = new StubCatalogService([
+      withRelations("User", "jane", [
+        { type: "memberOf", targetRef: "group:default/platform" },
+      ]),
+      withRelations("Group", "platform", [
+        { type: "childOf", targetRef: "group:default/engineering" },
+      ]),
+      withRelations("Group", "engineering", [
+        { type: "childOf", targetRef: "group:default/acme" },
+      ]),
+      withRelations("Group", "acme", []),
+    ]);
+
+    // when
+    const owned = await readerFor(catalog).listOwnershipRefs("user:default/jane");
+
+    // then
+    expect(owned).toEqual([
+      "user:default/jane",
+      "group:default/platform",
+      "group:default/engineering",
+      "group:default/acme",
+    ]);
+  });
+
+  it("should ask for the whole level at once rather than group by group", async () => {
+    // given
+    // A person in eight teams under three departments is two round trips, not
+    // eleven.
+    const catalog = new StubCatalogService([
+      withRelations("User", "jane", [
+        { type: "memberOf", targetRef: "group:default/platform" },
+        { type: "memberOf", targetRef: "group:default/payments" },
+      ]),
+      withRelations("Group", "platform", []),
+      withRelations("Group", "payments", []),
+    ]);
+
+    // when
+    await readerFor(catalog).listOwnershipRefs("user:default/jane");
+
+    // then
+    expect(catalog.refQueries).toEqual([
+      ["group:default/platform", "group:default/payments"],
+    ]);
+  });
+
+  it("should ask only for the fields the walk reads", async () => {
+    // given
+    const catalog = new StubCatalogService([
+      withRelations("User", "jane", [
+        { type: "memberOf", targetRef: "group:default/platform" },
+      ]),
+      withRelations("Group", "platform", []),
+    ]);
+
+    // when
+    await readerFor(catalog).listOwnershipRefs("user:default/jane");
+
+    // then
+    expect(catalog.refFields[0]).toEqual([
+      "kind",
+      "metadata.name",
+      "metadata.namespace",
+      "relations",
+    ]);
+  });
+
+  it("should survive a group tree somebody drew as a cycle", async () => {
+    // given
+    // Nothing in the catalog forbids one, and a walk without the guard would
+    // never return.
+    const catalog = new StubCatalogService([
+      withRelations("User", "jane", [
+        { type: "memberOf", targetRef: "group:default/platform" },
+      ]),
+      withRelations("Group", "platform", [
+        { type: "childOf", targetRef: "group:default/engineering" },
+      ]),
+      withRelations("Group", "engineering", [
+        { type: "childOf", targetRef: "group:default/platform" },
+      ]),
+    ]);
+
+    // when
+    const owned = await readerFor(catalog).listOwnershipRefs("user:default/jane");
+
+    // then
+    expect(owned).toEqual([
+      "user:default/jane",
+      "group:default/platform",
+      "group:default/engineering",
+    ]);
+  });
+
+  it("should stop at the depth bound on a tree deeper than it", async () => {
+    // given
+    // A ceiling rather than a promise: the cycle guard already handles a loop,
+    // so this only bounds a chart that is genuinely this deep.
+    const depth = MAX_OWNERSHIP_DEPTH + 3;
+    const catalog = new StubCatalogService([
+      withRelations("User", "jane", [{ type: "memberOf", targetRef: "group:default/g0" }]),
+      ...Array.from({ length: depth }, (_unused, index) =>
+        withRelations("Group", `g${index}`, [
+          { type: "childOf", targetRef: `group:default/g${index + 1}` },
+        ]),
+      ),
+    ]);
+
+    // when
+    const owned = await readerFor(catalog).listOwnershipRefs("user:default/jane");
+
+    // then
+    expect(owned).toHaveLength(1 + MAX_OWNERSHIP_DEPTH);
+  });
+
+  it("should own nothing for a user the catalog no longer holds", async () => {
+    // given
+    // A link outlives the person it names; a stale one is a row that owns
+    // nothing, not a failed request.
+    const catalog = new StubCatalogService([]);
+
+    // when
+    const owned = await readerFor(catalog).listOwnershipRefs("user:default/departed");
+
+    // then
+    expect(owned).toEqual([]);
+    expect(catalog.refQueries).toEqual([]);
+  });
+
+  it("should own only itself for a user the catalog reports no relations for", async () => {
+    // given
+    // `relations` is absent rather than empty on an entity the catalog has not
+    // finished stitching, and on one registered by hand.
+    const catalog = new StubCatalogService([
+      {
+        apiVersion: "backstage.io/v1alpha1",
+        kind: "User",
+        metadata: { name: "jane", namespace: "default" },
+        spec: {},
+      } as Entity,
+    ]);
+
+    // when
+    const owned = await readerFor(catalog).listOwnershipRefs("user:default/jane");
+
+    // then
+    expect(owned).toEqual(["user:default/jane"]);
+  });
+
+  it("should skip a parent the catalog no longer holds", async () => {
+    // given
+    // A `childOf` relation outlives the group it points at, and a walk that
+    // dereferenced it would fail the whole ownership lookup over one stale edge.
+    const catalog = new StubCatalogService([
+      withRelations("User", "jane", [
+        { type: "memberOf", targetRef: "group:default/platform" },
+      ]),
+      withRelations("Group", "platform", [
+        { type: "childOf", targetRef: "group:default/disbanded" },
+      ]),
+    ]);
+
+    // when
+    const owned = await readerFor(catalog).listOwnershipRefs("user:default/jane");
+
+    // then
+    expect(owned).toEqual([
+      "user:default/jane",
+      "group:default/platform",
+      "group:default/disbanded",
+    ]);
+  });
+
+  it("should ignore relations that are not memberships or parents", async () => {
+    // given
+    const catalog = new StubCatalogService([
+      withRelations("User", "jane", [
+        { type: "memberOf", targetRef: "group:default/platform" },
+        { type: "ownerOf", targetRef: "component:default/gateway" },
+      ]),
+      withRelations("Group", "platform", [
+        { type: "hasMember", targetRef: "user:default/jane" },
+      ]),
+    ]);
+
+    // when
+    const owned = await readerFor(catalog).listOwnershipRefs("user:default/jane");
+
+    // then
+    expect(owned).toEqual(["user:default/jane", "group:default/platform"]);
   });
 });

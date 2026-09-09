@@ -1,6 +1,7 @@
 import { mockServices, TestDatabases } from "@backstage/backend-test-utils";
 import type { CodeHealthEvent } from "../../../src/domain/entities/code_health_event";
 import type { Day } from "../../../src/domain/entities/day";
+import type { RepositorySnapshotPayload } from "../../../src/domain/entities/repository_snapshot";
 import type { ObservedIdentity } from "../../../src/domain/services/identity_resolver";
 import { KnexCodeHealthStore } from "../../../src/infrastructure/repositories/knex_code_health_store";
 import { DiscoveredRepositoryBuilder } from "../../builders/discovered_repository_builder";
@@ -20,6 +21,29 @@ const createStore = async () => {
   const store = await KnexCodeHealthStore.create({ database: mockServices.database({ knex }) });
   return Object.assign(store, { knex });
 };
+
+const aSnapshotPayload = (
+  overrides: Partial<RepositorySnapshotPayload> = {},
+): RepositorySnapshotPayload => ({
+  description: null,
+  primaryLanguage: "Go",
+  visibility: "PUBLIC",
+  isArchived: false,
+  isFork: false,
+  defaultBranch: "main",
+  updatedAt: NOW.toISOString(),
+  ciStatus: null,
+  latestRelease: null,
+  latestTag: null,
+  branches: ["main"],
+  complianceStatus: null,
+  badgeStatus: null,
+  sonarMetrics: null,
+  jiraMetrics: null,
+  confluenceMetrics: null,
+  repositoryFiles: null,
+  ...overrides,
+});
 
 const anEvent = (overrides: Partial<CodeHealthEvent> = {}): CodeHealthEvent => ({
   repositoryId: "unset",
@@ -66,6 +90,7 @@ describe("KnexCodeHealthStore", () => {
         .withCatalogFacts({
           entityKind: "Component",
           entityType: "service",
+          ownerRef: "group:default/platform",
           techDocsRef: "dir:.",
           providesApis: 2,
           hasExternalDocs: true,
@@ -84,6 +109,7 @@ describe("KnexCodeHealthStore", () => {
       expect(tracked.repository.catalogFacts).toEqual({
         entityKind: "Component",
         entityType: "service",
+        ownerRef: "group:default/platform",
         techDocsRef: "dir:.",
         providesApis: 2,
         hasExternalDocs: true,
@@ -92,6 +118,53 @@ describe("KnexCodeHealthStore", () => {
         confluenceSpaceKey: null,
         wakaTimeProject: null,
       });
+    });
+
+    it("should refresh the owner when the entity is handed to another team", async () => {
+      // given
+      // Ownership moves, and it moves in a YAML file rather than in the
+      // provider — so a rediscovery has to pick the edit up rather than keep
+      // reporting the team that used to be responsible.
+      const store = await createStore();
+      const before = DiscoveredRepositoryBuilder.create()
+        .withOwner("group:default/platform")
+        .build();
+      await store.syncRepositories({ discovered: [before], retentionDays: 365, now: NOW });
+
+      // when
+      await store.syncRepositories({
+        discovered: [
+          DiscoveredRepositoryBuilder.create()
+            .withEntityRef(before.entityRef)
+            .withOwner("group:default/payments")
+            .build(),
+        ],
+        retentionDays: 365,
+        now: NOW,
+      });
+
+      // then
+      const [tracked] = await store.listTrackedRepositories();
+      expect(tracked.repository.catalogFacts.ownerRef).toBe("group:default/payments");
+    });
+
+    it("should store no owner for an entity that declares none", async () => {
+      // given
+      // Null rather than an empty string, because "nobody is named" is a real
+      // answer the ownership screen has to be able to give.
+      const store = await createStore();
+      const repository = DiscoveredRepositoryBuilder.create().build();
+
+      // when
+      await store.syncRepositories({
+        discovered: [repository],
+        retentionDays: 365,
+        now: NOW,
+      });
+
+      // then
+      const [tracked] = await store.listTrackedRepositories();
+      expect(tracked.repository.catalogFacts.ownerRef).toBeNull();
     });
 
     it("should refresh the catalog facts when the entity changes", async () => {
@@ -627,6 +700,199 @@ describe("KnexCodeHealthStore", () => {
       const snapshots = await store.listLatestSnapshots({ day: "2026-08-10" });
       expect(snapshots).toHaveLength(1);
       expect(snapshots[0].payload.primaryLanguage).toBe("Rust");
+    });
+  });
+
+  describe("listSnapshots", () => {
+    it("should return every snapshot in the range, ascending by day", async () => {
+      // given
+      // The trend routes read the state a repository was in at the end of each
+      // bucket. One range read answers every bucket; asking `listLatestSnapshots`
+      // per bucket would be one query per point on the chart.
+      const store = await createStore();
+      const repository = DiscoveredRepositoryBuilder.create().build();
+      await store.syncRepositories({ discovered: [repository], retentionDays: 365, now: NOW });
+      for (const day of ["2026-08-11", "2026-08-08", "2026-08-09"]) {
+        await store.saveSnapshot({
+          repositoryId: repository.id,
+          day,
+          capturedAt: NOW,
+          payload: aSnapshotPayload({ primaryLanguage: day }),
+        });
+      }
+
+      // when
+      const snapshots = await store.listSnapshots({ from: "2026-08-08", to: "2026-08-10" });
+
+      // then
+      expect(snapshots.map((snapshot) => snapshot.day)).toEqual([
+        "2026-08-08",
+        "2026-08-09",
+      ]);
+      expect(snapshots[0].payload.primaryLanguage).toBe("2026-08-08");
+    });
+
+    it("should restrict the result to the requested repositories", async () => {
+      // given
+      const store = await createStore();
+      const first = DiscoveredRepositoryBuilder.create()
+        .withEntityRef("component:default/ranged-first")
+        .build();
+      const second = DiscoveredRepositoryBuilder.create()
+        .withEntityRef("component:default/ranged-second")
+        .build();
+      await store.syncRepositories({
+        discovered: [first, second],
+        retentionDays: 365,
+        now: NOW,
+      });
+      for (const repository of [first, second]) {
+        await store.saveSnapshot({
+          repositoryId: repository.id,
+          day: "2026-08-09",
+          capturedAt: NOW,
+          payload: aSnapshotPayload(),
+        });
+      }
+
+      // when
+      const snapshots = await store.listSnapshots({
+        from: "2026-08-08",
+        to: "2026-08-10",
+        repositoryIds: [second.id],
+      });
+
+      // then
+      expect(snapshots.map((snapshot) => snapshot.repositoryId)).toEqual([second.id]);
+    });
+  });
+
+  describe("resetIngestion", () => {
+    const seedRepositoryWithHistory = async (
+      store: Awaited<ReturnType<typeof createStore>>,
+      entityRef: string,
+    ) => {
+      const repository = DiscoveredRepositoryBuilder.create()
+        .withEntityRef(entityRef)
+        .build();
+      await store.syncRepositories({ discovered: [repository], retentionDays: 365, now: NOW });
+      await store.commitIngestion({
+        repositoryId: repository.id,
+        events: [
+          anEvent({ repositoryId: repository.id, externalId: `${entityRef}-commit` }),
+          anEvent({
+            repositoryId: repository.id,
+            kind: "release",
+            externalId: `${entityRef}-release`,
+          }),
+        ],
+        chunk: {
+          repositoryId: repository.id,
+          kinds: ["commit"],
+          days: ["2026-08-10"],
+          ingestedAt: NOW,
+        },
+        backfillCursor: "2026-05-01",
+        status: "active",
+        now: NOW,
+      });
+      await store.saveSnapshot({
+        repositoryId: repository.id,
+        day: "2026-08-10",
+        capturedAt: NOW,
+        payload: aSnapshotPayload(),
+      });
+      return repository;
+    };
+
+    it("should drop what the walk re-collects and keep what it does not", async () => {
+      // given
+      const store = await createStore();
+      const repository = await seedRepositoryWithHistory(store, "component:default/reset-me");
+
+      // when
+      await store.resetIngestion({ days: 30, now: NOW });
+
+      // then
+      // Releases and tags come from the daily snapshot rather than the walk, so
+      // deleting them would lose history nothing would ever put back.
+      const events = await store.listEvents({
+        from: new Date("2026-08-01T00:00:00.000Z"),
+        to: new Date("2026-08-11T00:00:00.000Z"),
+      });
+      expect(events.map((event) => event.kind)).toEqual(["release"]);
+      expect(
+        await store.listLatestSnapshots({ day: "2026-08-10", repositoryIds: [repository.id] }),
+      ).toHaveLength(1);
+    });
+
+    it("should send the cursors back to the requested reach", async () => {
+      // given
+      // The floor is the administrator's choice rather than the retention
+      // setting: re-reading a year is a day of rate-limited requests, and
+      // somebody who wants last month should not pay for the other eleven.
+      const store = await createStore();
+      await seedRepositoryWithHistory(store, "component:default/reset-cursors");
+
+      // when
+      const result = await store.resetIngestion({ days: 30, now: NOW });
+
+      // then
+      expect(result.repositories).toBe(1);
+      const [tracked] = await store.listTrackedRepositories();
+      expect(tracked.state.backfillFloor).toBe("2026-07-11");
+      expect(tracked.state.backfillCursor).toBe("2026-08-10");
+      expect(tracked.state.status).toBe("pending");
+      expect(tracked.state.failureCount).toBe(0);
+      expect(tracked.state.lastError).toBeNull();
+    });
+
+    it("should forget the days it claimed as fetched", async () => {
+      // given
+      // A cursor sent back with the chunks left behind would report a repository
+      // as having covered days whose rows are gone.
+      const store = await createStore();
+      await seedRepositoryWithHistory(store, "component:default/reset-chunks");
+
+      // when
+      await store.resetIngestion({ days: 30, now: NOW });
+
+      // then
+      const coverage = await store.getCoverage();
+      expect(coverage.earliestDay).toBeNull();
+      expect(coverage.latestDay).toBeNull();
+    });
+
+    it("should leave a repository that has left the catalog alone", async () => {
+      // given
+      // It is never ingested again, so its history — wrong as it may be — is
+      // kept rather than deleted with nothing to replace it.
+      const store = await createStore();
+      const removed = await seedRepositoryWithHistory(store, "component:default/departed");
+      await store.syncRepositories({ discovered: [], retentionDays: 365, now: NOW });
+
+      // when
+      const result = await store.resetIngestion({ days: 30, now: NOW });
+
+      // then
+      expect(result.repositories).toBe(0);
+      const events = await store.listEvents({
+        from: new Date("2026-08-01T00:00:00.000Z"),
+        to: new Date("2026-08-11T00:00:00.000Z"),
+        repositoryIds: [removed.id],
+      });
+      expect(events).toHaveLength(2);
+    });
+
+    it("should do nothing at all when nothing is tracked", async () => {
+      // given
+      const store = await createStore();
+
+      // when
+      const result = await store.resetIngestion({ days: 30, now: NOW });
+
+      // then
+      expect(result.repositories).toBe(0);
     });
   });
 

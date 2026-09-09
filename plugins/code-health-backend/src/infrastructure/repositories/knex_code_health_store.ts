@@ -65,6 +65,7 @@ interface RepositoryRow {
   sonar_project_key: string | null;
   entity_kind: string | null;
   entity_type: string | null;
+  owner_ref: string | null;
   techdocs_ref: string | null;
   provides_apis: number | null;
   has_external_docs: boolean | number | null;
@@ -175,6 +176,7 @@ const toRepository = (row: RepositoryRow): TrackedRepository => ({
     // the same "nothing known" value a fresh entity without the field would get.
     entityKind: row.entity_kind ?? EMPTY_CATALOG_FACTS.entityKind,
     entityType: row.entity_type,
+    ownerRef: row.owner_ref ?? null,
     techDocsRef: row.techdocs_ref,
     providesApis: row.provides_apis ?? 0,
     hasExternalDocs: Boolean(row.has_external_docs),
@@ -303,6 +305,7 @@ export class KnexCodeHealthStore implements CodeHealthStore {
           sonar_project_key: repository.sonarProjectKey,
           entity_kind: repository.catalogFacts.entityKind,
           entity_type: repository.catalogFacts.entityType,
+          owner_ref: repository.catalogFacts.ownerRef,
           techdocs_ref: repository.catalogFacts.techDocsRef,
           provides_apis: repository.catalogFacts.providesApis,
           has_external_docs: repository.catalogFacts.hasExternalDocs,
@@ -666,6 +669,28 @@ export class KnexCodeHealthStore implements CodeHealthStore {
     }));
   }
 
+  async listSnapshots(options: {
+    from: Day;
+    to: Day;
+    repositoryIds?: readonly string[];
+  }): Promise<RepositorySnapshot[]> {
+    const query = this.client<SnapshotRow>(SNAPSHOTS)
+      .where("day", ">=", options.from)
+      .andWhere("day", "<=", options.to);
+    if (options.repositoryIds) {
+      query.whereIn("repository_id", [...options.repositoryIds]);
+    }
+
+    const rows = await query.orderBy("day", "asc").orderBy("repository_id", "asc");
+
+    return rows.map((row) => ({
+      repositoryId: row.repository_id,
+      day: fromStoredDate(row.day),
+      capturedAt: toDate(row.captured_at),
+      payload: JSON.parse(row.payload) as RepositorySnapshotPayload,
+    }));
+  }
+
   async listEvents(options: {
     from: Date;
     to: Date;
@@ -739,5 +764,47 @@ export class KnexCodeHealthStore implements CodeHealthStore {
       ingestedDays: Math.max(0, expectedDays - pendingDays),
       expectedDays,
     };
+  }
+
+  async resetIngestion(options: {
+    days: number;
+    now: Date;
+  }): Promise<{ repositories: number }> {
+    const today = toDay(options.now);
+
+    return this.client.transaction(async (trx) => {
+      const tracked = await trx<RepositoryRow>(REPOSITORIES)
+        .whereNull("removed_at")
+        .pluck("id");
+      if (tracked.length === 0) return { repositories: 0 };
+
+      // Only what the walk re-collects. Releases and tags come from the daily
+      // snapshot, so deleting them would lose history nothing would put back.
+      await trx(EVENTS)
+        .whereIn("repository_id", tracked)
+        .whereIn("kind", ["commit", "pull_request", "pr_review", "build"])
+        .delete();
+
+      await trx(CHUNKS).whereIn("repository_id", tracked).delete();
+
+      await trx(INGESTION_STATE).whereIn("repository_id", tracked).update({
+        // The floor is the administrator's choice rather than the retention
+        // setting, because it is the whole point of asking: re-reading a year
+        // across two hundred repositories is a day of rate-limited requests,
+        // and somebody who wants last quarter re-read after a fix should not
+        // have to pay for the other three. The store only ever sets a floor on
+        // insert, so the choice sticks until the next reset.
+        backfill_floor: addDays(today, -options.days),
+        backfill_cursor: today,
+        // A day back, as discovery sets it, so the very first run has a window
+        // to fetch and the dashboard can answer for "the last day" immediately.
+        incremental_through: addDaysToDate(options.now, -1),
+        status: "pending",
+        failure_count: 0,
+        last_error: null,
+      });
+
+      return { repositories: tracked.length };
+    });
   }
 }

@@ -1,6 +1,7 @@
 import { mockServices, startTestBackend, TestDatabases } from "@backstage/backend-test-utils";
 import type { Entity } from "@backstage/catalog-model";
 import { catalogServiceMock } from "@backstage/plugin-catalog-node/testUtils";
+import { AuthorizeResult } from "@backstage/plugin-permission-common";
 import request from "supertest";
 import { codeHealthPlugin } from "../src/plugin";
 
@@ -36,6 +37,7 @@ afterEach(async () => {
 const startBackend = async (
   entities: Entity[],
   integrations: Record<string, unknown> = {},
+  extraFeatures: Parameters<typeof startTestBackend>[0]["features"] = [],
 ) => {
   const knex = await databases.init("SQLITE_3");
   const backend = await startTestBackend({
@@ -65,12 +67,21 @@ const startBackend = async (
           },
         },
       }),
+      ...(extraFeatures ?? []),
     ],
   });
 
   started.push(backend);
   return backend;
 };
+
+/**
+ * The reference `mockServices.userInfo` derives from the default mock user, and
+ * the only thing it puts in `ownershipEntityRefs`. Configuring this as an
+ * administrator is what a real install does by naming a person in
+ * `codeHealth.administrators`.
+ */
+const MOCK_USER = "user:default/mock";
 
 /** Polls until `check` passes, so the test does not race the scheduled task. */
 const waitFor = async (check: () => Promise<boolean>): Promise<void> => {
@@ -351,6 +362,59 @@ describe("codeHealthPlugin", () => {
       ]);
     });
 
+    it("should return a fleet-wide time series", async () => {
+      // given
+      // Registered before the per-repository route so the literal path is not
+      // swallowed by `:id`.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .get("/api/code-health/v1/timeseries")
+        .query({ from: "2026-08-01T00:00:00.000Z", to: "2026-08-03T00:00:00.000Z" });
+
+      // then
+      expect(response.status).toBe(200);
+      expect(response.body.points.map((point: { day: string }) => point.day)).toEqual([
+        "2026-08-01",
+        "2026-08-02",
+      ]);
+    });
+
+    it("should honour an explicit bucket", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .get("/api/code-health/v1/timeseries")
+        .query({
+          from: "2026-08-03T00:00:00.000Z",
+          to: "2026-08-10T00:00:00.000Z",
+          bucket: "week",
+        });
+
+      // then
+      expect(response.body.bucket).toBe("week");
+      expect(response.body.points.map((point: { day: string }) => point.day)).toEqual([
+        "2026-08-03",
+      ]);
+    });
+
+    it("should narrow the identities to one source", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .get("/api/code-health/v1/identities")
+        .query({ source: "vcs" });
+
+      // then
+      expect(response.status).toBe(200);
+      expect(response.body.items).toEqual([]);
+    });
+
     it("should reject an unsupported bucket", async () => {
       // given
       const { server } = await startBackend([
@@ -577,6 +641,296 @@ describe("codeHealthPlugin", () => {
 
       // then
       expect(response.status).toBe(403);
+    });
+  });
+
+  describe("trends", () => {
+    it("should answer 404 for a repository it does not track", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server).get(
+        "/api/code-health/v1/repositories/does-not-exist/trend",
+      );
+
+      // then
+      expect(response.status).toBe(404);
+    });
+
+    it("should return a trend for a tracked repository", async () => {
+      // given
+      const { server } = await startBackend([
+        componentWithSlug("pipelines", "rios0rios0/pipelines"),
+      ]);
+      await waitFor(async () => {
+        const response = await request(server).get("/api/code-health/v1/repositories");
+        return response.body.items.length === 1;
+      });
+      const [repository] = (await request(server).get("/api/code-health/v1/repositories")).body
+        .items;
+
+      // when
+      const response = await request(server)
+        .get(`/api/code-health/v1/repositories/${repository.id}/trend`)
+        .query({ from: "2026-08-01T00:00:00.000Z", to: "2026-08-04T00:00:00.000Z" });
+
+      // then
+      expect(response.status).toBe(200);
+      expect(response.body.id).toBe(repository.id);
+      expect(response.body.bucket).toBe("day");
+      expect(response.body.points.map((point: { day: string }) => point.day)).toEqual([
+        "2026-08-01",
+        "2026-08-02",
+        "2026-08-03",
+      ]);
+      expect(response.body.summary.name).toBe("pipelines");
+      expect(response.body.score).toHaveProperty("components");
+    });
+
+    it("should reject an unsupported bucket on a repository trend", async () => {
+      // given
+      const { server } = await startBackend([
+        componentWithSlug("pipelines", "rios0rios0/pipelines"),
+      ]);
+      await waitFor(async () => {
+        const response = await request(server).get("/api/code-health/v1/repositories");
+        return response.body.items.length === 1;
+      });
+      const [repository] = (await request(server).get("/api/code-health/v1/repositories")).body
+        .items;
+
+      // when
+      const response = await request(server)
+        .get(`/api/code-health/v1/repositories/${repository.id}/trend`)
+        .query({ bucket: "hour" });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should answer a contributor trend for a key nothing was recorded under", async () => {
+      // given
+      // A stale link and a quiet month want different words on the screen, so
+      // the points are still returned and the summary says which it is.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .get("/api/code-health/v1/contributors/vcs%3Aghost%40example.com/trend")
+        .query({ from: "2026-08-01T00:00:00.000Z", to: "2026-08-04T00:00:00.000Z" });
+
+      // then
+      expect(response.status).toBe(200);
+      expect(response.body.key).toBe("vcs:ghost@example.com");
+      expect(response.body.summary).toBeNull();
+      expect(response.body.points).toHaveLength(3);
+    });
+
+    it("should round-trip a linked key carrying a slash", async () => {
+      // given
+      // A linked person's key is an entity reference, so it carries both a
+      // colon and a slash and arrives percent-encoded.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server).get(
+        "/api/code-health/v1/contributors/user%3Adefault%2Fjane/trend",
+      );
+
+      // then
+      expect(response.status).toBe(200);
+      expect(response.body.key).toBe("user:default/jane");
+    });
+
+    it("should reject an unsupported bucket on a contributor trend", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server)
+        .get("/api/code-health/v1/contributors/user%3Adefault%2Fjane/trend")
+        .query({ bucket: "hour" });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+  });
+
+  describe("ownership", () => {
+    it("should list the repositories a person's group owns", async () => {
+      // given
+      const { server } = await startBackend([
+        componentWithSlug("pipelines", "rios0rios0/pipelines"),
+      ]);
+      await waitFor(async () => {
+        const response = await request(server).get("/api/code-health/v1/repositories");
+        return response.body.items.length === 1;
+      });
+
+      // when
+      const response = await request(server).get(
+        "/api/code-health/v1/contributors/user%3Adefault%2Fmock/repositories",
+      );
+
+      // then
+      // The catalog mock holds no `User`, so the person owns nothing — which is
+      // the shape the screen has to render, not an error.
+      expect(response.status).toBe(200);
+      expect(response.body.ownership).toEqual({
+        entityRef: "user:default/mock",
+        owners: [],
+      });
+      expect(response.body.items).toEqual([]);
+    });
+
+    it("should own nothing for a row nobody has linked", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server).get(
+        "/api/code-health/v1/contributors/vcs%3Ajane%40acme.com/repositories",
+      );
+
+      // then
+      expect(response.body.ownership).toEqual({ entityRef: null, owners: [] });
+    });
+  });
+
+  describe("administration", () => {
+    it("should report no access and refuse a reset when nobody is configured", async () => {
+      // given
+      // A reset drops every collected commit and re-walks the providers, so an
+      // install that acquires the route by upgrading must not acquire an
+      // administrator with it.
+      const { server } = await startBackend([]);
+
+      // when
+      const access = await request(server).get("/api/code-health/v1/access");
+      const reset = await request(server)
+        .post("/api/code-health/v1/ingestion/reset")
+        .send({ days: 30 });
+
+      // then
+      expect(access.status).toBe(200);
+      expect(access.body).toEqual({ canResetIngestion: false, retentionDays: 365 });
+      expect(reset.status).toBe(403);
+    });
+
+    it("should let a configured administrator reset the ingestion", async () => {
+      // given
+      const { server } = await startBackend(
+        [componentWithSlug("pipelines", "rios0rios0/pipelines")],
+        { administrators: [MOCK_USER] },
+      );
+      await waitFor(async () => {
+        const response = await request(server).get("/api/code-health/v1/coverage");
+        return response.body.backfill.repositories === 1;
+      });
+
+      // when
+      const access = await request(server).get("/api/code-health/v1/access");
+      const reset = await request(server)
+        .post("/api/code-health/v1/ingestion/reset")
+        .send({ days: 30 });
+
+      // then
+      expect(access.body.canResetIngestion).toBe(true);
+      expect(reset.status).toBe(200);
+      expect(reset.body).toMatchObject({ repositories: 1, days: 30 });
+      // Ingestion is on a manual trigger here, so the observable effect is the
+      // cursor: the backfill now reaches thirty days rather than a year, which
+      // is what the administrator asked for.
+      const coverage = await request(server).get("/api/code-health/v1/coverage");
+      expect(coverage.body.backfill.pendingDays).toBeLessThanOrEqual(31);
+    });
+
+    it("should refuse a listed administrator the permission framework denies", async () => {
+      // given
+      // The permission only ever narrows: an installed policy, or the RBAC
+      // plugin, refuses the reset by name even for somebody on the list.
+      const { server } = await startBackend(
+        [],
+        { administrators: [MOCK_USER] },
+        [mockServices.permissions.factory({ result: AuthorizeResult.DENY })],
+      );
+
+      // when
+      const access = await request(server).get("/api/code-health/v1/access");
+      const reset = await request(server)
+        .post("/api/code-health/v1/ingestion/reset")
+        .send({ days: 30 });
+
+      // then
+      expect(access.body.canResetIngestion).toBe(false);
+      expect(reset.status).toBe(403);
+    });
+
+    it("should refuse a service token", async () => {
+      // given
+      // The point of the route is that a person chose to pay for the re-walk,
+      // and a token cannot choose.
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const access = await request(server)
+        .get("/api/code-health/v1/access")
+        .set("Authorization", "Bearer mock-service-token");
+      const reset = await request(server)
+        .post("/api/code-health/v1/ingestion/reset")
+        .set("Authorization", "Bearer mock-service-token")
+        .send({ days: 30 });
+
+      // then
+      expect(access.body.canResetIngestion).toBe(false);
+      expect(reset.status).toBe(403);
+    });
+
+    it("should reject a reach beyond the configured retention", async () => {
+      // given
+      // Reaching further back than the read API will ever answer for spends a
+      // day of provider requests on history no window can ask about.
+      const { server } = await startBackend([], {
+        administrators: [MOCK_USER],
+        ingestion: { retentionDays: 90 },
+      });
+
+      // when
+      const response = await request(server)
+        .post("/api/code-health/v1/ingestion/reset")
+        .send({ days: 400 });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should reject a reach that is not a whole number of days", async () => {
+      // given
+      // The walk is keyed by day, so half a day is not a thing it can be asked
+      // for.
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const response = await request(server)
+        .post("/api/code-health/v1/ingestion/reset")
+        .send({ days: 0.5 });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should reject a reach of nothing at all", async () => {
+      // given
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const response = await request(server)
+        .post("/api/code-health/v1/ingestion/reset")
+        .send({ days: 0 });
+
+      // then
+      expect(response.status).toBe(400);
     });
   });
 });

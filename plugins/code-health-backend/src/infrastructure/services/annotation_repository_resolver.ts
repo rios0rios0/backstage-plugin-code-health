@@ -4,6 +4,7 @@ import {
   type Entity,
 } from "@backstage/catalog-model";
 import type { ScmIntegrationRegistry } from "@backstage/integration";
+import { ownerEntityRef } from "@rios0rios0/backstage-plugin-code-health-common";
 import { createHash } from "node:crypto";
 import type { RepositoryResolver } from "../../domain/services/repository_resolver";
 import type {
@@ -221,12 +222,27 @@ const countProvidedApis = (entity: Entity): number => {
   return Array.isArray(provides) ? provides.length : 0;
 };
 
+/**
+ * Who the catalog says is responsible for the entity.
+ *
+ * `spec.owner` is a reference with its kind and namespace routinely left out —
+ * `team-a` means `group:default/team-a` — so it is normalised here rather than
+ * where it is read. Comparing the raw values instead would leave one group
+ * failing to match itself across two entities that spell it differently, and
+ * the mistake would show up as a team that owns nothing.
+ */
+const ownerRefOf = (entity: Entity): string | null => {
+  const owner = (entity.spec as { owner?: unknown } | undefined)?.owner;
+  return typeof owner === "string" ? ownerEntityRef(owner) : null;
+};
+
 const catalogFactsOf = (entity: Entity): RepositoryCatalogFacts => {
   const type = (entity.spec as { type?: unknown } | undefined)?.type;
 
   return {
     entityKind: entity.kind,
     entityType: typeof type === "string" && type !== "" ? type : null,
+    ownerRef: ownerRefOf(entity),
     techDocsRef: annotation(entity, TECHDOCS_REF_ANNOTATION) ?? null,
     providesApis: countProvidedApis(entity),
     hasExternalDocs: hasExternalDocs(entity),

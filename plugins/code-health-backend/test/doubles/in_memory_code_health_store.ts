@@ -30,6 +30,14 @@ import type { ObservedIdentity } from "../../src/domain/services/identity_resolv
 const chunkKey = (repositoryId: string, kind: EventKind, day: Day) =>
   `${repositoryId}:${kind}:${day}`;
 
+/** The kinds the history walk produces, and so the ones a reset drops. */
+const RE_COLLECTED_KINDS = new Set<EventKind>([
+  "commit",
+  "pull_request",
+  "pr_review",
+  "build",
+]);
+
 /**
  * In-memory implementation of the persistence port.
  *
@@ -330,6 +338,23 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
     return [...latest.values()];
   }
 
+  async listSnapshots(options: {
+    from: Day;
+    to: Day;
+    repositoryIds?: readonly string[];
+  }): Promise<RepositorySnapshot[]> {
+    const allowed = options.repositoryIds ? new Set(options.repositoryIds) : null;
+
+    return [...this.snapshots.values()]
+      .filter((snapshot) => snapshot.day >= options.from && snapshot.day <= options.to)
+      .filter((snapshot) => (allowed ? allowed.has(snapshot.repositoryId) : true))
+      .sort(
+        (left, right) =>
+          left.day.localeCompare(right.day) ||
+          left.repositoryId.localeCompare(right.repositoryId),
+      );
+  }
+
   async listEvents(options: {
     from: Date;
     to: Date;
@@ -382,5 +407,43 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
       ingestedDays: Math.max(0, expectedDays - pendingDays),
       expectedDays,
     };
+  }
+
+  async resetIngestion(options: {
+    days: number;
+    now: Date;
+  }): Promise<{ repositories: number }> {
+    const today = toDay(options.now);
+    const tracked = [...this.repositories.values()].filter(
+      (repository) => repository.removedAt === null,
+    );
+
+    for (const repository of tracked) {
+      for (const [key, event] of this.events) {
+        if (event.repositoryId !== repository.id) continue;
+        // Only what the walk re-collects; releases and tags come from the daily
+        // snapshot, exactly as in the real store.
+        if (!RE_COLLECTED_KINDS.has(event.kind)) continue;
+        this.events.delete(key);
+      }
+
+      for (const key of this.chunks.keys()) {
+        if (key.startsWith(`${repository.id}:`)) this.chunks.delete(key);
+      }
+
+      const state = this.states.get(repository.id);
+      if (!state) continue;
+      this.states.set(repository.id, {
+        ...state,
+        backfillFloor: addDays(today, -options.days),
+        backfillCursor: today,
+        incrementalThrough: new Date(options.now.getTime() - 24 * 60 * 60 * 1000),
+        status: "pending",
+        failureCount: 0,
+        lastError: null,
+      });
+    }
+
+    return { repositories: tracked.length };
   }
 }

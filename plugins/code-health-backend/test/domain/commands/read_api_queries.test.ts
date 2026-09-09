@@ -2,6 +2,10 @@ import { GetRepositoryTimeSeries } from "../../../src/domain/commands/get_reposi
 import { ListContributorSummaries } from "../../../src/domain/commands/list_contributor_summaries";
 import { ListRepositorySummaries } from "../../../src/domain/commands/list_repository_summaries";
 import type { RepositorySnapshotPayload } from "../../../src/domain/entities/repository_snapshot";
+import {
+  aConfluenceContributorMetrics,
+  aJiraContributorMetrics,
+} from "../../builders/atlassian_contributor_metrics_builder";
 import { DiscoveredRepositoryBuilder } from "../../builders/discovered_repository_builder";
 import { EventBuilder } from "../../builders/event_builder";
 import { WakaTimeMetricsBuilder } from "../../builders/wakatime_metrics_builder";
@@ -144,6 +148,146 @@ describe("ListRepositorySummaries", () => {
 
     // then
     expect(summary.primaryLanguage).toBe("Go");
+  });
+
+  it("should sum the coding time its people logged against the matching project", async () => {
+    // given
+    // WakaTime measures a person and a *project*; a repository's coding time is
+    // the sum of what its people logged against the project whose name matches,
+    // which is a question about a window rather than about a snapshot's day.
+    const { store } = await seed();
+    for (const [day, seconds] of [
+      ["2026-08-09", 3600],
+      ["2026-08-10", 1800],
+    ] as const) {
+      await store.saveContributorMetrics({
+        source: "wakatime",
+        day,
+        capturedAt: NOW,
+        metrics: new Map([
+          [
+            "jrios",
+            WakaTimeMetricsBuilder.aDay(day)
+              .withSeconds(seconds)
+              .withProject("Repo_0", seconds)
+              .build(),
+          ],
+        ]),
+      });
+    }
+
+    // when
+    const [summary] = await new ListRepositorySummaries(store).run(WINDOW);
+
+    // then
+    // `Repo_0` and `repo-0` are the same project: WakaTime spells it however
+    // the editor plugin derived it from a working directory, and the catalog
+    // spells it however somebody named the entity.
+    expect(summary.wakaTimeMetrics).toMatchObject({
+      projectName: "Repo_0",
+      totalSeconds: 5400,
+      contributors: 1,
+      daily: [
+        { day: "2026-08-09", totalSeconds: 3600 },
+        { day: "2026-08-10", totalSeconds: 1800 },
+      ],
+    });
+  });
+
+  it("should not count somebody with a seat and a quiet week as a contributor", async () => {
+    // given
+    // A member who logged nothing against the project did not work on it.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.saveContributorMetrics({
+      source: "wakatime",
+      day: "2026-08-09",
+      capturedAt: NOW,
+      metrics: new Map([
+        [
+          "quiet",
+          WakaTimeMetricsBuilder.aDay("2026-08-09").withProject("repo-0", 0).build(),
+        ],
+        [
+          "busy",
+          WakaTimeMetricsBuilder.aDay("2026-08-09")
+            .withSeconds(600)
+            .withProject("repo-0", 600)
+            .build(),
+        ],
+      ]),
+    });
+
+    // when
+    const [summary] = await new ListRepositorySummaries(store).run(WINDOW);
+
+    // then
+    expect(summary.wakaTimeMetrics?.contributors).toBe(1);
+    expect(summary.wakaTimeMetrics?.totalSeconds).toBe(600);
+    expect(repository.name).toBe("repo-0");
+  });
+
+  it("should report no coding time when nothing matched the repository", async () => {
+    // given
+    // Null rather than zero: "nobody here has WakaTime installed" and "the
+    // project is called something else" are different problems, and a zero
+    // would hide both behind the same cell.
+    const { store } = await seed();
+    await store.saveContributorMetrics({
+      source: "wakatime",
+      day: "2026-08-09",
+      capturedAt: NOW,
+      metrics: new Map([
+        [
+          "jrios",
+          WakaTimeMetricsBuilder.aDay("2026-08-09")
+            .withSeconds(3600)
+            .withProject("something-else", 3600)
+            .build(),
+        ],
+      ]),
+    });
+
+    // when
+    const [summary] = await new ListRepositorySummaries(store).run(WINDOW);
+
+    // then
+    expect(summary.wakaTimeMetrics).toBeNull();
+  });
+
+  it("should follow the annotation when the entity names its WakaTime project", async () => {
+    // given
+    const store = new InMemoryCodeHealthStore();
+    await store.syncRepositories({
+      discovered: [
+        DiscoveredRepositoryBuilder.create()
+          .withName("gateway")
+          .withCatalogFacts({ wakaTimeProject: "acme-gateway" })
+          .build(),
+      ],
+      retentionDays: 365,
+      now: NOW,
+    });
+    await store.saveContributorMetrics({
+      source: "wakatime",
+      day: "2026-08-09",
+      capturedAt: NOW,
+      metrics: new Map([
+        [
+          "jrios",
+          WakaTimeMetricsBuilder.aDay("2026-08-09")
+            .withSeconds(120)
+            .withProject("acme-gateway", 120)
+            .build(),
+        ],
+      ]),
+    });
+
+    // when
+    const [summary] = await new ListRepositorySummaries(store).run(WINDOW);
+
+    // then
+    expect(summary.wakaTimeMetrics?.totalSeconds).toBe(120);
   });
 
   it("should keep each repository's events to itself", async () => {
@@ -544,6 +688,131 @@ describe("ListContributorSummaries", () => {
     expect(contributor?.commits).toBe(0);
     expect(contributor?.wakaTimeMetrics?.totalSeconds).toBe(3600);
     expect(contributor?.churnUnit).toBe("none");
+  });
+
+  it("should merge a person's Jira days across the window", async () => {
+    // given
+    // Jira is stored a day at a time precisely so a window can be answered
+    // honestly rather than by repeating a trailing figure.
+    const { store } = await seed();
+    for (const [day, created] of [
+      ["2026-08-09", 2],
+      ["2026-08-10", 3],
+    ] as const) {
+      await store.saveContributorMetrics({
+        source: "jira",
+        day,
+        capturedAt: NOW,
+        metrics: new Map([
+          ["557058:abc", aJiraContributorMetrics({ issuesCreated: created })],
+        ]),
+      });
+    }
+
+    // when
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
+
+    // then
+    expect(contributor?.key).toBe("jira:557058:abc");
+    expect(contributor?.jiraMetrics?.issuesCreated).toBe(5);
+  });
+
+  it("should carry a person's Confluence row from the window's end", async () => {
+    // given
+    // Confluence's figures describe a trailing window rather than a day, so the
+    // row is the most recent one at or before the window's last day.
+    const { store } = await seed();
+    await store.saveContributorMetrics({
+      source: "confluence",
+      day: "2026-08-10",
+      capturedAt: NOW,
+      metrics: new Map([
+        ["557058:abc", aConfluenceContributorMetrics({ pagesCreated: 4 })],
+      ]),
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
+
+    // then
+    expect(contributor?.key).toBe("confluence:557058:abc");
+    expect(contributor?.confluenceMetrics?.pagesCreated).toBe(4);
+  });
+
+  it("should fold two linked Confluence accounts onto one row", async () => {
+    // given
+    // One human with two Atlassian logins is one contributor, and the figures
+    // add up only once the link table has resolved both to the same person.
+    const { store } = await seed();
+    for (const sourceKey of ["557058:one", "557058:two"]) {
+      await store.recordObservedIdentities({
+        identities: [
+          {
+            source: "confluence",
+            sourceKey,
+            displayName: "Jane Doe",
+            email: null,
+            avatarUrl: null,
+            profileUrl: null,
+          },
+        ],
+        now: NOW,
+      });
+      await store.saveIdentityLink({
+        source: "confluence",
+        sourceKey,
+        entityRef: "user:default/jane",
+        origin: "manual",
+        linkedBy: "user:default/admin",
+        linkedAt: NOW,
+      });
+    }
+    await store.saveContributorMetrics({
+      source: "confluence",
+      day: "2026-08-10",
+      capturedAt: NOW,
+      metrics: new Map([
+        ["557058:one", aConfluenceContributorMetrics({ pagesCreated: 1 })],
+        ["557058:two", aConfluenceContributorMetrics({ pagesCreated: 2 })],
+      ]),
+    });
+
+    // when
+    const [contributor] = await new ListContributorSummaries({ store }).run(WINDOW);
+
+    // then
+    expect(contributor?.key).toBe("user:default/jane");
+    expect(contributor?.confluenceMetrics?.pagesCreated).toBe(3);
+  });
+
+  it("should not invent a row from a ticket when the call is scoped to a repository", async () => {
+    // given
+    // Tickets and pages are measured for a person across everything they
+    // touched, not per repository, so scoped they would otherwise add people
+    // who have never been near it.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.saveContributorMetrics({
+      source: "jira",
+      day: "2026-08-09",
+      capturedAt: NOW,
+      metrics: new Map([["557058:abc", aJiraContributorMetrics({ issuesCreated: 2 })]]),
+    });
+    await store.saveContributorMetrics({
+      source: "confluence",
+      day: "2026-08-10",
+      capturedAt: NOW,
+      metrics: new Map([["557058:xyz", aConfluenceContributorMetrics({ pagesCreated: 1 })]]),
+    });
+
+    // when
+    const scoped = await new ListContributorSummaries({ store }).run({
+      ...WINDOW,
+      repositoryId: repository.id,
+    });
+
+    // then
+    expect(scoped).toEqual([]);
   });
 
   it("should leave an account nobody has linked on a row of its own", async () => {
