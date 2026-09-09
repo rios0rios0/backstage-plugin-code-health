@@ -15,7 +15,10 @@ import type { AdministrationService } from "../../src/domain/services/dashboard_
 export class StubAdministrationService implements AdministrationService {
   private access: GetAccessResponse = { canResetIngestion: false, retentionDays: 365 };
   private accessError: Error | null = null;
-  private resetError: Error | null = null;
+  private resetError: unknown = null;
+  private repositories = 3;
+  private held: Promise<void> | null = null;
+  private release: () => void = () => undefined;
 
   readonly resets: ResetIngestionRequest[] = [];
   accessCalls = 0;
@@ -25,14 +28,36 @@ export class StubAdministrationService implements AdministrationService {
     return this;
   }
 
+  /** How many repositories a reset reports having sent back to the start. */
+  withRepositoryCount(repositories: number): this {
+    this.repositories = repositories;
+    return this;
+  }
+
   withAccessError(error: Error): this {
     this.accessError = error;
     return this;
   }
 
-  withResetError(error: Error): this {
+  /**
+   * What the next reset rejects with. Typed as `unknown` because a rejected
+   * `fetch` chain settles with whatever it was handed, and the dialog has to
+   * print that rather than an empty red line.
+   */
+  withResetError(error: unknown): this {
     this.resetError = error;
     return this;
+  }
+
+  /**
+   * Holds every reset open until the returned function is called, so a test can
+   * look at the dialog while the request is still in flight.
+   */
+  holdResets(): () => void {
+    this.held = new Promise<void>((resolve) => {
+      this.release = resolve;
+    });
+    return () => this.release();
   }
 
   async getAccess(): Promise<GetAccessResponse> {
@@ -43,7 +68,12 @@ export class StubAdministrationService implements AdministrationService {
 
   async resetIngestion(request: ResetIngestionRequest): Promise<ResetIngestionResponse> {
     this.resets.push(request);
-    if (this.resetError) throw this.resetError;
-    return { repositories: 3, days: request.days, triggered: ["code-health.ingest"] };
+    if (this.held) await this.held;
+    if (this.resetError !== null) return Promise.reject(this.resetError);
+    return {
+      repositories: this.repositories,
+      days: request.days,
+      triggered: ["code-health.ingest"],
+    };
   }
 }

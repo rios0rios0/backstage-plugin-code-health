@@ -167,6 +167,36 @@ describe("Router", () => {
     expect(screen.queryByRole("tab", { name: "Settings" })).not.toBeInTheDocument();
   });
 
+  it("should offer the re-collect control to an administrator", async () => {
+    // given
+    const administrationService = new StubAdministrationService().withAdministrator();
+
+    // when
+    await renderRouter({ administrationService });
+
+    // then
+    // It sits in the page header rather than on a tab, because it is not a
+    // measurement of anything — it is the one thing on the dashboard that
+    // changes what the backend does.
+    expect(await screen.findByRole("button", { name: "Re-collect history" })).toBeInTheDocument();
+  });
+
+  it("should keep the re-collect control off the header for everybody else", async () => {
+    // given
+    // The stub refuses by default, which is what a fresh install answers until
+    // somebody is named in `codeHealth.administrators`.
+    const administrationService = new StubAdministrationService();
+
+    // when
+    await renderRouter({ administrationService });
+
+    // then
+    await waitFor(() => expect(administrationService.accessCalls).toBe(1));
+    expect(
+      screen.queryByRole("button", { name: "Re-collect history" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("should explain that the backend is missing when coverage cannot be read", async () => {
     // given
     // "The backend is not installed" and "the backfill has not started" look
