@@ -104,17 +104,29 @@ export interface GithubSearchResponse {
 
 /** The commits of one pull request, fetched by node id after a search. */
 export interface GithubPullRequestCommitsNode {
+  readonly id?: string;
   readonly number?: number;
   readonly commits?: {
     readonly totalCount?: number;
+    readonly pageInfo?: GithubPageInfo;
     readonly nodes?: readonly ({ readonly commit?: GithubCommitNode } | null)[];
   };
 }
 
+/** One batch of pull requests, each with the first page of its commits. */
 export interface GithubPullRequestCommitsResponse {
   readonly data?: {
     readonly rateLimit?: GithubRateLimitNode;
     readonly nodes?: readonly (GithubPullRequestCommitsNode | null)[];
+  };
+  readonly errors?: readonly { readonly message?: string }[];
+}
+
+/** A later page of one pull request's commits. */
+export interface GithubPullRequestCommitsPageResponse {
+  readonly data?: {
+    readonly rateLimit?: GithubRateLimitNode;
+    readonly node?: GithubPullRequestCommitsNode | null;
   };
   readonly errors?: readonly { readonly message?: string }[];
 }

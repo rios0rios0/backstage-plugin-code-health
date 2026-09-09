@@ -102,7 +102,7 @@ export interface ContributorSummary {
    * push is not a failure.
    */
   readonly pipelineSuccessRate: number;
-  /** Repositories any event of this person's landed in, reviews included. */
+  /** Repositories any of this person's events landed in, reviews included. */
   readonly repositories: number;
   /**
    * Sonar measures summed over the repositories this person committed to or

@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the pipeline success rate — on the contributors table and on the Insights tile — to divide by the runs that reached a verdict rather than by every run, and added `pipelineRunsFailed` to `ContributorSummary` beside `pipelineRunsSucceeded`. A run cancelled because a newer push superseded it, skipped by a path filter, or still in progress is neither a success nor a failure, and under a workflow that cancels in-progress runs it was most of the denominator, so a busy afternoon read as a bad success rate'
-time: '2026-09-09T15:17:17.26720936Z'

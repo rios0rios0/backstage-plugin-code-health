@@ -38,6 +38,8 @@ const createCollector = (
 const operationOf = (body: string): string => {
   const parsed = JSON.parse(body) as { query: string; variables: Record<string, unknown> };
   if (parsed.query.includes("CodeHealthHistory")) return "history";
+  // The page query's name extends the batch query's, so it is tested first.
+  if (parsed.query.includes("CodeHealthPullRequestCommitsPage")) return "pullRequestCommitsPage";
   if (parsed.query.includes("CodeHealthPullRequestCommits")) return "pullRequestCommits";
   return "pullRequests";
 };
@@ -546,6 +548,105 @@ describe("GithubCollector", () => {
         request.body.includes("CodeHealthPullRequestCommits"),
       );
       expect(graphqlVariables(lookup!.body)).toEqual({ ids: ["PR_node_42"] });
+    });
+
+    it("should walk a pull request's commits past the first page", async () => {
+      // given
+      // The commits beyond the first page were written on days already
+      // fetched, so nothing else will ever return them; stopping at the first
+      // page would lose them for good.
+      const commitNode = (oid: string) => ({
+        commit: {
+          oid,
+          committedDate: "2026-08-06T09:00:00Z",
+          author: { user: { login: "Author" } },
+          parents: { totalCount: 1 },
+        },
+      });
+      server
+        .on("/graphql", (request) => {
+          const operation = operationOf(request.body);
+          if (operation === "history") return { body: emptyHistory };
+          if (operation === "pullRequestCommits") {
+            return {
+              body: {
+                data: {
+                  nodes: [
+                    {
+                      id: "PR_node_42",
+                      number: 42,
+                      commits: {
+                        totalCount: 3,
+                        pageInfo: { hasNextPage: true, endCursor: "page-2" },
+                        nodes: [commitNode("work-1")],
+                      },
+                    },
+                  ],
+                },
+              },
+            };
+          }
+          if (operation === "pullRequestCommitsPage") {
+            const cursor = String(graphqlVariables(request.body).cursor);
+            return {
+              body: {
+                data: {
+                  node: {
+                    id: "PR_node_42",
+                    number: 42,
+                    commits:
+                      cursor === "page-2"
+                        ? {
+                            totalCount: 3,
+                            pageInfo: { hasNextPage: true, endCursor: "page-3" },
+                            nodes: [commitNode("work-2")],
+                          }
+                        : {
+                            totalCount: 3,
+                            pageInfo: { hasNextPage: false },
+                            nodes: [commitNode("work-3")],
+                          },
+                  },
+                },
+              },
+            };
+          }
+          const search = String(graphqlVariables(request.body).search);
+          if (!search.includes("closed:")) return { body: emptySearch };
+          return {
+            body: {
+              data: {
+                search: {
+                  pageInfo: {},
+                  nodes: [
+                    {
+                      id: "PR_node_42",
+                      number: 42,
+                      mergedAt: "2026-08-09T12:00:00Z",
+                      author: { login: "Author" },
+                      mergeCommit: { oid: "merge-sha", parents: { totalCount: 2 } },
+                    },
+                  ],
+                },
+              },
+            },
+          };
+        })
+        .on("/actions/runs", () => ({ body: { workflow_runs: [] } }));
+
+      // when
+      const result = await collect();
+
+      // then
+      const commits = result.events.filter((event) => event.kind === "commit");
+      expect(commits.map((event) => event.externalId)).toEqual(["work-1", "work-2", "work-3"]);
+      const pages = server.requests
+        .filter((request) => request.body.includes("CodeHealthPullRequestCommitsPage"))
+        .map((request) => graphqlVariables(request.body));
+      expect(pages).toEqual([
+        { id: "PR_node_42", cursor: "page-2" },
+        { id: "PR_node_42", cursor: "page-3" },
+      ]);
     });
 
     it("should not fetch commits for a pull request merged linearly", async () => {

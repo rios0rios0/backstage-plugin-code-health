@@ -58,9 +58,12 @@ would vanish from everybody's row.
 So for every pull request merged with a merge commit, its commits are asked for
 directly and stored **under the dates they were written**, deduplicated by
 identifier against anything the history already returned. On GitHub that is one
-extra GraphQL document per page of merged pull requests. On Azure DevOps it is
-one request per such pull request for the commit list, and one more per hundred
-commits to read their change counts, which the list does not carry.
+extra GraphQL document per page of merged pull requests, plus one per further
+hundred commits a single pull request carries beyond its first. On Azure DevOps
+it is one request per such pull request for the commit list, and one more per
+hundred commits to read their change counts, which the list does not carry.
+Both walk a pull request's commits to the end: the ones past the first page
+were written on days already fetched, and nothing else will ever return them.
 
 A squash or a rebase needs none of this: both put commits dated at the merge on
 the branch, and those the history already returns.
@@ -70,9 +73,13 @@ the branch, and those the history already returns.
 - **Multi-author squashes.** A squash collapses everybody's commits into one,
   and git itself no longer knows who wrote what. The pull request's author gets
   the credit, which is what every other tool reading the same history reports.
-- **A pull request with more than one page of commits** (a hundred on GitHub)
-  is attributed from its first page; the rest are on the branch under their own
-  dates and are counted when their day is walked.
+- **A merge pushed by hand loses its constituent commits.** A merge commit is
+  dropped whether a pull request produced it or not, but only a pull request
+  can be asked for the commits it brought in. A long-lived branch merged
+  locally and pushed, whose commits were written on days already walked, is
+  invisible on an install whose backfill has passed those days. The common
+  shape — a `git pull` that merges same-day local commits — is unaffected,
+  since those commits fall in the same window as the merge.
 - **A merge and its pull request on opposite sides of a window boundary.** The
   two happen within seconds of each other, so it is rare, and a commit no pull
   request in the same window claims is still dropped when it is a merge commit

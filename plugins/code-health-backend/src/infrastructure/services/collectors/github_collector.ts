@@ -33,6 +33,8 @@ import { SNAPSHOT_QUERY } from "./github_snapshot_query";
 import type {
   GithubCommitNode,
   GithubHistoryResponse,
+  GithubPullRequestCommitsNode,
+  GithubPullRequestCommitsPageResponse,
   GithubPullRequestCommitsResponse,
   GithubPullRequestNode,
   GithubRateLimitNode,
@@ -160,9 +162,38 @@ query CodeHealthPullRequestCommits($ids: [ID!]!) {
   rateLimit { limit remaining resetAt cost }
   nodes(ids: $ids) {
     ... on PullRequest {
+      id
       number
       commits(first: 100) {
         totalCount
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          commit {${COMMIT_FIELDS}
+          }
+        }
+      }
+    }
+  }
+}`;
+
+/**
+ * The pages after the first of one pull request's commits.
+ *
+ * A pull request carrying more than a hundred commits is rare, but the ones
+ * beyond the first page are not on the branch under any date that will be
+ * walked again: a day is fetched once, and these were written on days already
+ * fetched. Stopping at the first page would lose them for good.
+ */
+const PULL_REQUEST_COMMITS_PAGE_QUERY = `
+query CodeHealthPullRequestCommitsPage($id: ID!, $cursor: String!) {
+  rateLimit { limit remaining resetAt cost }
+  node(id: $id) {
+    ... on PullRequest {
+      id
+      number
+      commits(first: 100, after: $cursor) {
+        totalCount
+        pageInfo { hasNextPage endCursor }
         nodes {
           commit {${COMMIT_FIELDS}
           }
@@ -653,6 +684,10 @@ export class GithubCollector implements VcsCollector {
    * so they are stored where they happened and counted in the window they
    * happened in. The commit the history returned for the same identifier, if
    * any, is the same commit, and the two are deduplicated downstream.
+   *
+   * The first page of every pull request comes back in one document per
+   * batch; a pull request with more commits than that is walked to its end one
+   * page at a time, because nothing else will ever return those commits.
    */
   private async collectPullRequestCommits(
     repository: TrackedRepository,
@@ -670,25 +705,47 @@ export class GithubCollector implements VcsCollector {
       );
 
       for (const node of body.data?.nodes ?? []) {
-        const connection = node?.commits;
-        const received = connection?.nodes?.length ?? 0;
-        if ((connection?.totalCount ?? received) > received) {
-          // A pull request with more commits than one page holds is rare enough
-          // that paging inside a batch is not worth its complexity; the rest of
-          // its commits are on the branch under their own dates anyway.
-          this.options.logger.debug(
-            `pull request #${node?.number ?? "?"} in ${repository.entityRef} carries more than ` +
-              `${received} commits; only the first page was attributed`,
-          );
-        }
-
-        for (const entry of connection?.nodes ?? []) {
-          const commit = entry?.commit;
-          const occurredAt = isoOrNull(commit?.committedDate);
-          if (!commit?.oid || !occurredAt) continue;
-          commits.push(this.commitOf(repository, commit, occurredAt));
-        }
+        commits.push(...this.commitsIn(repository, node));
+        commits.push(...(await this.remainingPullRequestCommits(repository, node, headers, context)));
       }
+    }
+
+    return commits;
+  }
+
+  private commitsIn(
+    repository: TrackedRepository,
+    node: GithubPullRequestCommitsNode | null | undefined,
+  ): CollectedCommit[] {
+    const commits: CollectedCommit[] = [];
+    for (const entry of node?.commits?.nodes ?? []) {
+      const commit = entry?.commit;
+      const occurredAt = isoOrNull(commit?.committedDate);
+      if (!commit?.oid || !occurredAt) continue;
+      commits.push(this.commitOf(repository, commit, occurredAt));
+    }
+    return commits;
+  }
+
+  private async remainingPullRequestCommits(
+    repository: TrackedRepository,
+    first: GithubPullRequestCommitsNode | null | undefined,
+    headers: Record<string, string>,
+    context: CollectorContext,
+  ): Promise<CollectedCommit[]> {
+    const commits: CollectedCommit[] = [];
+    let pageInfo = first?.commits?.pageInfo;
+    const id = first?.id;
+
+    for (let page = 1; page < MAX_PAGES && id && pageInfo?.hasNextPage && pageInfo.endCursor; page += 1) {
+      const body = await this.graphql<GithubPullRequestCommitsPageResponse>(
+        { query: PULL_REQUEST_COMMITS_PAGE_QUERY, variables: { id, cursor: pageInfo.endCursor } },
+        headers,
+        context,
+      );
+      const node = body.data?.node;
+      commits.push(...this.commitsIn(repository, node));
+      pageInfo = node?.commits?.pageInfo;
     }
 
     return commits;
