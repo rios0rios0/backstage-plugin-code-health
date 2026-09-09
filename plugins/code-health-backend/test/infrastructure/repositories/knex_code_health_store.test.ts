@@ -863,6 +863,56 @@ describe("KnexCodeHealthStore", () => {
       expect(coverage.latestDay).toBeNull();
     });
 
+    it("should keep the history older than the reach", async () => {
+      // given
+      // The floor is raised to the reach in the same transaction and the walk
+      // never goes below its floor, so anything older that was deleted would
+      // never come back: a thirty-day reach must cost thirty days, not the
+      // other eleven months.
+      const store = await createStore();
+      const repository = await seedRepositoryWithHistory(store, "component:default/reset-older");
+      await store.commitIngestion({
+        repositoryId: repository.id,
+        events: [
+          anEvent({
+            repositoryId: repository.id,
+            externalId: "old-commit",
+            occurredAt: new Date("2026-05-02T09:00:00.000Z"),
+          }),
+        ],
+        chunk: {
+          repositoryId: repository.id,
+          kinds: ["commit"],
+          days: ["2026-05-02"],
+          ingestedAt: NOW,
+        },
+        backfillCursor: "2026-05-01",
+        status: "active",
+        now: NOW,
+      });
+
+      // when
+      await store.resetIngestion({ days: 30, now: NOW });
+
+      // then
+      const older = await store.listEvents({
+        from: new Date("2026-05-01T00:00:00.000Z"),
+        to: new Date("2026-05-03T00:00:00.000Z"),
+      });
+      expect(older.map((event) => event.externalId)).toEqual(["old-commit"]);
+      const recent = await store.listEvents({
+        from: new Date("2026-08-01T00:00:00.000Z"),
+        to: new Date("2026-08-11T00:00:00.000Z"),
+        kinds: ["commit"],
+      });
+      expect(recent).toHaveLength(0);
+      // The day before the reach stays claimed, so the range picker keeps
+      // offering the history that stayed.
+      const coverage = await store.getCoverage();
+      expect(coverage.earliestDay).toBe("2026-05-02");
+      expect(coverage.latestDay).toBe("2026-05-02");
+    });
+
     it("should leave a repository that has left the catalog alone", async () => {
       // given
       // It is never ingested again, so its history — wrong as it may be — is

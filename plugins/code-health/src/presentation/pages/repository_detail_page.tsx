@@ -8,6 +8,7 @@ import { useRouteRef } from "@backstage/core-plugin-api";
 import type {
   ConfluenceSpaceMetrics,
   IntegrationCapabilities,
+  JiraRepositoryMetrics,
   Platform,
   RepositorySummary,
   RepositoryTrendPoint,
@@ -15,6 +16,7 @@ import type {
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
   catalogEntityPath,
+  formatHours as formatJiraHours,
   parseEntityRef,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import Box from "@material-ui/core/Box";
@@ -35,7 +37,6 @@ import {
   contributorsTrend,
   coverageTrend,
   defectTrend,
-  jiraTrend,
   pullRequestTrend,
   releaseTrend,
   REPOSITORY_TREND_SERIES,
@@ -167,17 +168,83 @@ const RepositoryIdentity = ({ summary }: { summary: RepositorySummary }) => {
   );
 };
 
-/** A figure and its name, for the figures Confluence answers per window. */
-const Figure = ({ label, value }: { label: string; value: number | null }) => (
+/** A number is localised; a string arrives already formatted; null is a dash. */
+const formatFigure = (value: number | string | null): string => {
+  if (value === null) return EM_DASH;
+  return typeof value === "number" ? formatCount(value) : value;
+};
+
+/**
+ * A figure and its name, for what an integration answers per window rather
+ * than per bucket.
+ */
+const Figure = ({ label, value }: { label: string; value: number | string | null }) => (
   <Box display="flex" justifyContent="space-between" py={0.25}>
     <Typography variant="body2" color="textSecondary">
       {label}
     </Typography>
-    <Typography variant="body2">
-      {value === null ? EM_DASH : formatCount(value)}
-    </Typography>
+    <Typography variant="body2">{formatFigure(value)}</Typography>
   </Box>
 );
+
+const formatWindowDay = (instant: string): string => {
+  const parsed = new Date(instant);
+  return Number.isNaN(parsed.getTime())
+    ? instant
+    : parsed.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+};
+
+/**
+ * What the matching Jira project looked like at the end of the window.
+ *
+ * Figures rather than a chart, for the same reason as the Confluence card: the
+ * repository-level Jira measures ride on the daily snapshot and describe a
+ * trailing window of `atlassian.historyDays`, not the bucket's own events.
+ * Drawn per bucket, consecutive points would overlap by most of a month and a
+ * reader would compare a rolling total against a single week's commits. The
+ * per-day slicing the contributor page gets is only stored for people.
+ */
+const JiraFigures = ({ metrics }: { metrics: JiraRepositoryMetrics | null }) => {
+  if (metrics === null) {
+    return (
+      <Typography variant="body2" color="textSecondary">
+        No Jira project is named by the catalog entity, so nothing was collected. Add a{" "}
+        <code>jira/project-key</code> annotation to start.
+      </Typography>
+    );
+  }
+
+  const scope = metrics.component === null ? metrics.projectKey : `${metrics.projectKey} · ${metrics.component}`;
+
+  return (
+    <Box>
+      <Box mb={1}>
+        <Typography variant="caption" color="textSecondary">
+          {`${scope}, ${formatWindowDay(metrics.window.from)} to ${formatWindowDay(
+            metrics.window.to,
+          )} — the snapshot's own trailing window, not the range picked above`}
+        </Typography>
+      </Box>
+      <Figure label="Tickets resolved" value={metrics.issuesResolved} />
+      <Figure label="Tickets created" value={metrics.issuesCreated} />
+      <Figure label="Throughput per week" value={metrics.throughputPerWeek} />
+      <Figure
+        label="Median cycle time"
+        value={metrics.cycleTime === null ? null : formatJiraHours(metrics.cycleTime.medianHours)}
+      />
+      <Figure
+        label="Median lead time"
+        value={metrics.leadTime === null ? null : formatJiraHours(metrics.leadTime.medianHours)}
+      />
+      <Figure
+        label="Bug ratio"
+        value={metrics.bugRatio === null ? null : `${metrics.bugRatio}%`}
+      />
+      <Figure label="Reopened" value={metrics.reopened} />
+      <Figure label="Open right now" value={metrics.openIssues} />
+    </Box>
+  );
+};
 
 /**
  * What the matching Confluence space saw in the window.
@@ -267,7 +334,6 @@ export const RepositoryDetailPage = ({
   const compliance = useMemo(() => complianceTrend(points), [points]);
   const releases = useMemo(() => releaseTrend(points), [points]);
   const codingTime = useMemo(() => codingTimeTrend(points), [points]);
-  const jira = useMemo(() => jiraTrend(points), [points]);
   const ranking = useMemo(
     () => topContributorsByCommits(contributors.contributors),
     [contributors.contributors],
@@ -577,17 +643,10 @@ export const RepositoryDetailPage = ({
           {capabilities.jira ? (
             <Grid item xs={12} md={6}>
               <InfoCard
-                title="Jira throughput"
-                subheader="Issues resolved against issues created in the matching project."
+                title="Jira delivery"
+                subheader="Over the snapshot's trailing window rather than per bucket — the project's figures ride on the daily snapshot, so a per-bucket chart would draw the same rolling total once per bucket and call it throughput."
               >
-                <TrendChart
-                  points={jira}
-                  series={[
-                    { key: REPOSITORY_TREND_SERIES.issuesResolved, label: "Resolved" },
-                    { key: REPOSITORY_TREND_SERIES.issuesCreated, label: "Created" },
-                  ]}
-                  formatValue={formatCount}
-                />
+                <JiraFigures metrics={trend.summary.jiraMetrics} />
               </InfoCard>
             </Grid>
           ) : null}

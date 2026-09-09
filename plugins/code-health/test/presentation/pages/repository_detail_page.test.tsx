@@ -365,7 +365,7 @@ describe("RepositoryDetailPage", () => {
     // then
     expect(await screen.findByText("Commits and merges")).toBeInTheDocument();
     expect(screen.queryByText("Coding time")).not.toBeInTheDocument();
-    expect(screen.queryByText("Jira throughput")).not.toBeInTheDocument();
+    expect(screen.queryByText("Jira delivery")).not.toBeInTheDocument();
     expect(screen.queryByText("Confluence space")).not.toBeInTheDocument();
   });
 
@@ -392,7 +392,13 @@ describe("RepositoryDetailPage", () => {
 
     // then
     expect(await screen.findByText("Coding time")).toBeInTheDocument();
-    expect(screen.getByText("Jira throughput")).toBeInTheDocument();
+    expect(screen.getByText("Jira delivery")).toBeInTheDocument();
+    // Figures over the snapshot's own window rather than a per-bucket chart:
+    // the repository-level Jira measures describe a trailing window, and a
+    // chart of them beside the per-bucket cards would read as throughput.
+    expect(screen.getByText("Open right now")).toBeInTheDocument();
+    expect(screen.getByText("Tickets resolved")).toBeInTheDocument();
+    expect(screen.getByText(/GW, .* — the snapshot's own trailing window/)).toBeInTheDocument();
     expect(screen.getByText("Confluence space")).toBeInTheDocument();
     expect(screen.getByText("Gateway")).toBeInTheDocument();
     expect(screen.getByText("Pages edited")).toBeInTheDocument();

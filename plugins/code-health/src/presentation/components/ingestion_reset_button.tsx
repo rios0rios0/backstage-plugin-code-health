@@ -91,8 +91,9 @@ const IngestionResetDialog = ({
       <DialogTitle id="resetIngestionTitle">Re-collect history</DialogTitle>
       <DialogContent>
         <Typography variant="body2" className={classes.paragraph}>
-          Every commit, pull request, review and pipeline run already stored is discarded and read
-          again from GitHub and Azure DevOps, as fast as their rate limits allow.
+          Every commit, pull request, review and pipeline run inside the chosen reach is discarded
+          and read again from GitHub and Azure DevOps, as fast as their rate limits allow. History
+          older than the reach is left exactly as it is.
         </Typography>
         <Typography variant="body2" className={classes.paragraph}>
           Until the backfill catches up the dashboards answer for the last day only, exactly as they

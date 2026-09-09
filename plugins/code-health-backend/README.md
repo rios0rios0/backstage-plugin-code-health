@@ -76,14 +76,16 @@ There are two levers and both have to open:
 | `GET /v1/access` | `{ canResetIngestion, retentionDays }` for the caller. Never a 403: a page asks this before deciding whether to draw a button, and a service principal or an anonymous decision simply reads `false` |
 | `POST /v1/ingestion/reset` | Body `{ days }`, a whole number from 1 to the configured `codeHealth.ingestion.retentionDays`. `403` when the caller is not an administrator, `400` when `days` is out of range |
 
-A reset, in one transaction per run, sends every **tracked** repository back to where a fresh install
-starts: it deletes the commits, pull requests, reviews and builds the walk re-collects, forgets the
-days those repositories claimed as fetched, and sets the backfill floor to the reach that was asked
-for. It then triggers the ingestion task.
+A reset, in one transaction per run, sends every **tracked** repository back over the reach that was
+asked for: it deletes the commits, pull requests, reviews and builds inside the reach, forgets the
+days inside it those repositories claimed as fetched, and sets the backfill floor to the reach. It
+then triggers the ingestion task. The deletes stop at the reach on purpose — the walk never goes
+below its floor, so anything older that was deleted would never come back, and a thirty-day reach
+would silently cost the other eleven months.
 
-What it **keeps**: snapshots, releases and tags, which come from the daily snapshot rather than from
-the walk and which nothing would ever put back; and the history of a repository that has left the
-catalog, which is never ingested again.
+What it **keeps**: every row older than the reach; snapshots, releases and tags, which come from the
+daily snapshot rather than from the walk and which nothing would ever put back; and the history of a
+repository that has left the catalog, which is never ingested again.
 
 Afterwards the dashboard behaves as it does after installation — the last day is answerable from the
 first run, and wider ranges unlock as the backfill advances.

@@ -1,12 +1,10 @@
 import type {
   ComplianceStatus,
-  JiraRepositoryMetrics,
   RepositorySummary,
   RepositoryTrendPoint,
   SonarMetrics,
   WakaTimeProjectMetrics,
 } from "@rios0rios0/backstage-plugin-code-health-common";
-import { EMPTY_JIRA_ISSUE_TYPES } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
   buildSuccessRateTrend,
   buildTrend,
@@ -17,7 +15,6 @@ import {
   contributorsTrend,
   coverageTrend,
   defectTrend,
-  jiraTrend,
   pullRequestTrend,
   releaseTrend,
   REPOSITORY_TREND_SERIES,
@@ -381,49 +378,6 @@ describe("codingTimeTrend", () => {
 
     // then
     expect(result[0].values[REPOSITORY_TREND_SERIES.codingHours]).toBeNull();
-  });
-});
-
-describe("jiraTrend", () => {
-  it("should carry resolved against created", () => {
-    // given
-    const jira = {
-      window: { from: "2026-08-03T00:00:00.000Z", to: "2026-08-10T00:00:00.000Z" },
-      projectKey: "GW",
-      component: null,
-      issuesCreated: 9,
-      issuesResolved: 6,
-      throughputPerWeek: 6,
-      resolvedByType: { ...EMPTY_JIRA_ISSUE_TYPES, bug: 2, story: 4 },
-      bugRatio: 33.3,
-      reopened: 0,
-      cycleTime: null,
-      leadTime: null,
-      storyPointsEstimated: null,
-      storyPointsCompleted: null,
-      openIssues: 12,
-      oldestOpenIssue: null,
-      openByPriority: [],
-      contributors: 3,
-    } as JiraRepositoryMetrics;
-    const points = [bucket({ ...RepositoryBuilder.create().build(), jiraMetrics: jira })];
-
-    // when
-    const result = jiraTrend(points);
-
-    // then
-    expect(result[0].values).toEqual({ issuesResolved: 6, issuesCreated: 9 });
-  });
-
-  it("should leave a bucket with no matching project unmeasured", () => {
-    // given
-    const points = [bucket(RepositoryBuilder.create().build())];
-
-    // when
-    const result = jiraTrend(points);
-
-    // then
-    expect(result[0].values).toEqual({ issuesResolved: null, issuesCreated: null });
   });
 });
 

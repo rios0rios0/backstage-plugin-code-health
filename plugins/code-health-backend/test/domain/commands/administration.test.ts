@@ -221,6 +221,45 @@ describe("ResetIngestion", () => {
     expect(events.map((event) => event.kind)).toEqual(["release"]);
   });
 
+  it("should keep the history older than the reach", async () => {
+    // given
+    // The floor is raised to the reach and the walk never goes below it, so an
+    // older event that was deleted would never come back: a thirty-day reach
+    // must cost thirty days, not the other eleven months.
+    const { store, repository } = await seed();
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [
+        EventBuilder.commit()
+          .withRepository(repository.id)
+          .withExternalId("older-than-the-reach")
+          .at("2026-05-02T10:00:00.000Z")
+          .build(),
+      ],
+      chunk: {
+        repositoryId: repository.id,
+        kinds: ["commit"],
+        days: ["2026-05-02"],
+        ingestedAt: NOW,
+      },
+      backfillCursor: "2026-05-01",
+      status: "active",
+      now: NOW,
+    });
+
+    // when
+    await new ResetIngestion({ store }).run({ days: 30, now: NOW });
+
+    // then
+    const older = await store.listEvents({
+      from: new Date("2026-05-01T00:00:00.000Z"),
+      to: new Date("2026-05-03T00:00:00.000Z"),
+    });
+    expect(older.map((event) => event.externalId)).toEqual(["older-than-the-reach"]);
+    const coverage = await store.getCoverage();
+    expect(coverage.earliestDay).toBe("2026-05-02");
+  });
+
   it("should say what it did", async () => {
     // given
     // A reset costs hours of provider requests; an operator reading the logs

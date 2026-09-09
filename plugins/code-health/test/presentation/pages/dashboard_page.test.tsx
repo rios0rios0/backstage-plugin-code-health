@@ -194,7 +194,7 @@ describe("DashboardPage audits", () => {
     ]);
 
     // when
-    render(
+    await render(
       <DashboardPage
         dashboardService={service}
         coverage={coverageResult()}

@@ -57,8 +57,6 @@ export const REPOSITORY_TREND_SERIES = {
   releases: "releases",
   tags: "tags",
   codingHours: "codingHours",
-  issuesResolved: "issuesResolved",
-  issuesCreated: "issuesCreated",
 } as const;
 
 /** How many compliance checks a fully compliant repository passes. */
@@ -206,12 +204,4 @@ export const codingTimeTrend = (points: readonly RepositoryTrendPoint[]): TrendP
       const seconds = point.summary.wakaTimeMetrics?.totalSeconds;
       return seconds === undefined ? null : round(seconds / 3600, 1);
     },
-  });
-
-export const jiraTrend = (points: readonly RepositoryTrendPoint[]): TrendPoint[] =>
-  pointsOf(points, {
-    [REPOSITORY_TREND_SERIES.issuesResolved]: (point) =>
-      point.summary.jiraMetrics?.issuesResolved ?? null,
-    [REPOSITORY_TREND_SERIES.issuesCreated]: (point) =>
-      point.summary.jiraMetrics?.issuesCreated ?? null,
   });

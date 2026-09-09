@@ -771,6 +771,9 @@ export class KnexCodeHealthStore implements CodeHealthStore {
     now: Date;
   }): Promise<{ repositories: number }> {
     const today = toDay(options.now);
+    const floor = addDays(today, -options.days);
+    // The first instant of the floor day, in the calendar the days are kept in.
+    const floorInstant = new Date(`${floor}T00:00:00.000Z`);
 
     return this.client.transaction(async (trx) => {
       const tracked = await trx<RepositoryRow>(REPOSITORIES)
@@ -778,14 +781,26 @@ export class KnexCodeHealthStore implements CodeHealthStore {
         .pluck("id");
       if (tracked.length === 0) return { repositories: 0 };
 
-      // Only what the walk re-collects. Releases and tags come from the daily
-      // snapshot, so deleting them would lose history nothing would put back.
+      // Only what the walk re-collects, and only inside the reach. The floor
+      // is raised to the reach in this same transaction and the backfill never
+      // walks below its floor, so anything older deleted here would never come
+      // back — a thirty-day reach would silently throw away the other eleven
+      // months. Bounded, the shorter reach re-reads thirty days and leaves the
+      // rest exactly as it was, which is what makes it cheaper rather than
+      // lossy. Releases and tags come from the daily snapshot, so deleting
+      // them would lose history nothing would put back either.
       await trx(EVENTS)
         .whereIn("repository_id", tracked)
         .whereIn("kind", ["commit", "pull_request", "pr_review", "build"])
+        .andWhere("occurred_at", ">=", floorInstant)
         .delete();
 
-      await trx(CHUNKS).whereIn("repository_id", tracked).delete();
+      // The days inside the reach are forgotten so the walk fetches them
+      // again; the days before it stay claimed, because their rows stayed too.
+      await trx(CHUNKS)
+        .whereIn("repository_id", tracked)
+        .andWhere("day", ">=", floor)
+        .delete();
 
       await trx(INGESTION_STATE).whereIn("repository_id", tracked).update({
         // The floor is the administrator's choice rather than the retention
@@ -794,7 +809,7 @@ export class KnexCodeHealthStore implements CodeHealthStore {
         // and somebody who wants last quarter re-read after a fix should not
         // have to pay for the other three. The store only ever sets a floor on
         // insert, so the choice sticks until the next reset.
-        backfill_floor: addDays(today, -options.days),
+        backfill_floor: floor,
         backfill_cursor: today,
         // A day back, as discovery sets it, so the very first run has a window
         // to fetch and the dashboard can answer for "the last day" immediately.
