@@ -114,6 +114,19 @@ plugins/code-health/src/
   re-read each run, and a repository's coding time is derived on read from its people's project time
   rather than stored on the snapshot.
 - **Sonar, compliance and badge history cannot be backfilled**; those series start at installation.
+- **Merged work is credited to whoever did it, never to whoever merged it.** Both providers stamp
+  the merger on the squash commit, the merge commit and the post-merge pipeline run.
+  `attributeMergedWork` in `domain/entities/merge_attribution.ts` is the one place the correction
+  lives and both collectors feed it: a squash commit goes to the pull request's author, a merge
+  commit is dropped (its diff is the sum of the commits it joins) and the pull request's own commits
+  are fetched and stored under the dates they were written, a rebase is left alone, and a build
+  follows the commit it built. A collector that stores the provider's stamp is a bug.
+- **A review is a vote on somebody else's pull request**: the author's own vote and an Azure DevOps
+  reviewer who never voted are not reviews. **The pipeline success rate divides by the runs that
+  reached a verdict**, never by every run. **Sonar on a contributor row** sums over the repositories
+  the person committed to or merged into, not reviewed or built in.
+- **The re-attribution migration re-walks tracked history once.** It resets cursors and removes
+  what the walk re-collects; releases, tags and repositories that left the catalog stay.
 - **The bump desynchronises `yarn.lock`.** `.autobump.yaml` moves the caret range the frontend and
   backend declare on `-common`, and that string is a resolution descriptor in the lockfile, so every
   CI job's `yarn install --immutable` answers `YN0028` until the lockfile is regenerated. The fix is

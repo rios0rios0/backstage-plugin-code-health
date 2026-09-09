@@ -64,9 +64,11 @@ describe("AzureDevOpsCollector", () => {
                 commitId: "abc123",
                 comment: "fixed the thing",
                 remoteUrl: "https://dev.azure.com/commit/abc123",
+                // Git's own metadata, which is a `name` and an `email` rather
+                // than the identity service's `displayName` and `uniqueName`.
                 author: {
-                  displayName: "Dev Example",
-                  uniqueName: "Dev.Example@Corp.COM",
+                  name: "Dev Example",
+                  email: "Dev.Example@Corp.COM",
                   date: "2026-08-09T10:00:00Z",
                   imageUrl: "https://avatar",
                 },
@@ -137,6 +139,73 @@ describe("AzureDevOpsCollector", () => {
       expect(request.query.get("searchCriteria.toDate")).toBe(WINDOW.to.toISOString());
       expect(request.query.get("searchCriteria.itemVersion.version")).toBe("main");
       expect(request.query.get("api-version")).toBe("7.1");
+    });
+
+    it("should recognise a merge commit by its message when no parents are reported", async () => {
+      // given
+      // No list endpoint here reports a parent count, and the message is the
+      // only other evidence: git writes the same subject on every merge it
+      // makes.
+      server
+        .onPath("/repositories/gateway", () => ({ body: { id: "guid-1" } }))
+        .on("/commits", () => ({
+          body: {
+            value: [
+              {
+                commitId: "local-merge",
+                comment: "Merge branch 'main' into feature/thing",
+                author: { email: "dev@example.com", date: "2026-08-09T10:00:00Z" },
+                changeCounts: { Edit: 400 },
+              },
+              {
+                commitId: "work",
+                comment: "fixed the thing",
+                author: { email: "dev@example.com", date: "2026-08-09T11:00:00Z" },
+                changeCounts: { Edit: 1 },
+              },
+            ],
+          },
+        }))
+        .on("/pullrequests", () => ({ body: { value: [] } }))
+        .on("/build/builds", () => ({ body: { value: [] } }));
+
+      // when
+      const result = await collect();
+
+      // then
+      expect(result.events.filter((event) => event.kind === "commit").map((event) => event.externalId)).toEqual(["work"]);
+    });
+
+    it("should trust a reported parent count over the message", async () => {
+      // given
+      server
+        .onPath("/repositories/gateway", () => ({ body: { id: "guid-1" } }))
+        .on("/commits", () => ({
+          body: {
+            value: [
+              {
+                commitId: "two-parents",
+                comment: "fixed the thing",
+                parents: ["a", "b"],
+                author: { email: "dev@example.com", date: "2026-08-09T10:00:00Z" },
+              },
+              {
+                commitId: "one-parent",
+                comment: "Merge branch 'main' into feature/thing",
+                parents: ["a"],
+                author: { email: "dev@example.com", date: "2026-08-09T11:00:00Z" },
+              },
+            ],
+          },
+        }))
+        .on("/pullrequests", () => ({ body: { value: [] } }))
+        .on("/build/builds", () => ({ body: { value: [] } }));
+
+      // when
+      const result = await collect();
+
+      // then
+      expect(result.events.filter((event) => event.kind === "commit").map((event) => event.externalId)).toEqual(["one-parent"]);
     });
 
     it("should skip a commit with no usable date", async () => {
@@ -285,6 +354,360 @@ describe("AzureDevOpsCollector", () => {
       // A reviewer group carries a required-reviewer policy and never casts a
       // vote a person is accountable for.
       expect(reviews.some((event) => event.actorKey === "team@example.com")).toBe(false);
+    });
+  });
+
+  describe("merged work", () => {
+    const completer = { displayName: "Merger", uniqueName: "merger@example.com" };
+    const creator = {
+      displayName: "Author",
+      uniqueName: "Author@Example.com",
+      imageUrl: "https://avatar/author",
+    };
+
+    const completed = (overrides: Record<string, unknown>) => ({
+      pullRequestId: 42,
+      status: "completed",
+      creationDate: "2026-08-06T09:00:00Z",
+      closedDate: "2026-08-09T15:00:00Z",
+      createdBy: creator,
+      lastMergeCommit: { commitId: "landed" },
+      ...overrides,
+    });
+
+    const withClosed = (pullRequest: Record<string, unknown>, commits: Record<string, unknown>[]) =>
+      server
+        .onPath("/repositories/gateway", () => ({ body: { id: "guid-1" } }))
+        .on("/pullrequests", (request) => ({
+          body: {
+            value:
+              request.query.get("searchCriteria.queryTimeRangeType") === "closed"
+                ? [pullRequest]
+                : [],
+          },
+        }))
+        .on("/commits", () => ({ body: { value: commits } }))
+        .on("/build/builds", () => ({ body: { value: [] } }));
+
+    it("should credit a squash commit to the pull request's creator", async () => {
+      // given
+      // Azure DevOps stamps the squash commit with whoever pressed Complete.
+      withClosed(completed({ completionOptions: { mergeStrategy: "squash" } }), [
+        {
+          commitId: "landed",
+          comment: "Merged PR 42: add the thing",
+          author: { name: "Merger", email: "merger@example.com", date: "2026-08-09T15:00:00Z" },
+          changeCounts: { Add: 2, Edit: 3 },
+        },
+      ]);
+
+      // when
+      const result = await collect();
+
+      // then
+      const commit = result.events.find((event) => event.kind === "commit");
+      expect(commit).toMatchObject({
+        externalId: "landed",
+        actorKey: "author@example.com",
+        actorName: "Author",
+        actorAvatarUrl: "https://avatar/author",
+        changedFiles: 5,
+      });
+      expect(commit?.payload).toMatchObject({ pullRequestId: "42" });
+      expect(server.requests.filter((request) => request.path.includes("/pullrequests/42/commits"))).toEqual([]);
+    });
+
+    it("should honour the boolean an older completion recorded a squash with", async () => {
+      // given
+      withClosed(completed({ completionOptions: { squashMerge: true } }), [
+        {
+          commitId: "landed",
+          author: { email: "merger@example.com", date: "2026-08-09T15:00:00Z" },
+        },
+      ]);
+
+      // when
+      const result = await collect();
+
+      // then
+      expect(result.events.find((event) => event.kind === "commit")?.actorKey).toBe("author@example.com");
+    });
+
+    it("should drop the merge commit of a plain merge and count the pull request's own commits", async () => {
+      // given
+      // With no completion options the completion was a plain merge, whose
+      // commits keep the dates they were written on and never appear in the
+      // branch history for the day of the merge.
+      server
+        .onPath("/pullrequests/42/commits", () => ({
+          body: {
+            value: [
+              {
+                commitId: "work-1",
+                comment: "added the thing",
+                author: { name: "Author", email: "author@example.com", date: "2026-08-06T10:00:00Z" },
+              },
+              {
+                commitId: "work-2",
+                comment: "Merge branch 'main' into feature/thing",
+                author: { name: "Author", email: "author@example.com", date: "2026-08-07T10:00:00Z" },
+              },
+            ],
+          },
+        }))
+        .on("/commitsbatch", (request) => ({
+          body: {
+            value: (JSON.parse(request.body) as { ids: string[] }).ids.map((commitId) => ({
+              commitId,
+              changeCounts: { Edit: commitId === "work-1" ? 4 : 400 },
+            })),
+          },
+        }));
+      withClosed(completed({}), [
+        {
+          commitId: "landed",
+          comment: "Merged PR 42: add the thing",
+          author: { email: "merger@example.com", date: "2026-08-09T15:00:00Z" },
+          changeCounts: { Add: 2, Edit: 402 },
+        },
+      ]);
+
+      // when
+      const result = await collect();
+
+      // then
+      const commits = result.events.filter((event) => event.kind === "commit");
+      // The merge the author made from main on the way is a merge commit too.
+      expect(commits.map((event) => event.externalId)).toEqual(["work-1"]);
+      expect(commits[0]).toMatchObject({
+        actorKey: "author@example.com",
+        actorName: "Author",
+        occurredAt: new Date("2026-08-06T10:00:00Z"),
+        changedFiles: 4,
+      });
+      const batch = server.requests.find((request) => request.path.endsWith("/commitsbatch"));
+      expect(batch?.method).toBe("POST");
+      expect(JSON.parse(batch!.body)).toEqual({ ids: ["work-1", "work-2"] });
+    });
+
+    it("should not ask for change counts the pull request's commit list already carried", async () => {
+      // given
+      server.onPath("/pullrequests/42/commits", () => ({
+        body: {
+          value: [
+            {
+              commitId: "work-1",
+              author: { email: "author@example.com", date: "2026-08-06T10:00:00Z" },
+              changeCounts: { Add: 1 },
+            },
+          ],
+        },
+      }));
+      withClosed(completed({ completionOptions: { mergeStrategy: "noFastForward" } }), []);
+
+      // when
+      const result = await collect();
+
+      // then
+      expect(result.events.find((event) => event.kind === "commit")?.changedFiles).toBe(1);
+      expect(server.requests.filter((request) => request.path.endsWith("/commitsbatch"))).toEqual([]);
+    });
+
+    it("should follow the continuation token across a pull request's commit pages", async () => {
+      // given
+      let served = 0;
+      server.onPath("/pullrequests/42/commits", () => {
+        served += 1;
+        return served === 1
+          ? {
+              body: { value: [{ commitId: "work-1", author: { email: "author@example.com", date: "2026-08-06T10:00:00Z" }, changeCounts: {} }] },
+              headers: { "x-ms-continuationtoken": "page-2" },
+            }
+          : {
+              body: { value: [{ commitId: "work-2", author: { email: "author@example.com", date: "2026-08-07T10:00:00Z" }, changeCounts: {} }] },
+            };
+      });
+      withClosed(completed({}), []);
+
+      // when
+      const result = await collect();
+
+      // then
+      expect(result.events.filter((event) => event.kind === "commit").map((event) => event.externalId)).toEqual(["work-1", "work-2"]);
+      expect(server.requestsFor("/pullrequests/42/commits")[1].query.get("continuationToken")).toBe("page-2");
+    });
+
+    it("should leave a rebase completion's commits as the provider reported them", async () => {
+      // given
+      // A rebase rewrites the pull request's commits onto the target with their
+      // authors intact, and they are dated at the completion, so the branch
+      // history already has them under the right people.
+      withClosed(completed({ completionOptions: { mergeStrategy: "rebase" } }), [
+        {
+          commitId: "landed",
+          comment: "added the thing",
+          author: { email: "author@example.com", date: "2026-08-09T15:00:00Z" },
+        },
+      ]);
+
+      // when
+      const result = await collect();
+
+      // then
+      const commit = result.events.find((event) => event.kind === "commit");
+      expect(commit?.actorKey).toBe("author@example.com");
+      expect(commit?.payload).not.toHaveProperty("pullRequestId");
+      expect(server.requests.filter((request) => request.path.includes("/pullrequests/42/commits"))).toEqual([]);
+    });
+
+    it("should drop the merge commit of a rebase-and-merge without re-fetching its commits", async () => {
+      // given
+      // The rewritten commits are already on the branch under their authors;
+      // asking the pull request for its commits would return the originals
+      // under different identifiers and count the work twice.
+      withClosed(completed({ completionOptions: { mergeStrategy: "rebaseMerge" } }), [
+        {
+          commitId: "landed",
+          comment: "Merged PR 42: add the thing",
+          author: { email: "merger@example.com", date: "2026-08-09T15:00:01Z" },
+        },
+        {
+          commitId: "rewritten",
+          comment: "added the thing",
+          author: { email: "author@example.com", date: "2026-08-09T15:00:00Z" },
+        },
+      ]);
+
+      // when
+      const result = await collect();
+
+      // then
+      expect(result.events.filter((event) => event.kind === "commit").map((event) => event.externalId)).toEqual(["rewritten"]);
+      expect(server.requests.filter((request) => request.path.includes("/pullrequests/42/commits"))).toEqual([]);
+    });
+
+    it("should keep the stamp on a completion strategy it does not know", async () => {
+      // given
+      withClosed(completed({ completionOptions: { mergeStrategy: "somethingNew" } }), [
+        {
+          commitId: "landed",
+          author: { email: "merger@example.com", date: "2026-08-09T15:00:00Z" },
+        },
+      ]);
+
+      // when
+      const result = await collect();
+
+      // then
+      expect(result.events.find((event) => event.kind === "commit")?.actorKey).toBe("merger@example.com");
+    });
+
+    it("should credit a build to the creator of the pull request whose completion it built", async () => {
+      // given
+      // The post-completion build is requested for whoever completed, and it
+      // built the creator's change.
+      server.on("/build/builds", () => ({
+        body: {
+          value: [
+            {
+              id: 900,
+              result: "succeeded",
+              finishTime: "2026-08-09T15:10:00Z",
+              sourceBranch: "refs/heads/main",
+              sourceVersion: "landed",
+              requestedFor: completer,
+            },
+          ],
+        },
+      }));
+      withClosed(completed({ completionOptions: { mergeStrategy: "squash" } }), []);
+
+      // when
+      const result = await collect();
+
+      // then
+      const build = result.events.find((event) => event.kind === "build");
+      expect(build).toMatchObject({ actorKey: "author@example.com", actorName: "Author" });
+      expect(build?.payload).toMatchObject({ commitSha: "landed" });
+    });
+
+    it("should credit a build to the author of the commit it built", async () => {
+      // given
+      server.on("/build/builds", () => ({
+        body: {
+          value: [
+            {
+              id: 901,
+              result: "failed",
+              finishTime: "2026-08-09T11:10:00Z",
+              sourceVersion: "abc123",
+              requestedFor: completer,
+            },
+          ],
+        },
+      }));
+      server
+        .onPath("/repositories/gateway", () => ({ body: { id: "guid-1" } }))
+        .on("/commits", () => ({
+          body: {
+            value: [
+              {
+                commitId: "abc123",
+                author: { email: "author@example.com", date: "2026-08-09T11:00:00Z" },
+              },
+            ],
+          },
+        }))
+        .on("/pullrequests", () => ({ body: { value: [] } }));
+
+      // when
+      const result = await collect();
+
+      // then
+      expect(result.events.find((event) => event.kind === "build")?.actorKey).toBe("author@example.com");
+    });
+
+    it("should not count a reviewer who never voted", async () => {
+      // given
+      // Azure DevOps lists everyone a policy or a person added, and most of
+      // them never look.
+      withClosed(
+        completed({
+          reviewers: [
+            { id: "r1", uniqueName: "approver@example.com", vote: 10 },
+            { id: "r2", uniqueName: "bystander@example.com", vote: 0 },
+            { id: "r3", uniqueName: "silent@example.com" },
+          ],
+        }),
+        [],
+      );
+
+      // when
+      const result = await collect();
+
+      // then
+      const reviews = result.events.filter((event) => event.kind === "pr_review");
+      expect(reviews.map((event) => event.actorKey)).toEqual(["approver@example.com"]);
+    });
+
+    it("should not count the creator's own vote as a review", async () => {
+      // given
+      withClosed(
+        completed({
+          reviewers: [
+            { id: "r1", uniqueName: "author@example.com", vote: 10 },
+            { id: "r2", uniqueName: "approver@example.com", vote: 5 },
+          ],
+        }),
+        [],
+      );
+
+      // when
+      const result = await collect();
+
+      // then
+      const reviews = result.events.filter((event) => event.kind === "pr_review");
+      expect(reviews.map((event) => event.actorKey)).toEqual(["approver@example.com"]);
     });
   });
 
@@ -526,7 +949,8 @@ describe("AzureDevOpsCollector", () => {
       expect(byKind("pull_request").find((event) => event.externalId === "1:closed")?.outcome).toBe(
         "abandoned",
       );
-      expect(byKind("pr_review")[0]).toMatchObject({ outcome: "no_vote" });
+      // A reviewer with no vote never reviewed, so no review is recorded.
+      expect(byKind("pr_review")).toEqual([]);
       expect(byKind("build")[0]).toMatchObject({ outcome: null, actorKey: null });
     });
 

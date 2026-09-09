@@ -30,6 +30,11 @@ export interface GithubCommitNode {
     readonly avatarUrl?: string;
     readonly user?: GithubActorNode;
   };
+  /**
+   * How many histories the commit joins. Two or more is a merge commit, whose
+   * diff is the sum of the commits it joins rather than work of its own.
+   */
+  readonly parents?: { readonly totalCount?: number };
 }
 
 export interface GithubPageInfo {
@@ -45,6 +50,8 @@ export interface GithubReviewNode {
 }
 
 export interface GithubPullRequestNode {
+  /** The node id, which is what a follow-up `nodes(ids:)` query is addressed by. */
+  readonly id?: string;
   readonly number?: number;
   readonly title?: string;
   readonly state?: string;
@@ -52,6 +59,15 @@ export interface GithubPullRequestNode {
   readonly closedAt?: string;
   readonly mergedAt?: string;
   readonly author?: GithubActorNode;
+  /**
+   * The commit the merge put on the base branch. Its parent count is what tells
+   * a merge commit apart from a squash or a rebase, because GitHub reports the
+   * merge method nowhere else.
+   */
+  readonly mergeCommit?: {
+    readonly oid?: string;
+    readonly parents?: { readonly totalCount?: number };
+  } | null;
   readonly reviews?: { readonly nodes?: readonly (GithubReviewNode | null)[] };
 }
 
@@ -86,10 +102,29 @@ export interface GithubSearchResponse {
   readonly errors?: readonly { readonly message?: string }[];
 }
 
+/** The commits of one pull request, fetched by node id after a search. */
+export interface GithubPullRequestCommitsNode {
+  readonly number?: number;
+  readonly commits?: {
+    readonly totalCount?: number;
+    readonly nodes?: readonly ({ readonly commit?: GithubCommitNode } | null)[];
+  };
+}
+
+export interface GithubPullRequestCommitsResponse {
+  readonly data?: {
+    readonly rateLimit?: GithubRateLimitNode;
+    readonly nodes?: readonly (GithubPullRequestCommitsNode | null)[];
+  };
+  readonly errors?: readonly { readonly message?: string }[];
+}
+
 export interface GithubWorkflowRunNode {
   readonly id?: number;
   readonly name?: string;
   readonly head_branch?: string;
+  /** The commit the run built, which is what decides whose run it was. */
+  readonly head_sha?: string;
   readonly status?: string;
   readonly conclusion?: string;
   readonly run_started_at?: string;

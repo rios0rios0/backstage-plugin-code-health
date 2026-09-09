@@ -38,6 +38,7 @@ const createCollector = (
 const operationOf = (body: string): string => {
   const parsed = JSON.parse(body) as { query: string; variables: Record<string, unknown> };
   if (parsed.query.includes("CodeHealthHistory")) return "history";
+  if (parsed.query.includes("CodeHealthPullRequestCommits")) return "pullRequestCommits";
   return "pullRequests";
 };
 
@@ -137,6 +138,61 @@ describe("GithubCollector", () => {
         actorKey: "devexample",
         actorName: "DevExample",
       });
+    });
+
+    it("should not count a merge commit from the branch history", async () => {
+      // given
+      // A merge commit's diff against its first parent is the sum of the
+      // commits it joins, so counting it credits the merger with a phantom
+      // commit and the author's churn a second time.
+      server
+        .on("/graphql", (request) => {
+          if (operationOf(request.body) !== "history") return { body: emptySearch };
+          return {
+            body: {
+              data: {
+                repository: {
+                  defaultBranchRef: {
+                    name: "main",
+                    target: {
+                      history: {
+                        pageInfo: { hasNextPage: false },
+                        nodes: [
+                          {
+                            oid: "merge-sha",
+                            messageHeadline: "Merge pull request #42 from acme/feature",
+                            committedDate: "2026-08-09T12:00:00Z",
+                            additions: 500,
+                            deletions: 40,
+                            author: { user: { login: "Merger" } },
+                            parents: { totalCount: 2 },
+                          },
+                          {
+                            oid: "work-sha",
+                            committedDate: "2026-08-09T10:00:00Z",
+                            additions: 500,
+                            deletions: 40,
+                            author: { user: { login: "Author" } },
+                            parents: { totalCount: 1 },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          };
+        })
+        .on("/actions/runs", () => ({ body: { workflow_runs: [] } }));
+
+      // when
+      const result = await collect();
+
+      // then
+      const commits = result.events.filter((event) => event.kind === "commit");
+      expect(commits.map((event) => event.externalId)).toEqual(["work-sha"]);
+      expect(commits[0]?.actorKey).toBe("author");
     });
 
     it("should fall back to the commit e-mail when the author has no linked account", async () => {
@@ -375,6 +431,203 @@ describe("GithubCollector", () => {
       expect(reviews.map((event) => event.outcome).sort()).toEqual(["approved", "rejected"]);
     });
 
+    it("should fetch the commits a pull request merged with a merge commit brought in", async () => {
+      // given
+      // Those commits keep the dates they were written on, so the branch
+      // history for the day of the merge never returns them, and the day they
+      // were written was fetched before they were on the branch.
+      server
+        .on("/graphql", (request) => {
+          const operation = operationOf(request.body);
+          if (operation === "history") {
+            return {
+              body: {
+                data: {
+                  repository: {
+                    defaultBranchRef: {
+                      name: "main",
+                      target: {
+                        history: {
+                          pageInfo: {},
+                          nodes: [
+                            {
+                              oid: "merge-sha",
+                              committedDate: "2026-08-09T12:00:00Z",
+                              additions: 30,
+                              deletions: 3,
+                              author: { user: { login: "Merger" } },
+                              parents: { totalCount: 2 },
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            };
+          }
+          if (operation === "pullRequestCommits") {
+            return {
+              body: {
+                data: {
+                  nodes: [
+                    {
+                      number: 42,
+                      commits: {
+                        totalCount: 2,
+                        nodes: [
+                          {
+                            commit: {
+                              oid: "work-1",
+                              committedDate: "2026-08-06T09:00:00Z",
+                              additions: 20,
+                              deletions: 1,
+                              author: { user: { login: "Author" } },
+                              parents: { totalCount: 1 },
+                            },
+                          },
+                          {
+                            commit: {
+                              oid: "work-2",
+                              committedDate: "2026-08-07T09:00:00Z",
+                              additions: 10,
+                              deletions: 2,
+                              author: { user: { login: "Author" } },
+                              parents: { totalCount: 1 },
+                            },
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            };
+          }
+          const search = String(graphqlVariables(request.body).search);
+          if (!search.includes("closed:")) return { body: emptySearch };
+          return {
+            body: {
+              data: {
+                search: {
+                  pageInfo: {},
+                  nodes: [
+                    {
+                      id: "PR_node_42",
+                      number: 42,
+                      state: "MERGED",
+                      createdAt: "2026-08-06T08:00:00Z",
+                      mergedAt: "2026-08-09T12:00:00Z",
+                      author: { login: "Author" },
+                      mergeCommit: { oid: "merge-sha", parents: { totalCount: 2 } },
+                    },
+                  ],
+                },
+              },
+            },
+          };
+        })
+        .on("/actions/runs", () => ({ body: { workflow_runs: [] } }));
+
+      // when
+      const result = await collect();
+
+      // then
+      const commits = result.events.filter((event) => event.kind === "commit");
+      expect(commits.map((event) => event.externalId).sort()).toEqual(["work-1", "work-2"]);
+      expect(commits.every((event) => event.actorKey === "author")).toBe(true);
+      // Stored where they happened, not on the day of the merge.
+      expect(commits.map((event) => event.occurredAt.toISOString()).sort()).toEqual([
+        "2026-08-06T09:00:00.000Z",
+        "2026-08-07T09:00:00.000Z",
+      ]);
+      const lookup = server.requests.find((request) =>
+        request.body.includes("CodeHealthPullRequestCommits"),
+      );
+      expect(graphqlVariables(lookup!.body)).toEqual({ ids: ["PR_node_42"] });
+    });
+
+    it("should not fetch commits for a pull request merged linearly", async () => {
+      // given
+      // A squash or a rebase puts commits dated at the merge on the branch,
+      // and those the history already returns.
+      server
+        .on("/graphql", (request) => {
+          if (operationOf(request.body) === "history") return { body: emptyHistory };
+          const search = String(graphqlVariables(request.body).search);
+          if (!search.includes("closed:")) return { body: emptySearch };
+          return {
+            body: {
+              data: {
+                search: {
+                  pageInfo: {},
+                  nodes: [
+                    {
+                      id: "PR_node_43",
+                      number: 43,
+                      mergedAt: "2026-08-09T12:00:00Z",
+                      author: { login: "Author" },
+                      mergeCommit: { oid: "squash-sha", parents: { totalCount: 1 } },
+                    },
+                  ],
+                },
+              },
+            },
+          };
+        })
+        .on("/actions/runs", () => ({ body: { workflow_runs: [] } }));
+
+      // when
+      await collect();
+
+      // then
+      expect(
+        server.requests.filter((request) => request.body.includes("CodeHealthPullRequestCommits")),
+      ).toEqual([]);
+    });
+
+    it("should not count a review by the pull request's own author", async () => {
+      // given
+      // Commenting on your own pull request is not reviewing it.
+      server
+        .on("/graphql", (request) => {
+          if (operationOf(request.body) === "history") return { body: emptyHistory };
+          const search = String(graphqlVariables(request.body).search);
+          if (!search.includes("closed:")) return { body: emptySearch };
+          return {
+            body: {
+              data: {
+                search: {
+                  pageInfo: {},
+                  nodes: [
+                    {
+                      number: 44,
+                      mergedAt: "2026-08-09T12:00:00Z",
+                      author: { login: "DevExample" },
+                      reviews: {
+                        nodes: [
+                          { id: "self", state: "COMMENTED", author: { login: "devexample" } },
+                          { id: "peer", state: "APPROVED", author: { login: "Reviewer" } },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          };
+        })
+        .on("/actions/runs", () => ({ body: { workflow_runs: [] } }));
+
+      // when
+      const result = await collect();
+
+      // then
+      const reviews = result.events.filter((event) => event.kind === "pr_review");
+      expect(reviews.map((event) => event.actorKey)).toEqual(["reviewer"]);
+    });
+
     it("should discard a result outside the real window bounds", async () => {
       // given
       // GitHub search filters by calendar day, so a window narrower than a day
@@ -483,6 +736,112 @@ describe("GithubCollector", () => {
         outcome: "failed",
         actorKey: "devexample",
       });
+    });
+
+    it("should credit a run to the author of the pull request whose merge it built", async () => {
+      // given
+      // The post-merge run is requested by whoever pressed the button, and it
+      // built the author's change.
+      server
+        .on("/actions/runs", () => ({
+          body: {
+            workflow_runs: [
+              {
+                id: 901,
+                head_branch: "main",
+                head_sha: "merge-sha",
+                conclusion: "success",
+                updated_at: "2026-08-09T12:05:00Z",
+                actor: { login: "Merger" },
+              },
+            ],
+          },
+        }))
+        .on("/graphql", (request) => {
+          if (operationOf(request.body) === "history") return { body: emptyHistory };
+          const search = String(graphqlVariables(request.body).search);
+          if (!search.includes("closed:")) return { body: emptySearch };
+          return {
+            body: {
+              data: {
+                search: {
+                  pageInfo: {},
+                  nodes: [
+                    {
+                      number: 42,
+                      mergedAt: "2026-08-09T12:00:00Z",
+                      author: { login: "Author", avatarUrl: "https://avatar/author" },
+                      mergeCommit: { oid: "merge-sha", parents: { totalCount: 1 } },
+                    },
+                  ],
+                },
+              },
+            },
+          };
+        });
+
+      // when
+      const result = await collect();
+
+      // then
+      const build = result.events.find((event) => event.kind === "build");
+      expect(build).toMatchObject({
+        actorKey: "author",
+        actorName: "Author",
+        actorAvatarUrl: "https://avatar/author",
+      });
+      expect(build?.payload).toMatchObject({ commitSha: "merge-sha" });
+    });
+
+    it("should credit a run to the author of the commit it built", async () => {
+      // given
+      server
+        .on("/actions/runs", () => ({
+          body: {
+            workflow_runs: [
+              {
+                id: 902,
+                head_sha: "abc123",
+                conclusion: "failure",
+                updated_at: "2026-08-09T11:00:00Z",
+                actor: { login: "Merger" },
+              },
+            ],
+          },
+        }))
+        .on("/graphql", (request) => {
+          if (operationOf(request.body) !== "history") return { body: emptySearch };
+          return {
+            body: {
+              data: {
+                repository: {
+                  defaultBranchRef: {
+                    name: "main",
+                    target: {
+                      history: {
+                        pageInfo: {},
+                        nodes: [
+                          {
+                            oid: "abc123",
+                            committedDate: "2026-08-09T10:00:00Z",
+                            author: { user: { login: "DevExample" } },
+                            parents: { totalCount: 1 },
+                          },
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          };
+        });
+
+      // when
+      const result = await collect();
+
+      // then
+      expect(result.events.find((event) => event.kind === "build")?.actorKey).toBe("devexample");
     });
 
     it("should carry on when the repository has Actions disabled", async () => {

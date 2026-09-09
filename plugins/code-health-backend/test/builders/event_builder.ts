@@ -58,6 +58,12 @@ export class EventBuilder {
     return this;
   }
 
+  /** The provider's own identifier — a commit sha, a run id. */
+  withExternalId(externalId: string): EventBuilder {
+    this.props = { ...this.props, externalId };
+    return this;
+  }
+
   withActor(actorKey: string | null, actorName?: string): EventBuilder {
     this.props = {
       ...this.props,

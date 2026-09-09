@@ -38,6 +38,7 @@ export class ContributorBuilder {
       prApprovalRate: 50,
       pipelineRuns: 10,
       pipelineRunsSucceeded: 9,
+      pipelineRunsFailed: 1,
       pipelineSuccessRate: 90,
       repositories: 3,
       sonarMetrics: null,
@@ -149,6 +150,19 @@ export class ContributorBuilder {
 
   withPipelineSuccessRate(rate: number): this {
     this.props = { ...this.props, pipelineSuccessRate: rate };
+    return this;
+  }
+
+  /** Every run counted, and the two verdicts among them; the rest were cancelled or skipped. */
+  withPipelineRuns(counts: { runs: number; succeeded: number; failed: number }): this {
+    const decided = counts.succeeded + counts.failed;
+    this.props = {
+      ...this.props,
+      pipelineRuns: counts.runs,
+      pipelineRunsSucceeded: counts.succeeded,
+      pipelineRunsFailed: counts.failed,
+      pipelineSuccessRate: decided === 0 ? 0 : Math.round((counts.succeeded / decided) * 1000) / 10,
+    };
     return this;
   }
 

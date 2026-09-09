@@ -270,6 +270,17 @@ const ChurnCell = ({ contributor }: { contributor: ContributorSummary }) => {
   return <EmptyCell />;
 };
 
+/**
+ * What the Sonar columns are, said once and shown on every one of them.
+ *
+ * A number in a "Bugs" column on a row that carries a person's name reads as
+ * that person's bugs. It is not: Sonar measures a project, and the row carries
+ * the totals of the repositories the person changed the code of. Without the
+ * explanation the column measures whoever works on the oldest repositories.
+ */
+const SONAR_HELP =
+  "Sonar measures a repository, not a person. This is the total over the repositories this person committed to or merged into in the window — what the code they worked on looks like, not what they wrote — so two people on the same repository show the same figure, and reviewing or building there does not count.";
+
 const columns: ColumnDef<ContributorSummary>[] = [
   {
     accessorKey: "displayName",
@@ -300,7 +311,7 @@ const columns: ColumnDef<ContributorSummary>[] = [
     header: () => (
       <HeaderWithHelp
         label="PRs approved"
-        help="Other people's pull requests this person reviewed and voted to approve, out of every pull request they reviewed. This is review work done, not their own pull requests."
+        help="Other people's pull requests this person reviewed and voted to approve, out of every pull request they reviewed. This is review work done, not their own pull requests: a vote on one's own pull request is not counted, and on Azure DevOps neither is a reviewer who was added and never voted."
       />
     ),
     cell: ({ row }) => (
@@ -320,7 +331,7 @@ const columns: ColumnDef<ContributorSummary>[] = [
     header: () => (
       <HeaderWithHelp
         label="Code churn"
-        help="Lines added minus lines deleted, floored at zero — a window someone spent mostly deleting code is a real contribution, not a negative one. Azure DevOps reports changed files instead and exposes no line count anywhere in its API, so those rows count files. Each row prints its own unit, and the column sorts on whichever it is."
+        help="Lines added minus lines deleted over the commits this person authored, floored at zero — a window someone spent mostly deleting code is a real contribution, not a negative one. The commit a merge produces is credited to the pull request's author, and a merge commit is not counted at all, so merging somebody else's work adds nothing here. Azure DevOps reports changed files instead and exposes no line count anywhere in its API, so those rows count files. Each row prints its own unit, and the column sorts on whichever it is."
       />
     ),
     cell: ({ row }) => <ChurnCell contributor={row.original} />,
@@ -342,14 +353,15 @@ const columns: ColumnDef<ContributorSummary>[] = [
     header: () => (
       <HeaderWithHelp
         label="Pipeline"
-        help="Of the pipeline runs requested for this person in the window, the share that succeeded, with the counts beside it. A run is attributed to whoever it was requested for, so a build triggered by their merge counts here even if somebody else pressed the button."
+        help="Of this person's pipeline runs that reached a verdict, the share that succeeded, with succeeded over decided beside it. Cancelled and skipped runs count on neither side: a run superseded by a newer push is not a failure. A run belongs to the author of the change it built — the pull request whose merge produced the commit, else the commit's own author — never to whoever pressed the merge button."
       />
     ),
     cell: ({ row }) => (
       <Box display="flex" alignItems="baseline" gridGap={4}>
         <RateCell rate={row.original.pipelineSuccessRate} />
         <Typography variant="caption" color="textSecondary">
-          ({row.original.pipelineRunsSucceeded}/{row.original.pipelineRuns})
+          ({row.original.pipelineRunsSucceeded}/
+          {row.original.pipelineRunsSucceeded + row.original.pipelineRunsFailed})
         </Typography>
       </Box>
     ),
@@ -358,35 +370,35 @@ const columns: ColumnDef<ContributorSummary>[] = [
   {
     id: "bugs",
     accessorFn: (row) => row.sonarMetrics?.bugs ?? null,
-    header: "Bugs",
+    header: () => <HeaderWithHelp label="Bugs" help={SONAR_HELP} />,
     cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
     id: "codeSmells",
     accessorFn: (row) => row.sonarMetrics?.codeSmells ?? null,
-    header: "Smells",
+    header: () => <HeaderWithHelp label="Smells" help={SONAR_HELP} />,
     cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
     id: "securityHotspots",
     accessorFn: (row) => row.sonarMetrics?.securityHotspots ?? null,
-    header: "Hotspots",
+    header: () => <HeaderWithHelp label="Hotspots" help={SONAR_HELP} />,
     cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
     id: "vulnerabilities",
     accessorFn: (row) => row.sonarMetrics?.vulnerabilities ?? null,
-    header: "Vulns",
+    header: () => <HeaderWithHelp label="Vulns" help={SONAR_HELP} />,
     cell: ({ getValue }) => <MetricCell value={getValue<number | null>()} />,
     enableColumnFilter: false,
   },
   {
     id: "coverage",
     accessorFn: (row) => row.sonarMetrics?.coverage ?? null,
-    header: "Coverage",
+    header: () => <HeaderWithHelp label="Coverage" help={SONAR_HELP} />,
     cell: ({ getValue }) => {
       const v = getValue<number | null>();
       return <MetricCell value={v !== null ? formatRate(v) : null} />;
@@ -396,7 +408,7 @@ const columns: ColumnDef<ContributorSummary>[] = [
   {
     id: "duplications",
     accessorFn: (row) => row.sonarMetrics?.duplications ?? null,
-    header: "Dups",
+    header: () => <HeaderWithHelp label="Dups" help={SONAR_HELP} />,
     cell: ({ getValue }) => {
       const v = getValue<number | null>();
       return <MetricCell value={v !== null ? formatRate(v) : null} />;
@@ -406,7 +418,7 @@ const columns: ColumnDef<ContributorSummary>[] = [
   {
     id: "technicalDebt",
     accessorFn: (row) => row.sonarMetrics?.technicalDebt ?? null,
-    header: "Debt",
+    header: () => <HeaderWithHelp label="Debt" help={SONAR_HELP} />,
     cell: ({ getValue }) => <MetricCell value={getValue<string | null>()} />,
     enableColumnFilter: false,
   },

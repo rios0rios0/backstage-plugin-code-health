@@ -40,7 +40,10 @@ export interface FleetKpis {
   readonly activeContributors: number;
   readonly commits: number;
   readonly pullRequestsMerged: number;
-  /** Percentage of pipeline runs that succeeded, or null with no runs. */
+  /**
+   * Percentage of pipeline runs that succeeded, over the runs that reached a
+   * verdict, or null with none. Cancelled and still-running runs are neither.
+   */
   readonly buildSuccessRate: number | null;
   /** Percentage of merged pull requests that carry at least one review. */
   readonly reviewCoverage: number | null;
@@ -182,10 +185,14 @@ export const computeKpis = (
   repositories: readonly RepositorySummary[],
   contributors: readonly ContributorSummary[],
 ): FleetKpis => {
-  const builds = sum(repositories.map((repository) => repository.activity.builds));
   const succeeded = sum(
     repositories.map((repository) => repository.activity.buildsSucceeded),
   );
+  const failed = sum(repositories.map((repository) => repository.activity.buildsFailed));
+  // Only the runs that reached a verdict: a run cancelled because a newer push
+  // superseded it is neither a success nor a failure, and on a workflow that
+  // cancels in-progress runs it would otherwise be most of the denominator.
+  const decided = succeeded + failed;
   const merged = sum(
     repositories.map((repository) => repository.activity.pullRequestsMerged),
   );
@@ -200,7 +207,7 @@ export const computeKpis = (
       .length,
     commits: sum(repositories.map((repository) => repository.activity.commits)),
     pullRequestsMerged: merged,
-    buildSuccessRate: builds > 0 ? computeRate(succeeded, builds) : null,
+    buildSuccessRate: decided > 0 ? computeRate(succeeded, decided) : null,
     // Capped at 100: a pull request can collect more than one review, and a
     // "coverage" figure above 100% is a unit error on its face.
     reviewCoverage: merged > 0 ? Math.min(100, computeRate(reviews, merged)) : null,

@@ -37,6 +37,7 @@ rather than showing an empty dashboard.
 - **Compliance checks**: pipeline present, build policy on pull requests, build policy expiration and branch protection
 - **README badge audit**: which of the six standard shields are present in each repository's README
 - **Contributor metrics**: commits, code churn, pull requests created and pull requests approved as separate columns, review approval rate and pipeline success rate — every rate explains what it divides in a tooltip on its heading
+- **Merged work is credited to whoever did it, not to whoever merged it**: a squash commit goes to the pull request's author whatever the provider stamped on it, a merge commit is not counted at all and the pull request's own commits are, and a pipeline run belongs to the author of the change it built. See [Attribution](plugins/code-health-backend/docs/attribution.md)
 - **Honest churn units**: GitHub reports added and deleted lines; Azure DevOps reports changed files and exposes no line count anywhere in its API, so each row prints the unit its provider actually gave rather than showing zero
 - **Insights**: the landing tab, with the fleet-level figures and charts — delivery cadence, top contributors, most active repositories, review load, quality-gate and branch-policy breakdowns, test-coverage distribution, and the documentation and catalog-API gaps
 - **Catalog links**: repository rows and contributors link through to their catalog entity, and a contributor matched to a `User` shows that entity's name and picture
@@ -176,9 +177,10 @@ codeHealth:
       timeout: { hours: 1 }
 ```
 
-**How long the first backfill takes.** Roughly three requests per repository per day. With the
-defaults — a 500-request budget every five minutes — 500 repositories take about four days to reach
-a full year. Raising `backfillChunk` to `P7D` brings that under a day. The dashboard is useful
+**How long the first backfill takes.** Roughly three requests per repository per day, plus one or
+two for each pull request merged with a merge commit, whose commits the branch history never returns
+on its own. With the defaults — a 500-request budget every five minutes — 500 repositories take about
+four days to reach a full year. Raising `backfillChunk` to `P7D` brings that under a day. The dashboard is useful
 throughout: the actor collects the recent window before it starts walking backwards, so the last day
 is answerable from the first run and wider ranges unlock as the backfill advances.
 
@@ -245,6 +247,12 @@ derived, what the provider cannot answer and why:
 - [Jira](plugins/code-health-backend/docs/jira.md)
 - [Confluence](plugins/code-health-backend/docs/confluence.md)
 
+The version control figures have a reference of their own, because whose row a fact lands on is the
+whole of a per-person metric:
+
+- [Attribution](plugins/code-health-backend/docs/attribution.md) — who a commit, a build and a
+  review belong to, and how each provider's stamp is corrected
+
 ### Identities — making a contributor row a person
 
 Every system identifies people differently, and only a shared e-mail address joins any two of them
@@ -262,6 +270,34 @@ Links are applied when a row is built rather than when a measurement is taken, s
 retroactive across every window the plugin has ever collected. An account nobody has linked keeps a
 row of its own — hiding it would hide every bot, every service account, and everybody nobody has got
 round to linking, which are exactly the rows that show the work is not finished.
+
+### Who a commit, a build and a review belong to
+
+Both providers stamp whoever **merges** a pull request on everything the merge produces: the squash
+commit, the merge commit, the pipeline run it triggers. Read at face value, the person who completes
+most pull requests looks like the author of everything, which is the opposite of what a contributors
+table is for. So:
+
+- A **squash commit** is credited to the pull request's author, whatever the provider stamped on it.
+- A **merge commit** is not counted at all — its diff is the sum of the commits it joins — and the
+  pull request's own commits are fetched and stored under the dates they were written, because the
+  branch history for the day of the merge never returns them.
+- A **rebase** keeps every commit's own author and needs no correction.
+- A **pipeline run** belongs to the author of the change it built: the pull request whose merge
+  produced the commit, else the commit's author, else whoever requested the run. Its success rate
+  divides by the runs that reached a verdict, so a run cancelled by a newer push is not a failure.
+- A **review** is a vote cast on somebody else's pull request. The author's own vote is not one,
+  and on Azure DevOps neither is a reviewer who was added and never voted.
+- The **Sonar** figures on a contributor row sum over the repositories the person committed to or
+  merged into, and say so on every heading — Sonar measures a project, not a person.
+
+[Attribution](plugins/code-health-backend/docs/attribution.md) states every rule with the provider
+field it is decided from, and what each provider cannot answer.
+
+**Upgrading from `3.0.0` or earlier re-walks the history.** The rows those releases stored credit the
+merger, and nothing can repair them in place. On its first start the backend sends every tracked
+repository's ingestion cursors back to where a fresh install starts and re-collects; the last day is
+answerable from the first run, and wider ranges unlock as the backfill advances.
 
 ### Presentation
 
