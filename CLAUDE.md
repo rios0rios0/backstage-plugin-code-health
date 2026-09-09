@@ -78,7 +78,10 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/domain/commands/list_owned_repositories.ts` | The repositories a person owns, through `spec.owner` and their group ancestry |
 | `src/domain/commands/reset_ingestion.ts` | Sends every tracked repository's cursors back over the reach asked for and drops what the walk re-collects |
 | `src/domain/commands/authorize_administrator.ts` | The two gates a reset passes: named in `codeHealth.administrators`, *and* allowed by the permission framework |
-| `src/permissions.ts` | `code-health.ingestion.reset`, registered by the plugin and exported so a policy or the RBAC plugin can name it |
+| `src/domain/entities/permissions.ts` | `code-health.ingestion.reset`, registered by the plugin and exported so a policy or the RBAC plugin can name it |
+| `src/domain/entities/bucket.ts` | Where a day's bucket starts and ends — shared by the cadence series and both trends, with the end bounded by the window so no snapshot taken after it is read |
+| `src/domain/entities/contributor_aggregation.ts` | The per-person accumulation the contributors list and a trend's every bucket run through, split from the naming and Sonar pass that needs the catalog |
+| `src/domain/entities/repository_summary_builder.ts` | One repository row from a snapshot and a window's events, built once for the table and once per bucket for a trend |
 | `migrations/20260910000000_owner.js` | The `owner_ref` column discovery writes the catalog's `spec.owner` to |
 | `src/infrastructure/services/collectors/` | Azure DevOps and GitHub collectors |
 | `src/infrastructure/services/wakatime_enricher.ts` | Coding time and AI tokens, per member per day |
@@ -94,7 +97,7 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | File | Purpose |
 |---|---|
 | `src/plugin.ts` / `src/alpha.tsx` | Legacy and declarative entry points |
-| `src/main/apis.ts` / `src/main/api_refs.ts` | `createApiFactory` wiring; one stateless client behind six data refs (repositories, contributors, coverage, time series, integrations, identities), plus a separate config ref |
+| `src/main/apis.ts` / `src/main/api_refs.ts` | `createApiFactory` wiring; one stateless client behind nine data refs (repositories, contributors, coverage, time series, integrations, identities, trends, ownership, administration), plus a separate config ref |
 | `src/infrastructure/http/code_health_backend_client.ts` | The only thing the browser talks to |
 | `src/main/router.tsx` | Page composition, the backend-reachability gate and the capabilities probe; Insights is the root tab |
 | `src/presentation/pages/identities_page.tsx` | Attaching an account to a catalog `User` — the plugin's only write |
@@ -109,6 +112,10 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/presentation/components/score_card.tsx` | A score beside the components it was folded from; the number is never drawn without them |
 | `src/presentation/components/trend_range_picker.tsx` | One to six months, bounded by what the backfill reached |
 | `src/presentation/hooks/use_trend_window.ts` | The months picked, turned into a window and the bucket `trendBucketFor` implies |
+| `src/domain/entities/contributor_trend.ts` | Turns a person's trend points into chart series, with null where a bucket measured nothing and zero where it measured nothing happening |
+| `src/presentation/hooks/use_contributor_trend.ts` / `use_owned_repositories.ts` | The contributor page's two reads |
+| `src/presentation/components/owned_repositories_card.tsx` | The repositories a person owns, worst health first, and what to do when they own none |
+| `src/domain/entities/repository_trend.ts` / `src/presentation/hooks/use_repository_trend.ts` | The repository page's series and its one read; a backend 404 reads as "not tracked" rather than as a failure |
 | `src/presentation/components/ingestion_reset_button.tsx` | The administrator's reset — the access probe, the reach and the confirmation |
 | `src/presentation/hooks/use_access.ts` | `/v1/access`, asked once; unreachable reads as "not an administrator" rather than as an error panel |
 | `src/domain/entities/reset_reach.ts` | Which reaches a reset offers, in months, each converted to days and bounded by the retention |
