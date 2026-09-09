@@ -172,3 +172,38 @@ describe("DashboardPage", () => {
     expect(service.callCount).toBe(0);
   });
 });
+
+describe("DashboardPage audits", () => {
+  it("should audit documentation, catalog APIs and policy above the table", async () => {
+    // given
+    // All three findings name a repository and are closed by editing one or its
+    // catalog entity, so they sit beside the list of them rather than on the
+    // fleet's overview.
+    const service = new StubDashboardService().withRepositories([
+      RepositoryBuilder.create()
+        .withName("gateway")
+        .withDocumentationState("unpublished", { hasDocsSource: true })
+        .withApiExposureState("candidate", "api/openapi.yaml")
+        .withComplianceColor("green")
+        .build(),
+    ]);
+
+    // when
+    render(
+      <DashboardPage
+        dashboardService={service}
+        coverage={coverageResult()}
+        config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
+      />,
+    );
+
+    // then
+    await waitFor(() => expect(screen.getByText("Documentation")).toBeInTheDocument());
+    expect(screen.getByText("has a docs/ tree")).toBeInTheDocument();
+    expect(screen.getByText("Catalog APIs")).toBeInTheDocument();
+    expect(screen.getByText("api/openapi.yaml")).toBeInTheDocument();
+    expect(screen.getByText("Fleet health")).toBeInTheDocument();
+    expect(screen.getByLabelText("Compliant: 1 of 1")).toBeInTheDocument();
+  });
+});

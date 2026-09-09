@@ -15,6 +15,8 @@ import {
   codeHealthTrendsApiRef,
 } from "../../src/main/api_refs";
 import { Router } from "../../src/main/router";
+import { rootRouteRef } from "../../src/routes";
+import { ContributorBuilder } from "../builders/contributor_builder";
 import { RepositoryBuilder } from "../builders/repository_builder";
 import { StubAdministrationService } from "../doubles/stub_administration_service";
 import { StubAppThemeApi } from "../doubles/stub_app_theme_api";
@@ -71,7 +73,10 @@ const renderRouter = async (
     >
       <Router />
     </TestApiProvider>,
-    { routeEntries: [overrides.path ?? "/"] },
+    // The plugin root is mounted here the way a consuming app mounts the
+    // routable extension, because the Contributors rankings resolve their links
+    // to the detail pages through `useRouteRef`.
+    { routeEntries: [overrides.path ?? "/"], mountedRoutes: { "/": rootRouteRef } },
   );
 
   return {
@@ -101,9 +106,33 @@ describe("Router", () => {
     // Insights leads because it is the only tab that answers a question about
     // the fleet rather than about one row of it.
     expect(await screen.findByText("At a glance")).toBeInTheDocument();
+    expect(screen.getByText("Delivery cadence")).toBeInTheDocument();
+    expect(screen.getByText("Test coverage across the fleet")).toBeInTheDocument();
+    // Everything that names a person or a repository moved to the tab that
+    // lists them, where each row is also the way into its detail page.
+    expect(screen.queryByText("Top contributors")).not.toBeInTheDocument();
+    expect(screen.queryByText("Documentation")).not.toBeInTheDocument();
   });
 
-  it("should render the repositories table on its own tab", async () => {
+  it("should rank people and repositories on the contributors tab", async () => {
+    // given
+    const contributorService = new StubContributorService().withContributors([
+      ContributorBuilder.create().withDisplayName("alice").withCommits(30).build(),
+    ]);
+    const dashboardService = new StubDashboardService().withRepositories([
+      RepositoryBuilder.create().withName("gateway").withActivity({ commits: 9 }).build(),
+    ]);
+
+    // when
+    await renderRouter({ contributorService, dashboardService, path: "/contributors" });
+
+    // then
+    expect(await screen.findByText("Top contributors")).toBeInTheDocument();
+    expect(screen.getByText("Review load")).toBeInTheDocument();
+    expect(screen.getByText("Most active repositories")).toBeInTheDocument();
+  });
+
+  it("should render the repositories table on its own tab, under the audits", async () => {
     // given
     const dashboardService = new StubDashboardService().withRepositories([
       RepositoryBuilder.create().withName("gateway").build(),
@@ -114,6 +143,9 @@ describe("Router", () => {
 
     // then
     expect(await screen.findByText("user/gateway")).toBeInTheDocument();
+    expect(screen.getByText("Documentation")).toBeInTheDocument();
+    expect(screen.getByText("Catalog APIs")).toBeInTheDocument();
+    expect(screen.getByText("Fleet health")).toBeInTheDocument();
   });
 
   it("should show every tab, insights first", async () => {

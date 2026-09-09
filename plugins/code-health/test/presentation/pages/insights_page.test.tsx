@@ -35,7 +35,8 @@ const renderPage = (
   const timeSeriesService = overrides.timeSeriesService ?? new StubTimeSeriesService();
 
   render(
-    // The rankings link to catalog entities, so the page needs a router.
+    // The least-covered ranking links to catalog entities, so the page needs a
+    // router even now that the people rankings have moved off it.
     <MemoryRouter>
       <InsightsPage
         dashboardService={dashboardService}
@@ -67,8 +68,10 @@ describe("InsightsPage", () => {
     expect(screen.getByText("of 2 tracked")).toBeInTheDocument();
   });
 
-  it("should rank contributors by commits", async () => {
+  it("should count the contributors it fetched without naming any of them", async () => {
     // given
+    // Ranking people is the Contributors tab's job now. Insights answers
+    // questions about the fleet, and a name is not one of them.
     const contributorService = new StubContributorService().withContributors([
       ContributorBuilder.create().withDisplayName("alice").withCommits(30).build(),
       ContributorBuilder.create().withDisplayName("bob").withCommits(2).build(),
@@ -78,31 +81,12 @@ describe("InsightsPage", () => {
     renderPage({ contributorService });
 
     // then
-    await waitFor(() => expect(screen.getByText("Top contributors")).toBeInTheDocument());
-    const ranked = screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"));
-    expect(ranked[0]).toContain("alice: 30 commits");
-  });
-
-  it("should link a contributor that resolved to a catalog user", async () => {
-    // given
-    const contributorService = new StubContributorService().withContributors([
-      ContributorBuilder.create()
-        .withDisplayName("alice")
-        .withCommits(30)
-        .withEntityRef("user:default/alice")
-        .withReviewsGiven(0)
-        .build(),
-    ]);
-
-    // when
-    renderPage({ contributorService });
-
-    // then
-    await waitFor(() => expect(screen.getByText("alice")).toBeInTheDocument());
-    expect(screen.getByRole("link", { name: "alice" })).toHaveAttribute(
-      "href",
-      "/catalog/default/user/alice",
-    );
+    await waitFor(() => expect(screen.getByText("Contributors")).toBeInTheDocument());
+    expect(screen.getByText("committed in window")).toBeInTheDocument();
+    expect(screen.queryByText("Top contributors")).not.toBeInTheDocument();
+    expect(screen.queryByText("Review load")).not.toBeInTheDocument();
+    expect(screen.queryByText("Most active repositories")).not.toBeInTheDocument();
+    expect(screen.queryByText("alice")).not.toBeInTheDocument();
   });
 
   it("should ask for daily buckets over a short window", async () => {
@@ -145,7 +129,7 @@ describe("InsightsPage", () => {
   });
 });
 
-describe("InsightsPage fleet coverage, documentation and API cards", () => {
+describe("InsightsPage fleet coverage card", () => {
   it("should report the fleet's test coverage", async () => {
     // given
     const dashboardService = new StubDashboardService().withRepositories([
@@ -188,30 +172,14 @@ describe("InsightsPage fleet coverage, documentation and API cards", () => {
     );
   });
 
-  it("should name the repositories whose documentation was never published", async () => {
+  it("should leave the documentation, API and policy audits to the repositories tab", async () => {
     // given
+    // All three are closed by editing one repository or its catalog entity, so
+    // they belong beside the list of them rather than on the fleet's overview.
     const dashboardService = new StubDashboardService().withRepositories([
       RepositoryBuilder.create()
         .withName("gateway")
         .withDocumentationState("unpublished", { hasDocsSource: true })
-        .build(),
-    ]);
-
-    // when
-    renderPage({ dashboardService });
-
-    // then
-    await waitFor(() =>
-      expect(screen.getByText("Written but not published")).toBeInTheDocument(),
-    );
-    expect(screen.getByText("has a docs/ tree")).toBeInTheDocument();
-  });
-
-  it("should flag the repositories that could be catalog APIs and are not", async () => {
-    // given
-    const dashboardService = new StubDashboardService().withRepositories([
-      RepositoryBuilder.create()
-        .withName("gateway")
         .withApiExposureState("candidate", "api/openapi.yaml")
         .build(),
     ]);
@@ -220,33 +188,11 @@ describe("InsightsPage fleet coverage, documentation and API cards", () => {
     renderPage({ dashboardService });
 
     // then
-    await waitFor(() => expect(screen.getByText("Catalog APIs")).toBeInTheDocument());
-    expect(screen.getByText("api/openapi.yaml")).toBeInTheDocument();
-  });
-
-  it("should say so when there is no documentation or API gap left", async () => {
-    // given
-    const dashboardService = new StubDashboardService().withRepositories([
-      RepositoryBuilder.create()
-        .withName("gateway")
-        .withDocumentationState("documented")
-        .withApiExposureState("declared")
-        .build(),
-    ]);
-
-    // when
-    renderPage({ dashboardService });
-
-    // then
     await waitFor(() =>
-      expect(
-        screen.getByText("Every repository that writes documentation publishes it."),
-      ).toBeInTheDocument(),
+      expect(screen.getByText("Test coverage across the fleet")).toBeInTheDocument(),
     );
-    expect(
-      screen.getByText(
-        "Every repository that looks like it serves an API already declares one.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.queryByText("Documentation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Catalog APIs")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fleet health")).not.toBeInTheDocument();
   });
 });

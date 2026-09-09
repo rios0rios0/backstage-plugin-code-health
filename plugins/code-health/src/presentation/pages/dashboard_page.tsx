@@ -1,10 +1,12 @@
 import { ContentHeader, WarningPanel } from "@backstage/core-components";
 import Box from "@material-ui/core/Box";
+import Grid from "@material-ui/core/Grid";
 import type { IntegrationCapabilities } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthConfig } from "../../domain/entities/code_health_config";
 import type { DashboardService } from "../../domain/services/dashboard_service";
 import { BackfillProgress } from "../components/backfill_progress";
 import { DashboardToolbar } from "../components/dashboard_toolbar";
+import { RepositoryAudits } from "../components/insights/repository_audits";
 import { RepositoryTable } from "../components/repository_table";
 import { useAutoRefresh } from "../hooks/use_auto_refresh";
 import type { UseCoverageResult } from "../hooks/use_coverage";
@@ -20,6 +22,13 @@ interface DashboardPageProps {
   enabled?: boolean;
 }
 
+/**
+ * Every tracked repository, with the three audits that name one.
+ *
+ * The audits sit above the table because each of their rows is a repository the
+ * reader is about to look up in it, and because all three are closed by editing
+ * a repository or its catalog entity rather than by anything the fleet does.
+ */
 export const DashboardPage = ({
   dashboardService,
   coverage,
@@ -66,6 +75,12 @@ export const DashboardPage = ({
           />
         </Box>
       )}
+
+      <Box mb={3}>
+        <Grid container spacing={3}>
+          <RepositoryAudits repositories={repositories} />
+        </Grid>
+      </Box>
 
       <RepositoryTable
         repositories={repositories}
