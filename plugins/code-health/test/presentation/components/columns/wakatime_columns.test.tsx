@@ -1,8 +1,10 @@
+import { renderInTestApp } from "@backstage/test-utils";
 import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { fireEvent, render as renderBare, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { ContributorsTable } from "../../../../src/presentation/components/contributors_table";
 import { RepositoryTable } from "../../../../src/presentation/components/repository_table";
+import { rootRouteRef } from "../../../../src/routes";
 import {
   hasAiMetrics,
   wakaTimeAiColumns,
@@ -19,14 +21,18 @@ const render = (ui: React.ReactElement) => renderBare(<MemoryRouter>{ui}</Memory
 
 const wakatimeOn = { ...NO_INTEGRATIONS, wakatime: true };
 
+// The contributors table resolves each person's page through `useRouteRef`,
+// which needs a mounted route ref rather than only a router. The repository
+// table below has no such link and still renders bare.
 const renderContributors = (contributors: ReturnType<ContributorBuilder["build"]>[]) =>
-  render(
+  renderInTestApp(
     <ContributorsTable
       contributors={contributors}
       totalCount={contributors.length}
       isLoading={false}
       capabilities={wakatimeOn}
     />,
+    { mountedRoutes: { "/": rootRouteRef } },
   );
 
 describe("wakaTimeContributorColumns", () => {
@@ -48,7 +54,7 @@ describe("wakaTimeContributorColumns", () => {
     ]);
   });
 
-  it("should show the time, the average, the language and the branches", () => {
+  it("should show the time, the average, the language and the branches", async () => {
     // given
     const contributor = ContributorBuilder.create()
       .withDisplayName("alice")
@@ -61,7 +67,7 @@ describe("wakaTimeContributorColumns", () => {
       .build();
 
     // when
-    renderContributors([contributor]);
+    await renderContributors([contributor]);
 
     // then
     expect(screen.getByText("10h")).toBeInTheDocument();
@@ -72,7 +78,7 @@ describe("wakaTimeContributorColumns", () => {
     expect(screen.getByText("42")).toBeInTheDocument();
   });
 
-  it("should report active days as a share of the days the window covers", () => {
+  it("should report active days as a share of the days the window covers", async () => {
     // given
     // A high total spread over two days and the same total spread over ten are
     // different weeks.
@@ -81,14 +87,14 @@ describe("wakaTimeContributorColumns", () => {
       .build();
 
     // when
-    renderContributors([contributor]);
+    await renderContributors([contributor]);
 
     // then
     expect(screen.getByText("8")).toBeInTheDocument();
     expect(screen.getByText("of 10")).toBeInTheDocument();
   });
 
-  it("should leave the file count empty when the plan does not report it", () => {
+  it("should leave the file count empty when the plan does not report it", async () => {
     // given
     // Zero files edited by somebody who demonstrably spent eleven hours in an
     // editor is the wrong answer to report.
@@ -97,19 +103,19 @@ describe("wakaTimeContributorColumns", () => {
       .build();
 
     // when
-    renderContributors([contributor]);
+    await renderContributors([contributor]);
 
     // then
     expect(screen.queryByText("42")).not.toBeInTheDocument();
     expect(screen.getAllByText("-").length).toBeGreaterThan(0);
   });
 
-  it("should leave every cell empty for somebody with no WakaTime account", () => {
+  it("should leave every cell empty for somebody with no WakaTime account", async () => {
     // given
     const contributor = ContributorBuilder.create().build();
 
     // when
-    renderContributors([contributor]);
+    await renderContributors([contributor]);
 
     // then
     expect(screen.queryByText("10h")).not.toBeInTheDocument();
@@ -118,7 +124,7 @@ describe("wakaTimeContributorColumns", () => {
 });
 
 describe("wakaTimeAiColumns", () => {
-  it("should show tokens split into input and output", () => {
+  it("should show tokens split into input and output", async () => {
     // given
     const contributor = ContributorBuilder.create()
       .withWakaTimeMetrics(
@@ -135,7 +141,7 @@ describe("wakaTimeAiColumns", () => {
       .build();
 
     // when
-    renderContributors([contributor]);
+    await renderContributors([contributor]);
 
     // then
     expect(screen.getByText("1.5M")).toBeInTheDocument();
@@ -144,7 +150,7 @@ describe("wakaTimeAiColumns", () => {
     expect(screen.getByText("12 prompts")).toBeInTheDocument();
   });
 
-  it("should leave the AI share empty when nothing was written at all", () => {
+  it("should leave the AI share empty when nothing was written at all", async () => {
     // given
     // Nobody wrote anything is not the same as a human wrote everything.
     const contributor = ContributorBuilder.create()
@@ -152,7 +158,7 @@ describe("wakaTimeAiColumns", () => {
       .build();
 
     // when
-    renderContributors([contributor]);
+    await renderContributors([contributor]);
 
     // then
     expect(screen.getByText("3 prompts")).toBeInTheDocument();
@@ -179,7 +185,7 @@ describe("sorting on a WakaTime column", () => {
       .slice(2)
       .map((row) => row.querySelector("td")?.textContent ?? "");
 
-  it("should sort an unmeasured contributor below every measured one", () => {
+  it("should sort an unmeasured contributor below every measured one", async () => {
     // given
     // The accessors report -1 rather than 0 for an unmeasured row, so somebody
     // with no WakaTime account never outranks somebody who logged nothing.
@@ -188,7 +194,7 @@ describe("sorting on a WakaTime column", () => {
       .withWakaTimeMetrics(WakaTimeBuilder.create().withTotalSeconds(0).build())
       .build();
     const unmeasured = ContributorBuilder.create().withDisplayName("unmeasured").build();
-    renderContributors([unmeasured, measured]);
+    await renderContributors([unmeasured, measured]);
 
     // when
     sortBy("Coding time");
@@ -197,7 +203,7 @@ describe("sorting on a WakaTime column", () => {
     expect(rows()[0]).toContain("measured");
   });
 
-  it("should sort on every WakaTime column without throwing", () => {
+  it("should sort on every WakaTime column without throwing", async () => {
     // given
     const busy = ContributorBuilder.create()
       .withDisplayName("busy")
@@ -215,7 +221,7 @@ describe("sorting on a WakaTime column", () => {
         WakaTimeBuilder.create().withTotalSeconds(60).withoutFileCount().build(),
       )
       .build();
-    renderContributors([quiet, busy]);
+    await renderContributors([quiet, busy]);
 
     // when / then
     for (const heading of ["Active days", "Language", "Branches", "Files", "AI tokens", "AI lines"]) {
@@ -224,7 +230,7 @@ describe("sorting on a WakaTime column", () => {
     }
   });
 
-  it("should sort a contributor with no AI figures below one with them", () => {
+  it("should sort a contributor with no AI figures below one with them", async () => {
     // given
     const withAi = ContributorBuilder.create()
       .withDisplayName("with-ai")
@@ -234,7 +240,7 @@ describe("sorting on a WakaTime column", () => {
       .withDisplayName("without-ai")
       .withWakaTimeMetrics(WakaTimeBuilder.create().build())
       .build();
-    renderContributors([withoutAi, withAi]);
+    await renderContributors([withoutAi, withAi]);
 
     // when
     sortBy("AI tokens");

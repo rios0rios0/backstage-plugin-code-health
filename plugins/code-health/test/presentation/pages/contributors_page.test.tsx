@@ -1,5 +1,5 @@
-import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { renderInTestApp } from "@backstage/test-utils";
+import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
 import type { UseCoverageResult } from "../../../src/presentation/hooks/use_coverage";
@@ -20,9 +20,10 @@ const coverageResult = (overrides: Partial<UseCoverageResult> = {}): UseCoverage
 });
 
 /**
- * The rankings above the table resolve their links through `useRouteRef`, which
- * needs the plugin root mounted — a bare `render` leaves the route refs with no
- * path to give and the page throws before it draws anything.
+ * The rankings above the table and every contributor's name resolve their
+ * links through `useRouteRef`, which needs the plugin root mounted — a bare
+ * `render` leaves the route refs with no path to give and the page throws
+ * before it draws anything.
  */
 const renderPage = (
   service: StubContributorService,

@@ -1,6 +1,7 @@
 import { appThemeApiRef } from "@backstage/core-plugin-api";
 import { renderInTestApp, TestApiProvider } from "@backstage/test-utils";
 import { screen, waitFor } from "@testing-library/react";
+import { Route, Routes } from "react-router-dom";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../src/domain/entities/code_health_config";
 import {
   codeHealthAdministrationApiRef,
@@ -21,7 +22,7 @@ import { RepositoryBuilder } from "../builders/repository_builder";
 import { StubAdministrationService } from "../doubles/stub_administration_service";
 import { StubAppThemeApi } from "../doubles/stub_app_theme_api";
 import { StubOwnershipService } from "../doubles/stub_ownership_service";
-import { StubTrendService } from "../doubles/stub_trend_service";
+import { aContributorTrend, StubTrendService } from "../doubles/stub_trend_service";
 import { StubIdentityService } from "../doubles/stub_identity_service";
 import { StubIntegrationsService } from "../doubles/stub_integrations_service";
 import { StubContributorService } from "../doubles/stub_contributor_service";
@@ -71,12 +72,18 @@ const renderRouter = async (
         [codeHealthAdministrationApiRef, administrationService],
       ]}
     >
-      <Router />
+      {/* Mounted behind a splat route, the way a consuming app mounts the
+          plugin. It is not decoration: `TabbedLayout` reads the splat parameter
+          to decide which tab is selected, so a router rendered bare resolves
+          its content from the location but reports the first tab selected
+          whatever is on screen. The detail pages also resolve their links
+          through `useRouteRef`, which needs the mounted route ref below to
+          resolve a sub route against and throws without one. */}
+      <Routes>
+        <Route path="/*" element={<Router />} />
+      </Routes>
     </TestApiProvider>,
-    // The plugin root is mounted here the way a consuming app mounts the
-    // routable extension, because the Contributors rankings resolve their links
-    // to the detail pages through `useRouteRef`.
-    { routeEntries: [overrides.path ?? "/"], mountedRoutes: { "/": rootRouteRef } },
+    { mountedRoutes: { "/*": rootRouteRef }, routeEntries: [overrides.path ?? "/"] },
   );
 
   return {
@@ -146,6 +153,35 @@ describe("Router", () => {
     expect(screen.getByText("Documentation")).toBeInTheDocument();
     expect(screen.getByText("Catalog APIs")).toBeInTheDocument();
     expect(screen.getByText("Fleet health")).toBeInTheDocument();
+  });
+
+  it("should open a person's page under the contributors tab", async () => {
+    // given
+    // `TabbedLayout` matches every tab as `<path>/*`, so the detail route
+    // resolves relative to the tab and the tab stays selected while somebody is
+    // open — which is the whole reason the page is nested rather than routed at
+    // the plugin root.
+    const trendService = new StubTrendService().withContributorTrend(
+      aContributorTrend({
+        summary: ContributorBuilder.create().withDisplayName("Jane Roe").build(),
+      }),
+    );
+
+    // when
+    await renderRouter({
+      trendService,
+      path: "/contributors/person?key=user%3Adefault%2Fjane",
+    });
+
+    // then
+    expect(await screen.findByText("Jane Roe")).toBeInTheDocument();
+    // The key survives the round trip: it carries a colon and a slash, which is
+    // why it travels in the query string rather than in a path segment.
+    expect(trendService.contributorCalls[0].key).toBe("user:default/jane");
+    expect(screen.getByRole("tab", { name: "Contributors" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("should show every tab, insights first", async () => {
