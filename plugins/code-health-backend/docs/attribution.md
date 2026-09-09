@@ -77,9 +77,16 @@ the branch, and those the history already returns.
   dropped whether a pull request produced it or not, but only a pull request
   can be asked for the commits it brought in. A long-lived branch merged
   locally and pushed, whose commits were written on days already walked, is
-  invisible on an install whose backfill has passed those days. The common
-  shape — a `git pull` that merges same-day local commits — is unaffected,
-  since those commits fall in the same window as the merge.
+  invisible on an install whose backfill has passed those days: the work is
+  counted on nobody's row, where an earlier release counted it on the pusher's.
+  That is a deliberate trade, not an oversight. On a default branch the common
+  merge commit that no pull request claims is a `git pull` merge, and its diff
+  against its first parent is *other people's* commits — already on the branch
+  and already counted under their authors — so keeping it would credit whoever
+  pulled with everyone else's work, which is the misattribution this rule
+  exists to remove, and it would fall on whoever pull-merges most often. The
+  same-day `git pull` that merges a person's own local commits is unaffected
+  either way, since those commits fall in the same window as the merge.
 - **A merge and its pull request on opposite sides of a window boundary.** The
   two happen within seconds of each other, so it is rare, and a commit no pull
   request in the same window claims is still dropped when it is a merge commit

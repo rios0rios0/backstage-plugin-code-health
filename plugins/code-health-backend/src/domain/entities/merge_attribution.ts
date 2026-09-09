@@ -100,7 +100,14 @@ const withActor = (event: CodeHealthEvent, actor: EventActor): CodeHealthEvent =
  *    by that pull request's {@link MergeStrategy}: re-attributed to the pull
  *    request's author for a squash, left alone for a linear merge, dropped for
  *    a merge commit.
- * 2. Any other commit the provider marks as a merge commit is dropped.
+ * 2. Any other commit the provider marks as a merge commit is dropped, and
+ *    nothing replaces it. On a default branch that is nearly always a `git
+ *    pull` merge, whose diff against its first parent is other people's
+ *    commits — already on the branch and already counted under their authors
+ *    — so keeping it would credit whoever pulled with everyone else's work.
+ *    The price is a branch merged by hand and pushed: only a pull request can
+ *    be asked for the commits a merge joined, so that work lands on nobody's
+ *    row rather than on the pusher's. The rule book states the trade.
  * 3. Everything else keeps the author the provider reported.
  *
  * A build is credited to the author of the pull request whose merge produced
