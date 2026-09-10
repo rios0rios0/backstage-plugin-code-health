@@ -13,6 +13,17 @@ nothing.
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-09-10
+
+### Added
+
+- added the WakaTime, Jira and Confluence cards to the Contributors and Repositories tabs, on the same terms as the version-control cards: the cards about people — who spent the time, who closes tickets, who keeps the board moving, who is documenting — sit above the contributors table, the cards about repositories — where the time went by repository, backlog flow, open work by priority, the oldest open work, documentation rot — sit above the repositories table, and the fleet-level figures stay on Insights. Every ranking row links to the plugin's own detail page. Each group is drawn only when its integration is configured, never inferred from data
+
+### Changed
+
+- changed the **productivity score** to count the optional integrations when they are configured, with the weights shared over whatever is on. WakaTime adds coding time (a nominal 10%), Jira adds tickets resolved (15%) and tickets that stayed done rather than being reopened (5%), and Confluence adds documentation written — pages created and edited, comments and attachments (10%) — each read as a share of the fleet's top figure in the same window, the way commits and reviews already are. The eleven nominal weights are renormalised to one over the enabled set, so with every integration on commits carry about 14% instead of 20%, and with none on the score is exactly what it was. An integration that is on but has no account linked to a person leaves its components unmeasured rather than scored as zero, and the Identities tab is where that link is made. `computeProductivityScore` takes the capabilities as a third argument, the backend trend passes the ones it was configured with, and the Productivity column's header names the components in play
+- changed the range picker to list every calendar month the backfill has reached by name, directly in the same dropdown as the rolling ranges, so picking "August 2026" is one click rather than a mode at the bottom of the list that reveals a month and a year select; the previous and next arrows stay for stepping through months. The pick now follows the reader across the Insights, Contributors and Repositories tabs instead of each tab falling back to the configured default range on its own
+
 ## [4.1.0] - 2026-09-10
 
 ### Added
