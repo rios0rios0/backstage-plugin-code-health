@@ -124,7 +124,8 @@ New files behind the trends, ownership and administration work:
   share of the fleet's top figure in the same window and reliability/quality absolutely (pipeline
   15%, gate 10%, coverage 10%); churn is only compared inside its own `churnUnit`. Where an
   integration is **configured**, it adds components on the same terms — coding time 10%, tickets
-  resolved 15% and documentation written 10% relative, tickets that stayed done 5% absolute — and
+  resolved 15% and documentation written 10% relative (the last over Confluence's trailing window,
+  never the picked one, and left out of per-bucket scores), tickets that stayed done 5% absolute — and
   `productivityComponentsFor(capabilities)` renormalises every weight over the enabled set, so those
   percentages are nominal (1.40 with all three on, making commits ~14%). Pass
   `IntegrationCapabilities` to `computeProductivityScore`; never infer it from whether a row carries

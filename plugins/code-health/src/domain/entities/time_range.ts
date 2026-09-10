@@ -90,7 +90,12 @@ export const selectionFromKey = (key: string): RangeSelection | null => {
   const month = /^month:(\d{4})-(\d{1,2})$/.exec(key);
   if (month !== null) {
     const [, year, ordinal] = month;
-    return { kind: "month", month: { year: Number(year), month: Number(ordinal) } };
+    const parsed = Number(ordinal);
+    // `Date` would happily roll `month:2026-99` into some year nobody asked
+    // for, and a zero into the previous December, so the ordinal is checked
+    // here rather than left to arithmetic that never complains.
+    if (parsed < 1 || parsed > 12) return null;
+    return { kind: "month", month: { year: Number(year), month: parsed } };
   }
 
   const range = TIME_RANGES.find(

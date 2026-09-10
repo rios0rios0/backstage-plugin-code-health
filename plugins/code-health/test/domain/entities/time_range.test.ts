@@ -141,6 +141,14 @@ describe("selectionFromKey", () => {
     // back, and a rolling range that no longer exists must not resolve either.
     expect(selectionFromKey("")).toBeNull();
     expect(selectionFromKey("preset:fortnight")).toBeNull();
+    // A month ordinal outside 1-12 is refused rather than rolled by `Date`
+    // into a month nobody asked for.
+    expect(selectionFromKey("month:2026-99")).toBeNull();
+    expect(selectionFromKey("month:2026-0")).toBeNull();
+    expect(selectionFromKey("month:2026-12")).toEqual({
+      kind: "month",
+      month: { year: 2026, month: 12 },
+    });
   });
 });
 

@@ -284,6 +284,10 @@ The wire contract, and the pure functions both sides have to agree on.
   into it would be wrong on most installs and wrong in a way nobody would notice. Unmeasured is
   still distinct from absent: an account nobody has linked says so by name ("no Jira account is
   linked to this person"), which is the one cause of a missing figure somebody can go and fix.
+  Documentation written is the exception to "in the same window": Confluence is stored per window,
+  not per day, so that component's detail names Confluence's trailing window rather than the range
+  picked, and the per-bucket scores on a person's page are folded with Confluence switched off —
+  otherwise the "Score over time" line would sit permanently below the headline it claims to be.
 - **What was not measured is left out, never scored as zero.** A repository with no Sonar project
   has an unknown quality gate, not a failing one; somebody whose pipeline never ran has no success
   rate, not a bad one. `combineScore` drops an unmeasured component and shares its weight among the

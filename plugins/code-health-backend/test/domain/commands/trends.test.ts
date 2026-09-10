@@ -462,7 +462,10 @@ describe("GetContributorTrend", () => {
     });
 
     // when
-    const trend = await new GetContributorTrend({ store }).run({
+    const trend = await new GetContributorTrend({
+      store,
+      capabilities: { ...NO_INTEGRATIONS, confluence: true },
+    }).run({
       key: "confluence:dev",
       ...WINDOW,
       bucket: "day",
@@ -471,6 +474,15 @@ describe("GetContributorTrend", () => {
     // then
     expect(trend.summary?.confluenceMetrics?.pagesCreated).toBe(3);
     expect(trend.points.every((point) => point.summary.confluenceMetrics === null)).toBe(true);
+    // The headline score is folded with documentation in; every bucket's score
+    // is folded with it out, rather than carrying it as unmeasured on every
+    // point — otherwise the line would sit below the card for the whole window
+    // while claiming to be the same quantity.
+    const ids = (components: readonly { id: string }[]) => components.map((c) => c.id);
+    expect(ids(trend.score?.components ?? [])).toContain("documentation");
+    expect(
+      trend.points.every((point) => !ids(point.score.components).includes("documentation")),
+    ).toBe(true);
   });
 
   it("should read the Sonar of every repository snapshotted on the same day", async () => {

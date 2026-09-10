@@ -177,7 +177,7 @@ export const ConfluenceContributorInsights = ({
     <Grid item xs={12} md={6}>
       <InfoCard
         title="Who is documenting"
-        subheader="Pages, edits, comments and attachments added together"
+        subheader={`Pages, edits, comments and attachments added together. ${WINDOW_NOTE}`}
       >
         <RankingChart
           items={authors}
@@ -223,7 +223,7 @@ export const ConfluenceRepositoryInsights = ({
     <Grid item xs={12} md={6}>
       <InfoCard
         title="Documentation rot"
-        subheader="Where the wiki has stopped being maintained"
+        subheader={`Where the wiki has stopped being maintained. ${WINDOW_NOTE}`}
       >
         <StatusBreakdown slices={freshness} />
         <Box my={2}>

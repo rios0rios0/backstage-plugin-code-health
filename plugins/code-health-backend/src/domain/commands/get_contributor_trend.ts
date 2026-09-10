@@ -223,7 +223,16 @@ export class GetContributorTrend {
       return {
         day: start,
         summary: row,
-        score: computeProductivityScore(row, fleetReferenceOf(rows), capabilities),
+        // Confluence is switched off for a bucket's score on purpose. Its
+        // figures describe a trailing window and enrich no bucket (see the
+        // read above), so with it on the component would be unmeasured on
+        // every point while measured on the headline — and a line folded from
+        // one component fewer than the card above it would sit below that
+        // card for the whole window, claiming to be the same quantity.
+        score: computeProductivityScore(row, fleetReferenceOf(rows), {
+          ...capabilities,
+          confluence: false,
+        }),
       };
     });
 

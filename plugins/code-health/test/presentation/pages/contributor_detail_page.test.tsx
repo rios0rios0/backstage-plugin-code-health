@@ -255,9 +255,18 @@ describe("ContributorDetailPage", () => {
 
     // then
     expect(
-      await screen.findByText(/Coding time, tickets resolved and documentation written/u),
+      await screen.findByText(/Coding time and tickets resolved join the score/u),
     ).toBeInTheDocument();
     expect(screen.getByText(/shared out over whatever is configured/u)).toBeInTheDocument();
+    // Confluence is the one integration stored per window rather than per
+    // day, so its component is named as read over its own trailing window,
+    // and the per-bucket chart says it carries no point of it.
+    expect(
+      screen.getByText(/over Confluence's own trailing window, which the range above does not move/u),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Documentation written counts in the score above and on no point here/u),
+    ).toBeInTheDocument();
   });
 
   it("should not describe integrations to an install that has none", async () => {
@@ -274,7 +283,10 @@ describe("ContributorDetailPage", () => {
       await screen.findByRole("list", { name: "Productivity score components" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/Coding time, tickets resolved and documentation written/u),
+      screen.queryByText(/Coding time and tickets resolved join the score/u),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Documentation written counts in the score above/u),
     ).not.toBeInTheDocument();
   });
 

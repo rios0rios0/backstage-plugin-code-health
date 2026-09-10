@@ -340,6 +340,18 @@ const reopenedOf = (
   );
 };
 
+/**
+ * Documentation written, read against the fleet's top figure — but over
+ * Confluence's own trailing window, not the one the reader picked.
+ *
+ * Confluence is the one integration stored per window rather than per day: its
+ * figures describe the backend's trailing `atlassian.historyDays` and do not
+ * move with the range picker, so this component cannot honestly claim "in the
+ * same window" the way coding time and tickets can. The detail says so rather
+ * than borrowing the wording of the other relative components, because a
+ * ninety-day figure labelled as "last 24 hours" is exactly the misreading the
+ * rest of the dashboard refuses to leave implicit.
+ */
 const documentationOf = (
   definition: ScoreComponentDefinition,
   summary: ContributorSummary,
@@ -349,11 +361,19 @@ const documentationOf = (
   if (confluence === null) {
     return unmeasuredComponent(definition, "no Confluence account is linked to this person");
   }
-  return relative(
+  const top = reference.documentationContributions;
+  if (top <= 0) {
+    return unmeasuredComponent(
+      definition,
+      "nobody recorded any Confluence contributions over Confluence's trailing window",
+    );
+  }
+  const value = confluenceContributions(confluence);
+  return measuredComponent(
     definition,
-    confluenceContributions(confluence),
-    reference.documentationContributions,
-    "Confluence contribution",
+    value,
+    shareOf(value, top),
+    `${plural(value, "Confluence contribution")} against the top figure of ${top.toLocaleString()} over Confluence's trailing window, not the range picked`,
   );
 };
 

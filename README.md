@@ -411,11 +411,18 @@ the same measurement wearing different labels.
 | Coding time | 10% | **WakaTime only** — share of the window's top figure |
 | Tickets resolved | 15% | **Jira only** — share of the window's top figure |
 | Tickets that stayed done | 5% | **Jira only** — absolute, over this person's own resolved tickets |
-| Documentation written | 10% | **Confluence only** — share of the window's top figure |
+| Documentation written | 10% | **Confluence only** — share of the top figure over Confluence's trailing window, which the range picker does not move |
 
 The two Sonar components describe **the repositories the person changed, not the code they wrote** —
 Sonar measures a project — which is why they carry the least weight and why every Sonar heading says
 so.
+
+Documentation written is the one component that does not follow the range picker. Confluence is
+stored per window rather than per day — its figures describe the backend's trailing
+`atlassian.historyDays`, ninety by default — so the component's own sentence says which window it
+was read over, and the per-bucket score on a person's page leaves it out entirely: a bucket cannot
+measure it, and a line folded from one component fewer than the headline would sit below that
+headline for the whole window.
 
 The last four exist only where their integration is **configured**, and their absence is read from
 the configuration rather than from the rows: a row carrying no ticket count cannot say whether Jira

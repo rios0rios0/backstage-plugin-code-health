@@ -203,6 +203,20 @@ describe("ConfluenceContributorInsights", () => {
     expect(screen.getByLabelText(/^Bo: 1 contributions/)).toBeInTheDocument();
   });
 
+  it("should say the ranking covers Confluence's trailing window, not the range picked", async () => {
+    // given
+    // The card now sits under a range picker that reads "Last 7 days", and
+    // Confluence's figures do not move with it. The note used to live on the
+    // fleet card above this one; after the split it has to travel with the card.
+    const contributors = [aContributor("Ada", confluence({ pagesCreated: 2 }))];
+
+    // when
+    await render(<ConfluenceContributorInsights contributors={contributors} />);
+
+    // then
+    expect(screen.getByText(/do not move with the range picker/u)).toBeInTheDocument();
+  });
+
   it("should send a row to the plugin's contributor page", async () => {
     // given
     // The person at the top of this ranking is usually nowhere near the top of
@@ -274,6 +288,17 @@ describe("ConfluenceRepositoryInsights", () => {
     // then
     expect(screen.getByText("Operations")).toBeInTheDocument();
     expect(screen.getByText("60% stale · oldest 2021-03-04")).toBeInTheDocument();
+  });
+
+  it("should say the rot is measured over Confluence's trailing window", async () => {
+    // given
+    const repositories = [aRepository("a", space({ totalPages: 10, stalePages: 4 }))];
+
+    // when
+    await render(<ConfluenceRepositoryInsights repositories={repositories} />);
+
+    // then
+    expect(screen.getByText(/do not move with the range picker/u)).toBeInTheDocument();
   });
 
   it("should list the spaces holding pages nothing links to", async () => {

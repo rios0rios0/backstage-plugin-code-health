@@ -632,7 +632,7 @@ describe("computeProductivityScore", () => {
     });
   });
 
-  it("should read documentation against the window's top figure", () => {
+  it("should read documentation against the top figure over Confluence's trailing window", () => {
     // given
     // Pages, versions, blog posts, comments and attachments together — writing
     // a page and answering three questions on somebody else's both count.
@@ -648,7 +648,8 @@ describe("computeProductivityScore", () => {
     expect(componentById(score, "documentation")).toMatchObject({
       value: 5,
       normalized: 0.5,
-      detail: "5 Confluence contributions against the window's top figure of 10",
+      detail:
+        "5 Confluence contributions against the top figure of 10 over Confluence's trailing window, not the range picked",
     });
   });
 
@@ -681,7 +682,7 @@ describe("computeProductivityScore", () => {
     // then
     expect(componentById(score, "documentation")).toMatchObject({
       normalized: null,
-      detail: "nobody recorded any Confluence contributions in this window",
+      detail: "nobody recorded any Confluence contributions over Confluence's trailing window",
     });
   });
 

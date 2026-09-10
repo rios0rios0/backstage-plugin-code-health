@@ -104,7 +104,7 @@ const PRODUCTIVITY_SUBHEADER =
  * be left to work out for itself why every weight below moved.
  */
 const INTEGRATION_SUBHEADER =
-  "Coding time, tickets resolved and documentation written join the score wherever their integration is configured, and are read against the fleet's top figure in the window exactly as output is; only how much of somebody's resolved work stayed resolved is absolute. The weights are shared out over whatever is configured, so each component below carries a smaller share than it would on its own.";
+  "Coding time and tickets resolved join the score wherever their integration is configured, read against the fleet's top figure in the window exactly as output is; documentation written joins it too, but over Confluence's own trailing window, which the range above does not move. Only how much of somebody's resolved work stayed resolved is absolute. The weights are shared out over whatever is configured, so each component below carries a smaller share than it would on its own.";
 
 const COMMIT_SERIES: readonly TrendSeries[] = [
   { key: CONTRIBUTOR_SERIES.commits, label: "Commits", area: true },
@@ -465,7 +465,11 @@ export const ContributorDetailPage = ({
 
           <ChartCard
             title="Score over time"
-            subheader={`The productivity score each bucket earned, against the fleet's top figures in that same bucket. A bucket in which nothing measurable happened anywhere has no score, and the line breaks. ${bucketNote}`}
+            subheader={`The productivity score each bucket earned, against the fleet's top figures in that same bucket. A bucket in which nothing measurable happened anywhere has no score, and the line breaks.${
+              capabilities.confluence
+                ? " Documentation written counts in the score above and on no point here: Confluence answers for a trailing window rather than a day, so a bucket cannot measure it."
+                : ""
+            } ${bucketNote}`}
             points={whenMeasured(score, CONTRIBUTOR_SERIES.score)}
             series={SCORE_SERIES}
             emptyMessage="Nothing measurable was recorded in this window."
