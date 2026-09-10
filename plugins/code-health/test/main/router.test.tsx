@@ -1,6 +1,6 @@
 import { appThemeApiRef } from "@backstage/core-plugin-api";
 import { renderInTestApp, TestApiProvider } from "@backstage/test-utils";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { Route, Routes } from "react-router-dom";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../src/domain/entities/code_health_config";
 import {
@@ -143,6 +143,49 @@ describe("Router", () => {
     expect(screen.getByText("Most active repositories")).toBeInTheDocument();
   });
 
+  it("should put an integration's people cards on the contributors tab", async () => {
+    // given
+    // Every integration follows the same split as the version control cards:
+    // what it says about a person belongs with the people, not on Insights.
+    const integrationsService = new StubIntegrationsService().withEnabled(
+      "wakatime",
+      "confluence",
+    );
+    const contributorService = new StubContributorService().withContributors([
+      ContributorBuilder.create().withDisplayName("alice").withCommits(30).build(),
+    ]);
+
+    // when
+    await renderRouter({ integrationsService, contributorService, path: "/contributors" });
+
+    // then
+    expect(await screen.findByText("Who spent the time")).toBeInTheDocument();
+    expect(screen.getByText("Who is documenting")).toBeInTheDocument();
+    expect(screen.queryByText("Where the time went")).not.toBeInTheDocument();
+    expect(screen.queryByText("Confluence")).not.toBeInTheDocument();
+  });
+
+  it("should put an integration's repository cards on the repositories tab", async () => {
+    // given
+    const integrationsService = new StubIntegrationsService().withEnabled(
+      "wakatime",
+      "confluence",
+    );
+    const dashboardService = new StubDashboardService().withRepositories([
+      RepositoryBuilder.create().withName("gateway").build(),
+    ]);
+
+    // when
+    await renderRouter({ integrationsService, dashboardService, path: "/repositories" });
+
+    // then
+    expect(
+      await screen.findByText("Where the time went, by repository"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Documentation rot")).toBeInTheDocument();
+    expect(screen.queryByText("Who spent the time")).not.toBeInTheDocument();
+  });
+
   it("should render the repositories table on its own tab, under the audits", async () => {
     // given
     const dashboardService = new StubDashboardService().withRepositories([
@@ -226,6 +269,27 @@ describe("Router", () => {
       "Identities",
     ]);
     expect(screen.queryByRole("tab", { name: "Settings" })).not.toBeInTheDocument();
+  });
+
+  it("should carry a picked month from one tab to the next", async () => {
+    // given
+    // Clicking a tab unmounts the page that was showing, so a range held per
+    // tab was gone the moment somebody clicked away — which read as a dashboard
+    // that kept resetting itself to a default nobody had chosen.
+    await renderRouter();
+    const picker = await screen.findByLabelText("Time range");
+    // Taken from the control rather than named: which months are on offer
+    // depends on today's date, and the picker is the thing that knows.
+    const [, second] = screen
+      .getAllByRole<HTMLOptionElement>("option")
+      .filter((option) => option.value.startsWith("month:"));
+    fireEvent.change(picker, { target: { value: second.value } });
+
+    // when
+    fireEvent.click(screen.getByRole("tab", { name: "Contributors" }));
+
+    // then
+    expect(await screen.findByLabelText("Time range")).toHaveValue(second.value);
   });
 
   it("should offer the re-collect control to an administrator", async () => {

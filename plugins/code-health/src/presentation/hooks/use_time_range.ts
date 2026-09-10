@@ -1,5 +1,5 @@
 import type { CoverageInfo, TimeWindow } from "@rios0rios0/backstage-plugin-code-health-common";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useContext, useMemo, useState } from "react";
 import type {
   MonthSelection,
   RangeSelection,
@@ -13,6 +13,7 @@ import {
   selectionKey,
   toWindow,
 } from "../../domain/entities/time_range";
+import { RangeSelectionContext } from "./range_selection_context";
 
 export interface UseTimeRangeResult {
   /** Only the rolling ranges the backend has ingested enough history to answer. */
@@ -59,15 +60,24 @@ const isOffered = (
  *
  * A selection that is no longer offered falls back to the widest rolling range
  * available, rather than querying for a period the backend would answer emptily.
+ *
+ * The selection itself is shared when a `RangeSelectionProvider` is above the
+ * caller — which the plugin's router puts there — so a month picked on one tab
+ * is still the month on the next. Without one the hook keeps its own, which is
+ * what lets a page be rendered on its own and tested on its own.
  */
 export const useTimeRange = (
   coverage: CoverageInfo | null,
   defaultRange: TimeRangeId,
 ): UseTimeRangeResult => {
-  const [requested, setRequested] = useState<RangeSelection>({
-    kind: "preset",
-    id: defaultRange,
-  });
+  const shared = useContext(RangeSelectionContext);
+  const [own, setOwn] = useState<RangeSelection>({ kind: "preset", id: defaultRange });
+
+  const requested = shared?.requested ?? own;
+  // Read off the value rather than through it: the value is a new object on
+  // every change, but the setter inside it never is, so `select` below stays
+  // the same function across renders.
+  const request = shared?.request;
 
   // The clock, sampled rather than read per render. Every derived value hangs
   // off this one state, so a refresh moves the whole picker forward together —
@@ -95,7 +105,16 @@ export const useTimeRange = (
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const window = useMemo(() => toWindow(selection, now), [key, now]);
 
-  const select = useCallback((next: RangeSelection) => setRequested(next), []);
+  const select = useCallback(
+    (next: RangeSelection) => {
+      if (request === undefined) {
+        setOwn(next);
+        return;
+      }
+      request(next);
+    },
+    [request],
+  );
 
   return { ranges, months, selection, window, select, advance };
 };

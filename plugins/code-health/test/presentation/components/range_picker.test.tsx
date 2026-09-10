@@ -32,6 +32,12 @@ const renderPicker = (
 
 const preset = (id: TimeRangeId): RangeSelection => ({ kind: "preset", id });
 
+const rangeSelect = () => screen.getByLabelText("Time range");
+
+/** Every option in the one dropdown, in the order a reader sees them. */
+const optionLabels = () =>
+  screen.getAllByRole("option").map((option) => option.textContent);
+
 describe("RangePicker", () => {
   it("should offer every rolling range it was given", () => {
     // given / when
@@ -42,47 +48,62 @@ describe("RangePicker", () => {
     expect(screen.getByText("Last 365 days")).toBeInTheDocument();
   });
 
+  it("should name every month with history, newest first, in the same list", () => {
+    // given / when
+    renderPicker(preset("day"));
+
+    // then
+    // The months used to hide behind a "By month…" entry that revealed two
+    // steppers, so the list somebody opened looking for a month never held the
+    // name of one and gave no sign that a month could be picked at all.
+    expect(optionLabels().slice(TIME_RANGES.length)).toEqual([
+      "August 2026",
+      "July 2026",
+      "June 2026",
+      "December 2025",
+    ]);
+  });
+
   it("should report a rolling range a user picked", () => {
     // given
     const onChange = renderPicker(preset("day"));
 
     // when
-    fireEvent.change(screen.getByLabelText("Time range"), { target: { value: "week" } });
+    fireEvent.change(rangeSelect(), { target: { value: "preset:week" } });
 
     // then
     expect(onChange).toHaveBeenCalledWith({ kind: "preset", id: "week" });
   });
 
-  it("should hide the month steppers while a rolling range is selected", () => {
-    // given / when
-    renderPicker(preset("day"));
-
-    // then
-    // One control, not two: a mode switch beside the dropdown would let the two
-    // disagree about what is being shown.
-    expect(screen.queryByLabelText("Month")).not.toBeInTheDocument();
-  });
-
-  it("should land on the newest month when a user switches to month mode", () => {
+  it("should report a month a user picked straight out of the list", () => {
     // given
     const onChange = renderPicker(preset("day"));
 
     // when
-    fireEvent.change(screen.getByLabelText("Time range"), { target: { value: "__month__" } });
+    fireEvent.change(rangeSelect(), { target: { value: "month:2026-6" } });
 
     // then
-    // That is the month the rolling ranges were already describing, so nothing
-    // about the view jumps.
-    expect(onChange).toHaveBeenCalledWith({ kind: "month", month: { year: 2026, month: 8 } });
+    // One click, rather than a mode switch followed by two dropdowns.
+    expect(onChange).toHaveBeenCalledWith({ kind: "month", month: { year: 2026, month: 6 } });
   });
 
-  it("should show the month and year of the selection", () => {
+  it("should show the selected month as the value of the same control", () => {
     // given / when
     renderPicker({ kind: "month", month: { year: 2026, month: 7 } });
 
     // then
-    expect(screen.getByLabelText("Month")).toHaveValue("7");
-    expect(screen.getByLabelText("Year")).toHaveValue("2026");
+    // One control, not two: nothing else on screen can disagree with it about
+    // which month is showing.
+    expect(rangeSelect()).toHaveValue("month:2026-7");
+  });
+
+  it("should hide the month arrows while a rolling range is selected", () => {
+    // given / when
+    renderPicker(preset("day"));
+
+    // then
+    expect(screen.queryByLabelText("Previous month")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Next month")).not.toBeInTheDocument();
   });
 
   it("should step back one month", () => {
@@ -93,6 +114,9 @@ describe("RangePicker", () => {
     fireEvent.click(screen.getByLabelText("Previous month"));
 
     // then
+    // The arrows survive the new list because "and the month before that" is
+    // the comparison people make most, and reopening a year of months to make
+    // it is a worse deal than one click.
     expect(onChange).toHaveBeenCalledWith({ kind: "month", month: { year: 2026, month: 6 } });
   });
 
@@ -124,89 +148,38 @@ describe("RangePicker", () => {
     expect(screen.getByLabelText("Previous month")).toBeDisabled();
   });
 
-  it("should jump straight to a month a user picked", () => {
-    // given
-    const onChange = renderPicker({ kind: "month", month: { year: 2026, month: 8 } });
-
-    // when
-    fireEvent.change(screen.getByLabelText("Month"), { target: { value: "6" } });
-
-    // then
-    expect(onChange).toHaveBeenCalledWith({ kind: "month", month: { year: 2026, month: 6 } });
-  });
-
-  it("should disable months the backfill has not reached", () => {
+  it("should announce the selected month for a screen reader", () => {
     // given / when
-    renderPicker({ kind: "month", month: { year: 2026, month: 8 } });
+    renderPicker({ kind: "month", month: { year: 2026, month: 7 } });
 
     // then
-    // Visible but unselectable, so the gap reads as "not collected yet" rather
-    // than as a list that mysteriously starts in June.
-    expect(screen.getByRole("option", { name: "January" })).toBeDisabled();
-    expect(screen.getByRole("option", { name: "July" })).not.toBeDisabled();
-  });
-
-  it("should keep the month across a year change when that year has it", () => {
-    // given
-    const months: MonthSelection[] = [
-      { year: 2026, month: 8 },
-      { year: 2025, month: 8 },
-      { year: 2025, month: 7 },
-    ];
-    const onChange = renderPicker(
-      { kind: "month", month: { year: 2026, month: 8 } },
-      jest.fn(),
-      months,
-    );
-
-    // when
-    fireEvent.change(screen.getByLabelText("Year"), { target: { value: "2025" } });
-
-    // then
-    // "The same month last year" is the comparison this control exists for.
-    expect(onChange).toHaveBeenCalledWith({ kind: "month", month: { year: 2025, month: 8 } });
-  });
-
-  it("should fall back to the newest month of a year that lacks the current one", () => {
-    // given
-    const months: MonthSelection[] = [
-      { year: 2026, month: 8 },
-      { year: 2025, month: 11 },
-    ];
-    const onChange = renderPicker(
-      { kind: "month", month: { year: 2026, month: 8 } },
-      jest.fn(),
-      months,
-    );
-
-    // when
-    fireEvent.change(screen.getByLabelText("Year"), { target: { value: "2025" } });
-
-    // then
-    expect(onChange).toHaveBeenCalledWith({ kind: "month", month: { year: 2025, month: 11 } });
-  });
-
-  it("should ignore a year with no months at all", () => {
-    // given
-    const onChange = renderPicker({ kind: "month", month: { year: 2026, month: 8 } });
-
-    // when
-    fireEvent.change(screen.getByLabelText("Year"), { target: { value: "1999" } });
-
-    // then
-    expect(onChange).not.toHaveBeenCalled();
+    // An arrow changes the month without moving focus, so a screen reader is
+    // told nothing at all unless it is told here.
+    expect(
+      screen.getByText("July 2026", { selector: "[aria-live]" }),
+    ).toBeInTheDocument();
   });
 
   it("should cope with no months being offered at all", () => {
-    // given
-    const onChange = renderPicker(preset("day"), jest.fn(), []);
-
-    // when
-    fireEvent.change(screen.getByLabelText("Time range"), { target: { value: "__month__" } });
+    // given / when
+    renderPicker(preset("day"), jest.fn(), []);
 
     // then
-    // Coverage can be empty on a brand new install; the picker should stay put
-    // rather than select a month nothing can answer.
+    // Coverage is empty on a brand new install, and a group heading with
+    // nothing under it reads as an integration that broke.
+    expect(optionLabels()).toHaveLength(TIME_RANGES.length);
+  });
+
+  it("should ignore a value that encodes no selection", () => {
+    // given
+    const onChange = renderPicker(preset("day"));
+
+    // when
+    fireEvent.change(rangeSelect(), { target: { value: "not-a-selection" } });
+
+    // then
+    // A browser reports the empty string for a value none of its options
+    // carry; staying put beats querying for nobody's window.
     expect(onChange).not.toHaveBeenCalled();
   });
 });

@@ -34,6 +34,7 @@ import {
   fleetReferenceOf,
   formatScoreValue,
   NO_INTEGRATIONS,
+  productivityComponentsFor,
   scoreBand,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import { Link as RouterLink } from "react-router-dom";
@@ -332,7 +333,28 @@ const SONAR_HELP =
   "Sonar measures a repository, not a person. This is the total over the repositories this person committed to or merged into in the window — what the code they worked on looks like, not what they wrote — so two people on the same repository show the same figure, and reviewing or building there does not count.";
 
 const PRODUCTIVITY_HELP =
-  "One score out of 100 over the whole window. Output — commits, merged pull requests, churn and reviews — is read as a share of the top figure anybody recorded in the same window, so a quiet month for the whole team is a quiet month rather than everybody's failure. Reliability and quality — the pipeline success rate, and the gate and coverage of the code touched — are absolute. Anything that could not be measured is left out rather than scored as zero, so a dash means nothing measurable was recorded. Hover a score for the workings.";
+  "One score out of 100 over the whole window. Output — commits, merged pull requests, churn and reviews, and the coding time and resolved tickets of whichever integrations are configured — is read as a share of the top figure anybody recorded in the same window, so a quiet month for the whole team is a quiet month rather than everybody's failure. Documentation written is read the same way but over Confluence's own trailing window, which the range picker does not move. Reliability and quality — the pipeline success rate, the gate and coverage of the code touched, and how much resolved work stayed resolved — are absolute. Anything that could not be measured is left out rather than scored as zero, so a dash means nothing measurable was recorded. Hover a score for the workings.";
+
+/** A list a person can read, rather than one joined with commas throughout. */
+const sentenceList = (items: readonly string[]): string =>
+  `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+
+/**
+ * The help above, with the components this install actually scores on.
+ *
+ * The names are taken from the same definitions the score is folded from rather
+ * than written out here, because the weights are shared over whatever is
+ * configured: with all three integrations on, commits carry about 14% instead
+ * of 20%, and a header that had those figures typed into it would be wrong on
+ * most installs without ever looking wrong.
+ */
+const productivityHelp = (capabilities: IntegrationCapabilities): string => {
+  const labels = productivityComponentsFor(capabilities).map(
+    (definition) => definition.label,
+  );
+
+  return `${PRODUCTIVITY_HELP} It is folded from ${sentenceList(labels)}, and those weights are shared out over whatever is configured — switching an integration on moves every one of them.`;
+};
 
 /** Which of the theme's status colours each band borrows. */
 const BAND_CLASSES: Readonly<Record<ScoreBand, "good" | "fair" | "poor" | "unknown">> = {
@@ -377,15 +399,21 @@ const ProductivityCell = ({ score }: { score: ProductivityScore }) => {
  * the column cannot be built until the rows are known. Each row's score is
  * computed once and kept, because the accessor runs on every comparison a sort
  * makes and the cell needs the same object's components for its tooltip.
+ *
+ * The capabilities are the caller's for the same reason the integration column
+ * groups are: which components exist is a fact about the backend's
+ * configuration, and a row that carries no ticket count cannot say whether Jira
+ * is switched off or simply has not been read yet.
  */
 const productivityColumn = (
   reference: FleetReference,
+  capabilities: IntegrationCapabilities,
 ): ColumnDef<ContributorSummary> => {
   const scores = new WeakMap<ContributorSummary, ProductivityScore>();
   const scoreOf = (row: ContributorSummary): ProductivityScore => {
     const known = scores.get(row);
     if (known !== undefined) return known;
-    const score = computeProductivityScore(row, reference);
+    const score = computeProductivityScore(row, reference, capabilities);
     scores.set(row, score);
     return score;
   };
@@ -393,7 +421,9 @@ const productivityColumn = (
   return {
     id: "productivity",
     accessorFn: (row) => scoreOf(row).value,
-    header: () => <HeaderWithHelp label="Productivity" help={PRODUCTIVITY_HELP} />,
+    header: () => (
+      <HeaderWithHelp label="Productivity" help={productivityHelp(capabilities)} />
+    ),
     cell: ({ row }) => <ProductivityCell score={scoreOf(row.original)} />,
     enableColumnFilter: false,
   };
@@ -562,27 +592,35 @@ export const ContributorsTable = ({
   // figure is read against the top one anybody recorded in the same window.
   const reference = useMemo(() => fleetReferenceOf(contributors), [contributors]);
 
+  // Held on the three flags rather than on the object, because the productivity
+  // column now needs the whole of it and caches a score per row inside itself.
+  // A caller re-reading its capabilities into a fresh object every render would
+  // otherwise rebuild the column, and throw that cache away, on every keystroke
+  // in the filter box.
+  const gates = useMemo<IntegrationCapabilities>(
+    () => ({
+      wakatime: capabilities.wakatime,
+      jira: capabilities.jira,
+      confluence: capabilities.confluence,
+    }),
+    [capabilities.wakatime, capabilities.jira, capabilities.confluence],
+  );
+
   // The AI columns are gated on the data as well as on the integration, because
   // they are collected separately and opting out of them is a supported way to
   // run WakaTime — a screen of em dashes reads as a fault rather than a choice.
-  const showAiColumns = capabilities.wakatime && hasAiMetrics(contributors);
+  const showAiColumns = gates.wakatime && hasAiMetrics(contributors);
   const allColumns = useMemo(
     () => [
       nameColumn,
-      productivityColumn(reference),
+      productivityColumn(reference, gates),
       ...metricColumns,
-      ...(capabilities.wakatime ? wakaTimeContributorColumns() : []),
+      ...(gates.wakatime ? wakaTimeContributorColumns() : []),
       ...(showAiColumns ? wakaTimeAiColumns() : []),
-      ...(capabilities.jira ? jiraContributorColumns() : []),
-      ...(capabilities.confluence ? confluenceContributorColumns() : []),
+      ...(gates.jira ? jiraContributorColumns() : []),
+      ...(gates.confluence ? confluenceContributorColumns() : []),
     ],
-    [
-      reference,
-      capabilities.wakatime,
-      capabilities.jira,
-      capabilities.confluence,
-      showAiColumns,
-    ],
+    [reference, gates, showAiColumns],
   );
 
   const table = useReactTable({

@@ -76,13 +76,29 @@ export const distinctJiraProjects = (
   return [...byProject.values()];
 };
 
+/**
+ * Whether any repository names a Jira project the backend could measure.
+ *
+ * Asked on its own by the cards that are built from repository metrics alone.
+ * They live on the Repositories tab, which never fetches contributors, so
+ * "somebody commented on a ticket" is not an answer available to them — and it
+ * would not fill a backlog chart even if it were.
+ */
+export const hasJiraRepositoryMetrics = (
+  repositories: readonly RepositorySummary[],
+): boolean => repositories.some((repository) => repository.jiraMetrics !== null);
+
+/** Whether anybody carries a Jira measurement, for the rankings of people. */
+export const hasJiraContributorMetrics = (
+  contributors: readonly ContributorSummary[],
+): boolean => contributors.some((contributor) => contributor.jiraMetrics !== null);
+
 /** Whether anything on the page has a Jira measurement to show at all. */
 export const hasJiraMetrics = (
   repositories: readonly RepositorySummary[],
   contributors: readonly ContributorSummary[],
 ): boolean =>
-  repositories.some((repository) => repository.jiraMetrics !== null) ||
-  contributors.some((contributor) => contributor.jiraMetrics !== null);
+  hasJiraRepositoryMetrics(repositories) || hasJiraContributorMetrics(contributors);
 
 export interface JiraFleetStats {
   /** Jira projects the catalog pointed at and the backend could measure. */

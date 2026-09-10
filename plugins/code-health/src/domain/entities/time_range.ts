@@ -74,6 +74,37 @@ export const selectionKey = (selection: RangeSelection): string =>
     ? `preset:${selection.id}`
     : `month:${selection.month.year}-${selection.month.month}`;
 
+/**
+ * The selection a key encodes — the inverse of `selectionKey`.
+ *
+ * A `<select>` carries one string per option and hands that string straight
+ * back, so the picker needs the round trip. Writing both directions as one pair
+ * of functions is what stops the control's value and its own options from
+ * disagreeing: they are the same function of the same selection.
+ *
+ * A key nothing recognises reads as `null` rather than as a guessed selection.
+ * A browser handed a value no option carries reports the empty string back, and
+ * asking the backend for a window nobody chose is worse than staying put.
+ */
+export const selectionFromKey = (key: string): RangeSelection | null => {
+  const month = /^month:(\d{4})-(\d{1,2})$/.exec(key);
+  if (month !== null) {
+    const [, year, ordinal] = month;
+    const parsed = Number(ordinal);
+    // `Date` would happily roll `month:2026-99` into some year nobody asked
+    // for, and a zero into the previous December, so the ordinal is checked
+    // here rather than left to arithmetic that never complains.
+    if (parsed < 1 || parsed > 12) return null;
+    return { kind: "month", month: { year: Number(year), month: parsed } };
+  }
+
+  const range = TIME_RANGES.find(
+    (candidate) => selectionKey({ kind: "preset", id: candidate.id }) === key,
+  );
+
+  return range === undefined ? null : { kind: "preset", id: range.id };
+};
+
 export const monthOf = (instant: Date): MonthSelection => ({
   year: instant.getFullYear(),
   month: instant.getMonth() + 1,
@@ -103,7 +134,9 @@ const MONTH_NAMES: readonly string[] = [
   "December",
 ];
 
-export const monthName = (month: number): string => MONTH_NAMES[month - 1] ?? "";
+// Not exported: the picker names a whole month now — "September 2026" — so
+// `monthLabel` below is the only caller left.
+const monthName = (month: number): string => MONTH_NAMES[month - 1] ?? "";
 
 export const monthLabel = (month: MonthSelection): string =>
   `${monthName(month.month)} ${month.year}`;
@@ -190,13 +223,3 @@ export const availableMonths = (
 
   return months;
 };
-
-/** Every year the month picker can offer, newest first. */
-export const availableYears = (months: readonly MonthSelection[]): readonly number[] => [
-  ...new Set(months.map((month) => month.year)),
-];
-
-export const monthsInYear = (
-  months: readonly MonthSelection[],
-  year: number,
-): readonly MonthSelection[] => months.filter((month) => month.year === year);

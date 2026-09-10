@@ -1,4 +1,5 @@
 import type { SonarMetrics } from "@rios0rios0/backstage-plugin-code-health-common";
+import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { GetContributorTrend } from "../../../src/domain/commands/get_contributor_trend";
 import { GetRepositoryTrend } from "../../../src/domain/commands/get_repository_trend";
 import type { RepositorySnapshotPayload } from "../../../src/domain/entities/repository_snapshot";
@@ -405,6 +406,49 @@ describe("GetContributorTrend", () => {
     expect(trend.summary?.jiraMetrics?.issuesCreated).toBe(2);
   });
 
+  it("should score a bucket on the integrations the backend was configured with", async () => {
+    // given
+    // The same stored measures, read twice. Whether a ticket counts towards the
+    // score is a question about the backend's configuration, and the row itself
+    // cannot answer it — these figures are here either way.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await ingest(store, repository.id, [
+      commit(repository.id, "2026-08-06T10:00:00.000Z", "dev@example.com"),
+    ]);
+    await store.saveContributorMetrics({
+      source: "jira",
+      day: "2026-08-06",
+      capturedAt: NOW,
+      metrics: new Map([["dev@example.com", aJiraContributorMetrics({ issuesResolved: 3 })]]),
+    });
+
+    // when
+    const withJira = await new GetContributorTrend({
+      store,
+      capabilities: { ...NO_INTEGRATIONS, jira: true },
+    }).run({ key: "jira:dev@example.com", ...WINDOW, bucket: "day" });
+    const without = await new GetContributorTrend({ store }).run({
+      key: "jira:dev@example.com",
+      ...WINDOW,
+      bucket: "day",
+    });
+
+    // then
+    const componentIds = (trend: Awaited<ReturnType<GetContributorTrend["run"]>>) =>
+      trend.points
+        .find((point) => point.day === "2026-08-06")
+        ?.score.components.map((component) => component.id) ?? [];
+    expect(componentIds(withJira)).toEqual(
+      expect.arrayContaining(["ticketsResolved", "reopened"]),
+    );
+    expect(componentIds(withJira)).not.toContain("codingTime");
+    expect(componentIds(without)).not.toContain("ticketsResolved");
+    expect(withJira.score?.components.map((component) => component.id)).toContain(
+      "ticketsResolved",
+    );
+  });
+
   it("should keep Confluence on the whole-window row and off every bucket", async () => {
     // given
     // Confluence measures a trailing window rather than a day, so repeating one
@@ -418,7 +462,10 @@ describe("GetContributorTrend", () => {
     });
 
     // when
-    const trend = await new GetContributorTrend({ store }).run({
+    const trend = await new GetContributorTrend({
+      store,
+      capabilities: { ...NO_INTEGRATIONS, confluence: true },
+    }).run({
       key: "confluence:dev",
       ...WINDOW,
       bucket: "day",
@@ -427,6 +474,15 @@ describe("GetContributorTrend", () => {
     // then
     expect(trend.summary?.confluenceMetrics?.pagesCreated).toBe(3);
     expect(trend.points.every((point) => point.summary.confluenceMetrics === null)).toBe(true);
+    // The headline score is folded with documentation in; every bucket's score
+    // is folded with it out, rather than carrying it as unmeasured on every
+    // point — otherwise the line would sit below the card for the whole window
+    // while claiming to be the same quantity.
+    const ids = (components: readonly { id: string }[]) => components.map((c) => c.id);
+    expect(ids(trend.score?.components ?? [])).toContain("documentation");
+    expect(
+      trend.points.every((point) => !ids(point.score.components).includes("documentation")),
+    ).toBe(true);
   });
 
   it("should read the Sonar of every repository snapshotted on the same day", async () => {

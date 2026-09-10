@@ -1,4 +1,8 @@
 import { renderInTestApp } from "@backstage/test-utils";
+import type {
+  IntegrationCapabilities,
+  JiraContributorMetrics,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { screen, fireEvent, within } from "@testing-library/react";
 import { ContributorsTable } from "../../../src/presentation/components/contributors_table";
@@ -14,6 +18,28 @@ import {
 // resolve against, which is also how the app itself renders the table.
 const render = (ui: React.ReactElement) =>
   renderInTestApp(ui, { mountedRoutes: { "/": rootRouteRef } });
+
+const ALL_INTEGRATIONS: IntegrationCapabilities = {
+  wakatime: true,
+  jira: true,
+  confluence: true,
+};
+
+const jiraMetrics = (
+  overrides: Partial<JiraContributorMetrics> = {},
+): JiraContributorMetrics => ({
+  window: { from: "2026-08-01T00:00:00.000Z", to: "2026-08-08T00:00:00.000Z" },
+  issuesCreated: 0,
+  issuesResolved: 0,
+  interactions: { comments: null, worklogEntries: null, transitions: 0, truncatedIssues: 0 },
+  storyPointsEstimated: null,
+  storyPointsCompleted: null,
+  cycleTime: null,
+  leadTime: null,
+  resolvedByType: { bug: 0, story: 0, task: 0, epic: 0, other: 0 },
+  reopened: 0,
+  ...overrides,
+});
 
 describe("ContributorsTable", () => {
   it("should link a contributor's name to their page here", async () => {
@@ -742,6 +768,82 @@ describe("ContributorsTable productivity column", () => {
     expect(
       screen.getByRole("img", { name: /read as a share of the top figure/u }),
     ).toBeInTheDocument();
+  });
+
+  it("should name the components on the heading, and only the configured ones", async () => {
+    // given
+    const contributors = [ContributorBuilder.create().build()];
+
+    // when
+    await render(
+      <ContributorsTable
+        contributors={contributors}
+        totalCount={1}
+        isLoading={false}
+        capabilities={ALL_INTEGRATIONS}
+      />,
+    );
+
+    // then
+    // Read off the same definitions the score is folded from, so the heading
+    // cannot name a component this install does not score on — nor go stale
+    // when the weights are shared out differently.
+    expect(
+      screen.getByRole("img", {
+        name: /Coding time, Tickets resolved, Tickets that stayed done and Documentation written/u,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: /shared out over whatever is configured/u }),
+    ).toBeInTheDocument();
+  });
+
+  it("should leave the integration components off the heading when none is configured", async () => {
+    // given
+    const contributors = [ContributorBuilder.create().build()];
+
+    // when
+    await render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(screen.queryByRole("img", { name: /Coding time/u })).not.toBeInTheDocument();
+  });
+
+  it("should score on the integrations the caller says are configured", async () => {
+    // given
+    // The row carries the same Jira figures either way. Whether they count is a
+    // fact about the backend's configuration, and the row cannot answer it.
+    const contributors = [
+      ContributorBuilder.create()
+        .withDisplayName("dev")
+        .withJiraMetrics(jiraMetrics({ issuesResolved: 4, reopened: 2 }))
+        .build(),
+    ];
+    const scoreText = () =>
+      within(screen.getAllByRole("row")[2]).getAllByRole("cell")[1].textContent;
+
+    // when
+    const off = await render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+    const withoutJira = scoreText();
+    off.unmount();
+    await render(
+      <ContributorsTable
+        contributors={contributors}
+        totalCount={1}
+        isLoading={false}
+        capabilities={{ ...NO_INTEGRATIONS, jira: true }}
+      />,
+    );
+
+    // then
+    // Half of what they resolved came back, which the score only knows about
+    // once somebody has told it Jira is switched on.
+    expect(withoutJira).toBe("98");
+    expect(scoreText()).toBe("96");
   });
 });
 

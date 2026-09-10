@@ -11,6 +11,9 @@ import { BackfillProgress } from "../components/backfill_progress";
 import { ContributorsTable } from "../components/contributors_table";
 import { DashboardToolbar } from "../components/dashboard_toolbar";
 import { ActivityRankings } from "../components/insights/activity_rankings";
+import { ConfluenceContributorInsights } from "../components/insights/confluence_insights";
+import { JiraContributorInsights } from "../components/insights/jira_insights";
+import { WakaTimeContributorInsights } from "../components/insights/wakatime_insights";
 import { useAutoRefresh } from "../hooks/use_auto_refresh";
 import { useContributors } from "../hooks/use_contributors";
 import type { UseCoverageResult } from "../hooks/use_coverage";
@@ -31,10 +34,17 @@ interface ContributorsPageProps {
 /**
  * Who worked, and on what.
  *
- * The three rankings above the table are the tab's summary of itself: the table
- * is ordered on one column at a time, so "who committed most" and "who reviewed
+ * The rankings above the table are the tab's summary of itself: the table is
+ * ordered on one column at a time, so "who committed most" and "who reviewed
  * most" are two different sorts of it that nobody can see at once. Each row is
  * also the way into a person's or a repository's detail page.
+ *
+ * Every configured integration adds its own ranking of people to the same grid,
+ * because coding time, tickets closed and pages written are all answers to the
+ * tab's question and none of them is an answer to the fleet's. They are gated
+ * on the capability rather than on the data: inferring it from whether a row
+ * carries a value cannot tell a switched-off integration from one that is on
+ * and has not collected yet.
  */
 export const ContributorsPage = ({
   contributorService,
@@ -95,6 +105,18 @@ export const ContributorsPage = ({
             contributors={contributors}
             repositoriesError={repositoryLoad.error}
           />
+
+          {capabilities.wakatime ? (
+            <WakaTimeContributorInsights contributors={contributors} />
+          ) : null}
+
+          {capabilities.jira ? (
+            <JiraContributorInsights contributors={contributors} />
+          ) : null}
+
+          {capabilities.confluence ? (
+            <ConfluenceContributorInsights contributors={contributors} />
+          ) : null}
         </Grid>
       </Box>
 

@@ -212,3 +212,65 @@ describe("DashboardPage audits", () => {
     expect(screen.getByLabelText("Compliant: 1 of 1")).toBeInTheDocument();
   });
 });
+
+describe("DashboardPage integration audits", () => {
+  const oneRepository = () =>
+    new StubDashboardService().withRepositories([
+      RepositoryBuilder.create().withName("gateway").build(),
+    ]);
+
+  it("should put each configured integration's repository cards above the table", async () => {
+    // given
+    // Coding time by repository, a backlog scoped to a project a repository
+    // named, and a space its entity pointed at: every row is one the reader is
+    // about to look up in the table below.
+    const service = oneRepository();
+
+    // when
+    await render(
+      <DashboardPage
+        dashboardService={service}
+        coverage={coverageResult()}
+        config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={{ wakatime: true, jira: true, confluence: true }}
+      />,
+    );
+
+    // then
+    await waitFor(() =>
+      expect(screen.getByText("Where the time went, by repository")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Documentation rot")).toBeInTheDocument();
+    // Jira is on and nothing names a project, which the tab says for itself
+    // rather than leaving Insights to explain it.
+    expect(screen.getByText(/no repository names a project yet/u)).toBeInTheDocument();
+    // The fleet's own cards stay on Insights.
+    expect(screen.queryByText("Jira delivery")).not.toBeInTheDocument();
+    expect(screen.queryByText("Who spent the time")).not.toBeInTheDocument();
+  });
+
+  it("should draw nothing for an integration the backend was not configured with", async () => {
+    // given
+    // Gated on the capability rather than on the data, so a freshly configured
+    // integration reads as one that has not collected rather than as broken.
+    const service = oneRepository();
+
+    // when
+    await render(
+      <DashboardPage
+        dashboardService={service}
+        coverage={coverageResult()}
+        config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
+      />,
+    );
+
+    // then
+    await waitFor(() => expect(screen.getByText("Documentation")).toBeInTheDocument());
+    expect(
+      screen.queryByText("Where the time went, by repository"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Documentation rot")).not.toBeInTheDocument();
+    expect(screen.queryByText(/no repository names a project yet/u)).not.toBeInTheDocument();
+  });
+});

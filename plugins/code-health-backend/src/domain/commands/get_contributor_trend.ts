@@ -2,6 +2,7 @@ import type {
   ConfluenceContributorMetrics,
   ContributorSummary,
   ContributorTrendPoint,
+  IntegrationCapabilities,
   JiraContributorMetrics,
   ProductivityScore,
   SonarMetrics,
@@ -11,6 +12,7 @@ import type {
 import {
   computeProductivityScore,
   fleetReferenceOf,
+  NO_INTEGRATIONS,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import { bucketEnd, bucketsInWindow } from "../entities/bucket";
 import type { CodeHealthEvent } from "../entities/code_health_event";
@@ -94,6 +96,16 @@ const rowsWithin = <T>(
 export interface GetContributorTrendOptions {
   readonly store: CodeHealthStore;
   readonly directory?: DirectoryReader;
+  /**
+   * Which integrations this backend was configured with, deciding which
+   * components the productivity score is built from.
+   *
+   * Passed in rather than inferred from the rows, for the same reason the
+   * dashboard's columns are: a row carrying no coding time could be an account
+   * nobody linked, an integration switched off, or one switched on that has not
+   * collected yet, and only the configuration can tell the three apart.
+   */
+  readonly capabilities?: IntegrationCapabilities;
 }
 
 export class GetContributorTrend {
@@ -121,6 +133,7 @@ export class GetContributorTrend {
   }): Promise<ContributorTrend> {
     const from = toDay(input.from);
     const to = toDay(input.to);
+    const capabilities = this.options.capabilities ?? NO_INTEGRATIONS;
 
     const [
       events,
@@ -184,7 +197,7 @@ export class GetContributorTrend {
     const score =
       summary === null
         ? null
-        : computeProductivityScore(summary, fleetReferenceOf(windowRows));
+        : computeProductivityScore(summary, fleetReferenceOf(windowRows), capabilities);
 
     const points = bucketsInWindow(input.from, input.to, input.bucket).map((start) => {
       const last = bucketEnd(start, input.bucket, to);
@@ -210,7 +223,16 @@ export class GetContributorTrend {
       return {
         day: start,
         summary: row,
-        score: computeProductivityScore(row, fleetReferenceOf(rows)),
+        // Confluence is switched off for a bucket's score on purpose. Its
+        // figures describe a trailing window and enrich no bucket (see the
+        // read above), so with it on the component would be unmeasured on
+        // every point while measured on the headline — and a line folded from
+        // one component fewer than the card above it would sit below that
+        // card for the whole window, claiming to be the same quantity.
+        score: computeProductivityScore(row, fleetReferenceOf(rows), {
+          ...capabilities,
+          confluence: false,
+        }),
       };
     });
 

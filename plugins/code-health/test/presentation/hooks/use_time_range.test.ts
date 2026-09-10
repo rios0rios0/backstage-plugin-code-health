@@ -1,10 +1,25 @@
 import { act, renderHook } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { createElement } from "react";
+import type { TimeRangeId } from "../../../src/domain/entities/time_range";
+import { RangeSelectionProvider } from "../../../src/presentation/hooks/range_selection_context";
 import { useTimeRange } from "../../../src/presentation/hooks/use_time_range";
 import { aCoverageInfo } from "../../doubles/stub_coverage_service";
 
 /** Narrows a selection to a preset id, failing loudly when it is a month. */
 const presetOf = (selection: { kind: string; id?: string }): string | undefined =>
   selection.kind === "preset" ? selection.id : undefined;
+
+/**
+ * The provider the plugin's router puts above the tabs.
+ *
+ * Built with `createElement` rather than JSX so this file stays a `.ts` beside
+ * every other hook test.
+ */
+const withProvider =
+  (defaultRange: TimeRangeId = "day") =>
+  ({ children }: { children: ReactNode }) =>
+    createElement(RangeSelectionProvider, { defaultRange, children });
 
 describe("useTimeRange", () => {
   it("should start on the configured default when it is available", () => {
@@ -152,6 +167,73 @@ describe("useTimeRange", () => {
     // then
     expect(result.current.months[0]).toEqual({ year: 2026, month: 9 });
     jest.useRealTimers();
+  });
+
+  it("should share one selection with every other hook under the provider", () => {
+    // given
+    // Every tab holds its own instance of this hook, so a month picked on one
+    // used to be gone the moment somebody clicked another.
+    const coverage = aCoverageInfo({ earliestDay: "2025-08-10" });
+    const { result } = renderHook(
+      () => ({
+        insights: useTimeRange(coverage, "day"),
+        contributors: useTimeRange(coverage, "day"),
+      }),
+      { wrapper: withProvider() },
+    );
+    const month = result.current.insights.months[1];
+
+    // when
+    act(() => result.current.insights.select({ kind: "month", month }));
+
+    // then
+    expect(result.current.contributors.selection).toEqual({ kind: "month", month });
+  });
+
+  it("should start on the range the provider was seeded with", () => {
+    // given
+    const coverage = aCoverageInfo({ earliestDay: "2025-08-10" });
+
+    // when
+    // The router seeds the provider from `codeHealth.defaultRange`, so the
+    // shared selection is where the default lands once one is in place.
+    const { result } = renderHook(() => useTimeRange(coverage, "day"), {
+      wrapper: withProvider("quarter"),
+    });
+
+    // then
+    expect(presetOf(result.current.selection)).toBe("quarter");
+  });
+
+  it("should remember a pick across a rerender with no provider at all", () => {
+    // given
+    // A page rendered on its own — in a test, or embedded by a host — keeps its
+    // own selection rather than losing it on the next render.
+    const coverage = aCoverageInfo({ earliestDay: "2025-08-10" });
+    const { result, rerender } = renderHook(() => useTimeRange(coverage, "day"));
+    act(() => result.current.select({ kind: "preset", id: "week" }));
+
+    // when
+    rerender();
+
+    // then
+    expect(presetOf(result.current.selection)).toBe("week");
+  });
+
+  it("should keep two hooks apart when nothing shares a selection", () => {
+    // given
+    const coverage = aCoverageInfo({ earliestDay: "2025-08-10" });
+    const { result } = renderHook(() => ({
+      first: useTimeRange(coverage, "day"),
+      second: useTimeRange(coverage, "day"),
+    }));
+
+    // when
+    act(() => result.current.first.select({ kind: "preset", id: "week" }));
+
+    // then
+    // The fallback is per hook, not a module-level singleton hiding behind one.
+    expect(presetOf(result.current.second.selection)).toBe("day");
   });
 
   it("should cope with coverage not having been read yet", () => {

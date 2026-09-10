@@ -1,13 +1,12 @@
 import {
   availableMonths,
   availableRanges,
-  availableYears,
   DEFAULT_RANGE_ID,
   monthLabel,
   monthOf,
-  monthsInYear,
   rangeById,
   sameMonth,
+  selectionFromKey,
   selectionKey,
   shiftMonth,
   TIME_RANGES,
@@ -109,6 +108,47 @@ describe("selectionKey", () => {
     // The key is what the window is memoised on, so two different selections
     // sharing one would freeze the dashboard on the first of them.
     expect(preset).not.toBe(month);
+  });
+});
+
+describe("selectionFromKey", () => {
+  it("should read back every selection `selectionKey` writes", () => {
+    // given
+    // The picker puts a key on each option and reads the one it is handed back,
+    // so a round trip that loses anything would move the dashboard to a window
+    // nobody asked for.
+    const preset = { kind: "preset", id: "quarter" } as const;
+    const month = { kind: "month", month: { year: 2026, month: 9 } } as const;
+
+    // when / then
+    expect(selectionFromKey(selectionKey(preset))).toEqual(preset);
+    expect(selectionFromKey(selectionKey(month))).toEqual(month);
+  });
+
+  it("should read a month key written by hand", () => {
+    // given / when
+    const selection = selectionFromKey("month:2026-9");
+
+    // then
+    // The shape is part of the option values in the rendered markup, so it is
+    // worth stating rather than only round-tripping.
+    expect(selection).toEqual({ kind: "month", month: { year: 2026, month: 9 } });
+  });
+
+  it("should refuse a key no option carries", () => {
+    // given / when / then
+    // A browser handed a value it has no option for reports the empty string
+    // back, and a rolling range that no longer exists must not resolve either.
+    expect(selectionFromKey("")).toBeNull();
+    expect(selectionFromKey("preset:fortnight")).toBeNull();
+    // A month ordinal outside 1-12 is refused rather than rolled by `Date`
+    // into a month nobody asked for.
+    expect(selectionFromKey("month:2026-99")).toBeNull();
+    expect(selectionFromKey("month:2026-0")).toBeNull();
+    expect(selectionFromKey("month:2026-12")).toEqual({
+      kind: "month",
+      month: { year: 2026, month: 12 },
+    });
   });
 });
 
@@ -245,31 +285,5 @@ describe("availableMonths", () => {
 
     // then
     expect(months).toEqual([{ year: 2026, month: 8 }]);
-  });
-});
-
-describe("availableYears", () => {
-  it("should list each year once, newest first", () => {
-    // given
-    const months = availableMonths("2025-11-02", LOCAL_NOON);
-
-    // when
-    const years = availableYears(months);
-
-    // then
-    expect(years).toEqual([2026, 2025]);
-  });
-});
-
-describe("monthsInYear", () => {
-  it("should keep only the months belonging to the year", () => {
-    // given
-    const months = availableMonths("2025-11-02", LOCAL_NOON);
-
-    // when
-    const inner = monthsInYear(months, 2025);
-
-    // then
-    expect(inner.map((month) => month.month)).toEqual([12, 11]);
   });
 });

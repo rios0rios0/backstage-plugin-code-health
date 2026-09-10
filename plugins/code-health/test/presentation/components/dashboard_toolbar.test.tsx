@@ -117,7 +117,11 @@ describe("DashboardToolbar", () => {
     render(<DashboardToolbar {...defaultProps} onRangeChange={onRangeChange} />);
 
     // when
-    fireEvent.change(screen.getByLabelText("Time range"), { target: { value: "month" } });
+    // One list holds both kinds now, so each option carries the whole selection
+    // rather than a bare range id.
+    fireEvent.change(screen.getByLabelText("Time range"), {
+      target: { value: "preset:month" },
+    });
 
     // then
     expect(onRangeChange).toHaveBeenCalledWith({ kind: "preset", id: "month" });

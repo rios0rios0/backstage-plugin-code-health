@@ -244,6 +244,52 @@ describe("ContributorDetailPage", () => {
     expect(screen.getByText(/read as a share of the top figure/u)).toBeInTheDocument();
   });
 
+  it("should say how the integrations join the score once one is configured", async () => {
+    // given
+    // Every weight on the card moves when an integration is switched on, and a
+    // reader who is not told why is left to assume the score was rescaled.
+    const trendService = new StubTrendService().withContributorTrend(aFullTrend());
+
+    // when
+    await renderPage({ trendService, capabilities: ALL_INTEGRATIONS });
+
+    // then
+    expect(
+      await screen.findByText(/Coding time and tickets resolved join the score/u),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/shared out over whatever is configured/u)).toBeInTheDocument();
+    // Confluence is the one integration stored per window rather than per
+    // day, so its component is named as read over its own trailing window,
+    // and the per-bucket chart says it carries no point of it.
+    expect(
+      screen.getByText(/over Confluence's own trailing window, which the range above does not move/u),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Documentation written counts in the score above and on no point here/u),
+    ).toBeInTheDocument();
+  });
+
+  it("should not describe integrations to an install that has none", async () => {
+    // given
+    const trendService = new StubTrendService().withContributorTrend(aFullTrend());
+
+    // when
+    await renderPage({ trendService });
+
+    // then
+    // Nothing here can collect coding time or tickets, so describing how they
+    // would be read is an explanation of a card the reader will never see.
+    expect(
+      await screen.findByRole("list", { name: "Productivity score components" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Coding time and tickets resolved join the score/u),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Documentation written counts in the score above/u),
+    ).not.toBeInTheDocument();
+  });
+
   it("should explain a churn figure the provider never reported", async () => {
     // given
     // Azure DevOps exposes no line count anywhere in its REST API, and an empty

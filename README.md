@@ -324,10 +324,16 @@ codeHealth:
   defaultRange: 'day'
 ```
 
-Every tab shares one range control. It offers the rolling ranges above and, under **By month…**, any
-single calendar month the backfill has reached: arrows step a month at a time, and the month and year
-dropdowns jump anywhere. Months outside the ingested history stay visible but unselectable, so a gap
-reads as "not collected yet" rather than as a list that mysteriously starts in April.
+One range control, and one selection behind it. The dropdown lists the rolling ranges above under
+**Rolling**, and every calendar month the backfill has reached under **Calendar months**, by name and
+newest first — **September 2026**, **August 2026**, and so on — so picking a month is one click and
+the list itself shows how far back the history goes. The arrows beside it step a month at a time,
+which is the fast path for "and the month before that", and both stop at the ends of what has been
+ingested so the control can never ask for a period that would come back empty.
+
+The pick follows you across the tabs. Insights, Contributors and Repositories all read the same
+selection, so a month chosen on one is still the month on the next; each still resolves it against
+its own clock, which is what keeps `today` meaning today on a tab opened after midnight.
 
 The Insights tab has no settings of its own. Its cadence chart buckets by day, week or month
 according to the range already selected — a year of daily points is noise and a week of monthly
@@ -342,6 +348,18 @@ and documentation, catalog APIs and fleet health sit above the **Repositories** 
 a way into a row, so putting it a tab away from the rows it ranks made a reader carry a name across
 the screen by hand; every entry now links to that person's or that repository's page. **Identities**
 stays last, because it is maintenance rather than a measurement.
+
+Each optional integration is split the same way. Insights keeps what WakaTime, Jira and Confluence
+say about the fleet — where the fleet's hours went and what they went into, the Jira delivery
+figures, the Confluence headline. What they say about a *person* sits above the Contributors table:
+who spent the coding time, who closes tickets, who keeps the board moving, who is documenting. What
+they say about a *repository* sits above the Repositories table: coding time by repository, backlog
+flow, open work by priority, the oldest open ticket, and documentation rot. Every row links to that
+person's or that repository's page, exactly as the version control rankings beside them do. Each
+section appears only when the backend reports that integration as configured — never because a row
+happens to carry a value, which cannot tell a switched-off integration from one that is on and has
+not collected yet — and each says for itself when it is configured and has nothing to show, so a
+reader never has to visit another tab to learn why a card is empty.
 
 ### Trends and scores
 
@@ -373,13 +391,13 @@ one resting on all of them.
 
 #### Productivity — one person, over one window
 
-A reading aid, not a verdict. The four output components are read **as a share of the fleet's top
-figure in the same window** rather than against a constant, so a quiet month for the whole team is a
-quiet month rather than everybody's failure, and there is no invented "forty commits is a good
-month" for anyone to argue with. Reliability and quality are absolute, because a pipeline success
-rate means the same thing whoever else happens to be on the team. Churn is only ever compared within
-its own unit — GitHub's lines against lines, Azure DevOps's files against files — because the two
-are not the same measurement wearing different labels.
+A reading aid, not a verdict. The output components are read **as a share of the fleet's top figure
+in the same window** rather than against a constant, so a quiet month for the whole team is a quiet
+month rather than everybody's failure, and there is no invented "forty commits is a good month" for
+anyone to argue with. Reliability and quality are absolute, because a pipeline success rate means
+the same thing whoever else happens to be on the team. Churn is only ever compared within its own
+unit — GitHub's lines against lines, Azure DevOps's files against files — because the two are not
+the same measurement wearing different labels.
 
 | Component | Weight | Read as |
 |---|---|---|
@@ -390,9 +408,34 @@ are not the same measurement wearing different labels.
 | Pipeline success | 15% | absolute, over the runs that reached a verdict |
 | Quality gate of code touched | 10% | absolute |
 | Test coverage of code touched | 10% | absolute, against the 80% Sonar gate |
+| Coding time | 10% | **WakaTime only** — share of the window's top figure |
+| Tickets resolved | 15% | **Jira only** — share of the window's top figure |
+| Tickets that stayed done | 5% | **Jira only** — absolute, over this person's own resolved tickets |
+| Documentation written | 10% | **Confluence only** — share of the top figure over Confluence's trailing window, which the range picker does not move |
 
-The last two describe **the repositories the person changed, not the code they wrote** — Sonar
-measures a project — which is why they carry the least weight and why every Sonar heading says so.
+The two Sonar components describe **the repositories the person changed, not the code they wrote** —
+Sonar measures a project — which is why they carry the least weight and why every Sonar heading says
+so.
+
+Documentation written is the one component that does not follow the range picker. Confluence is
+stored per window rather than per day — its figures describe the backend's trailing
+`atlassian.historyDays`, ninety by default — so the component's own sentence says which window it
+was read over, and the per-bucket score on a person's page leaves it out entirely: a bucket cannot
+measure it, and a line folded from one component fewer than the headline would sit below that
+headline for the whole window.
+
+The last four exist only where their integration is **configured**, and their absence is read from
+the configuration rather than from the rows: a row carrying no ticket count cannot say whether Jira
+is switched off or simply has not been read yet, and grading on the second reading would make a
+freshly configured install look as though half its people had stopped working.
+
+**The weights above are nominal, and are shared out over whatever is enabled.** With every
+integration on they add up to 140%, so each is scaled to bring the total back to one — commits then
+carry about 14% rather than 20%. That way a weight states what its component is worth *against the
+others* instead of against a total that differs per install, and an install with nothing configured
+scores exactly the seven components at exactly the seven weights it always did. `productivityComponentsFor`
+is the one place that arithmetic happens, and the column heading, the score card and this table all
+read from it.
 
 #### Repository health — one repository, absolutely
 

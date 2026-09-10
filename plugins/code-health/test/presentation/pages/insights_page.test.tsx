@@ -1,10 +1,11 @@
+import type { IntegrationCapabilities } from "@rios0rios0/backstage-plugin-code-health-common";
 import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
 import type { UseCoverageResult } from "../../../src/presentation/hooks/use_coverage";
 import { InsightsPage } from "../../../src/presentation/pages/insights_page";
-import { ContributorBuilder } from "../../builders/contributor_builder";
+import { ContributorBuilder, WakaTimeBuilder } from "../../builders/contributor_builder";
 import { RepositoryBuilder } from "../../builders/repository_builder";
 import { StubContributorService } from "../../doubles/stub_contributor_service";
 import { aCoverageInfo } from "../../doubles/stub_coverage_service";
@@ -24,6 +25,7 @@ const renderPage = (
     dashboardService?: StubDashboardService;
     contributorService?: StubContributorService;
     timeSeriesService?: StubTimeSeriesService;
+    capabilities?: IntegrationCapabilities;
   } = {},
 ) => {
   const dashboardService =
@@ -44,7 +46,7 @@ const renderPage = (
         timeSeriesService={timeSeriesService}
         coverage={coverageResult()}
         config={DEFAULT_CODE_HEALTH_CONFIG}
-        capabilities={NO_INTEGRATIONS}
+        capabilities={overrides.capabilities ?? NO_INTEGRATIONS}
       />
     </MemoryRouter>,
   );
@@ -194,5 +196,63 @@ describe("InsightsPage fleet coverage card", () => {
     expect(screen.queryByText("Documentation")).not.toBeInTheDocument();
     expect(screen.queryByText("Catalog APIs")).not.toBeInTheDocument();
     expect(screen.queryByText("Fleet health")).not.toBeInTheDocument();
+  });
+});
+
+describe("InsightsPage integration sections", () => {
+  const measured = () =>
+    new StubContributorService().withContributors([
+      ContributorBuilder.create()
+        .withDisplayName("alice")
+        .withWakaTimeMetrics(WakaTimeBuilder.create().build())
+        .build(),
+    ]);
+
+  it("should keep only the cards an integration says about the fleet", async () => {
+    // given
+    // Coding time by person and by repository are questions about a row, so
+    // they sit above the table that lists those rows. What the fleet's hours
+    // went into is not a question about a row, and stays here.
+    const contributorService = measured();
+
+    // when
+    renderPage({
+      contributorService,
+      capabilities: { wakatime: true, jira: true, confluence: true },
+    });
+
+    // then
+    await waitFor(() =>
+      expect(screen.getByText("Where the time went")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("What the time went into")).toBeInTheDocument();
+    // Jira is on and nothing names a project, which is still a fleet-level
+    // statement and stays here rather than moving with the backlog cards.
+    expect(screen.getByText(/jira\/project-key/u)).toBeInTheDocument();
+    expect(screen.getByText("Confluence")).toBeInTheDocument();
+    expect(screen.queryByText("Who spent the time")).not.toBeInTheDocument();
+    expect(screen.queryByText("Who closes tickets")).not.toBeInTheDocument();
+    expect(screen.queryByText("Who is documenting")).not.toBeInTheDocument();
+    expect(screen.queryByText("Backlog flow")).not.toBeInTheDocument();
+    expect(screen.queryByText("Documentation rot")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Where the time went, by repository"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should draw nothing for an integration the backend was not configured with", async () => {
+    // given
+    // Gated on the capability, never on the data: a row carrying no value
+    // cannot tell a switched-off integration from one that is on and has not
+    // collected yet, and the second would read as broken until the first pass.
+    const contributorService = measured();
+
+    // when
+    renderPage({ contributorService });
+
+    // then
+    await waitFor(() => expect(screen.getByText("At a glance")).toBeInTheDocument());
+    expect(screen.queryByText("Where the time went")).not.toBeInTheDocument();
+    expect(screen.queryByText("What the time went into")).not.toBeInTheDocument();
   });
 });

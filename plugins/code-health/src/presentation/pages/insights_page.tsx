@@ -26,9 +26,9 @@ import { RankingChart } from "../components/charts/ranking_chart";
 import { StatTile } from "../components/charts/stat_tile";
 import { StatusBreakdown } from "../components/charts/status_breakdown";
 import { DashboardToolbar } from "../components/dashboard_toolbar";
-import { ConfluenceInsights } from "../components/insights/confluence_insights";
-import { JiraInsights } from "../components/insights/jira_insights";
-import { WakaTimeInsights } from "../components/insights/wakatime_insights";
+import { ConfluenceFleetInsights } from "../components/insights/confluence_insights";
+import { JiraFleetInsights } from "../components/insights/jira_insights";
+import { WakaTimeFleetInsights } from "../components/insights/wakatime_insights";
 import { useAutoRefresh } from "../hooks/use_auto_refresh";
 import type { UseCoverageResult } from "../hooks/use_coverage";
 import { useInsights } from "../hooks/use_insights";
@@ -254,16 +254,23 @@ export const InsightsPage = ({
             </InfoCard>
           </Grid>
 
+          {/* Only each integration's fleet cards. What it says about a person
+              sits above the contributors table and what it says about a
+              repository above the repositories table, beside the rows they
+              name — the same split the version control cards already follow. */}
           {capabilities.wakatime ? (
-            <WakaTimeInsights repositories={repositories} contributors={contributors} />
+            <WakaTimeFleetInsights contributors={contributors} />
           ) : null}
 
           {capabilities.jira ? (
-            <JiraInsights repositories={repositories} contributors={contributors} />
+            <JiraFleetInsights repositories={repositories} contributors={contributors} />
           ) : null}
 
           {capabilities.confluence ? (
-            <ConfluenceInsights repositories={repositories} contributors={contributors} />
+            <ConfluenceFleetInsights
+              repositories={repositories}
+              contributors={contributors}
+            />
           ) : null}
         </Grid>
       ) : null}
