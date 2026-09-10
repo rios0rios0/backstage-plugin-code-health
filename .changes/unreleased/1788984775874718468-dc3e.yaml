@@ -1,4 +1,0 @@
-kind: 'Changed'
-body: 'added two required fields to the wire contract: `RepositorySummary.ownerRef` (the catalog owner, or null) and `RepositoryActivity.reviews` (votes cast on the repository''s pull requests by somebody other than their author, so review coverage can be read per repository). Anything that constructs either shape — a test fixture, a stub backend, a second frontend — has to supply them, which is the same shape of change `pipelineRunsFailed` was. The common package also gains the score definitions both plugins share (`computeProductivityScore`, `computeRepositoryHealthScore`, `scoreBand`) and the trend, ownership, access and reset response types'
-breaking: true
-time: '2026-09-09T20:12:55.874643859Z'

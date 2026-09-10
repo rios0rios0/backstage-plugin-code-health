@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'moved six cards off the Insights tab to sit above the table they drill into. **Top contributors**, **Review load** and **Most active repositories** now open the Contributors tab; **Documentation**, **Catalog APIs** and **Fleet health** now open the Repositories tab; Insights keeps At a glance, Delivery cadence, Test coverage across the fleet and the integration sections. Ranking rows link to the plugin''s own detail pages rather than to the catalog, so clicking a name opens the trend'
-time: '2026-09-09T20:12:55.872709565Z'
