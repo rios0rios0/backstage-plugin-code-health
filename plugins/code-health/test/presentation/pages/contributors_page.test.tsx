@@ -78,7 +78,11 @@ describe("ContributorsPage", () => {
     await waitFor(() => expect(service.calls).toHaveLength(1));
 
     // when
-    fireEvent.change(screen.getByLabelText("Time range"), { target: { value: "month" } });
+    // One list holds the rolling ranges and the calendar months now, so each
+    // option carries the whole selection rather than a bare range id.
+    fireEvent.change(screen.getByLabelText("Time range"), {
+      target: { value: "preset:month" },
+    });
 
     // then
     await waitFor(() => expect(service.calls.length).toBeGreaterThan(1));

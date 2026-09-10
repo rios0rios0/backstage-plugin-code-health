@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { Route, Routes } from "react-router-dom";
 import { IngestionResetButton } from "../presentation/components/ingestion_reset_button";
 import { ThemeToggleButton } from "../presentation/components/theme_toggle_button";
+import { RangeSelectionProvider } from "../presentation/hooks/range_selection_context";
 import { useCapabilities } from "../presentation/hooks/use_capabilities";
 import { useCoverage } from "../presentation/hooks/use_coverage";
 import { ContributorDetailPage } from "../presentation/pages/contributor_detail_page";
@@ -76,6 +77,12 @@ const TabBody = ({ error, children }: { error: string | null; children: ReactNod
  * table. `TabbedLayout` matches every tab as `<path>/*`, so the nested routes
  * below resolve relative to the tab and the tab stays selected while a person
  * or a repository is open.
+ *
+ * One range selection covers all of them. Switching tabs unmounts the page that
+ * was showing, so a range held per tab was gone the moment somebody clicked
+ * away from it and the dashboard looked as though it kept resetting itself.
+ * `RangeSelectionProvider` holds the request above the tabs; each tab still
+ * resolves it against its own clock and its own reading of the coverage.
  */
 export const Router = () => {
   const config = useApi(codeHealthConfigApiRef);
@@ -108,88 +115,90 @@ export const Router = () => {
           <Progress />
         </Content>
       ) : (
-        <TabbedLayout>
-          <TabbedLayout.Route path="/" title="Insights">
-            <TabBody error={coverage.error}>
-              <InsightsPage
-                dashboardService={dashboardService}
-                contributorService={contributorService}
-                timeSeriesService={timeSeriesService}
-                coverage={coverage}
-                config={config}
-                capabilities={capabilities}
-              />
-            </TabBody>
-          </TabbedLayout.Route>
+        <RangeSelectionProvider defaultRange={config.defaultRange}>
+          <TabbedLayout>
+            <TabbedLayout.Route path="/" title="Insights">
+              <TabBody error={coverage.error}>
+                <InsightsPage
+                  dashboardService={dashboardService}
+                  contributorService={contributorService}
+                  timeSeriesService={timeSeriesService}
+                  coverage={coverage}
+                  config={config}
+                  capabilities={capabilities}
+                />
+              </TabBody>
+            </TabbedLayout.Route>
 
-          <TabbedLayout.Route path="/contributors" title="Contributors">
-            <TabBody error={coverage.error}>
-              <Routes>
-                <Route
-                  path="/person"
-                  element={
-                    <ContributorDetailPage
-                      trendService={trendService}
-                      ownershipService={ownershipService}
-                      coverage={coverage}
-                      capabilities={capabilities}
-                    />
-                  }
-                />
-                <Route
-                  path="/*"
-                  element={
-                    <ContributorsPage
-                      contributorService={contributorService}
-                      dashboardService={dashboardService}
-                      coverage={coverage}
-                      config={config}
-                      capabilities={capabilities}
-                    />
-                  }
-                />
-              </Routes>
-            </TabBody>
-          </TabbedLayout.Route>
+            <TabbedLayout.Route path="/contributors" title="Contributors">
+              <TabBody error={coverage.error}>
+                <Routes>
+                  <Route
+                    path="/person"
+                    element={
+                      <ContributorDetailPage
+                        trendService={trendService}
+                        ownershipService={ownershipService}
+                        coverage={coverage}
+                        capabilities={capabilities}
+                      />
+                    }
+                  />
+                  <Route
+                    path="/*"
+                    element={
+                      <ContributorsPage
+                        contributorService={contributorService}
+                        dashboardService={dashboardService}
+                        coverage={coverage}
+                        config={config}
+                        capabilities={capabilities}
+                      />
+                    }
+                  />
+                </Routes>
+              </TabBody>
+            </TabbedLayout.Route>
 
-          <TabbedLayout.Route path="/repositories" title="Repositories">
-            <TabBody error={coverage.error}>
-              <Routes>
-                <Route
-                  path="/:id"
-                  element={
-                    <RepositoryDetailPage
-                      trendService={trendService}
-                      contributorService={contributorService}
-                      coverage={coverage}
-                      capabilities={capabilities}
-                    />
-                  }
-                />
-                <Route
-                  path="/*"
-                  element={
-                    <DashboardPage
-                      dashboardService={dashboardService}
-                      coverage={coverage}
-                      config={config}
-                      capabilities={capabilities}
-                    />
-                  }
-                />
-              </Routes>
-            </TabBody>
-          </TabbedLayout.Route>
+            <TabbedLayout.Route path="/repositories" title="Repositories">
+              <TabBody error={coverage.error}>
+                <Routes>
+                  <Route
+                    path="/:id"
+                    element={
+                      <RepositoryDetailPage
+                        trendService={trendService}
+                        contributorService={contributorService}
+                        coverage={coverage}
+                        capabilities={capabilities}
+                      />
+                    }
+                  />
+                  <Route
+                    path="/*"
+                    element={
+                      <DashboardPage
+                        dashboardService={dashboardService}
+                        coverage={coverage}
+                        config={config}
+                        capabilities={capabilities}
+                      />
+                    }
+                  />
+                </Routes>
+              </TabBody>
+            </TabbedLayout.Route>
 
-          <TabbedLayout.Route path="/identities" title="Identities">
-            <TabBody error={coverage.error}>
-              <IdentitiesPage
-                identityService={identityService}
-                capabilities={capabilities}
-              />
-            </TabBody>
-          </TabbedLayout.Route>
-        </TabbedLayout>
+            <TabbedLayout.Route path="/identities" title="Identities">
+              <TabBody error={coverage.error}>
+                <IdentitiesPage
+                  identityService={identityService}
+                  capabilities={capabilities}
+                />
+              </TabBody>
+            </TabbedLayout.Route>
+          </TabbedLayout>
+        </RangeSelectionProvider>
       )}
     </Page>
   );

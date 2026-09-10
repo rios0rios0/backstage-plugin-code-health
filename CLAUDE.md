@@ -104,7 +104,8 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/presentation/components/columns/` | One column-group factory per integration, called only when its flag is set |
 | `src/presentation/components/insights/` | One Insights card set per integration, on the same terms |
 | `src/domain/entities/time_range.ts` | Which windows are offered, bounded by coverage — rolling ranges and calendar months |
-| `src/presentation/components/range_picker.tsx` | One control for both, so the two can never disagree |
+| `src/presentation/components/range_picker.tsx` | One control for both, so the two can never disagree; every offered month is in the list by name |
+| `src/presentation/hooks/range_selection_context.tsx` | The one selection the tabs share, so a month picked on one is still the month on the next |
 | `src/presentation/components/backfill_progress.tsx` | Why wider ranges are not available yet |
 | `src/routes.ts` | The route refs, and why a person key travels in the query string rather than a path segment |
 | `src/presentation/pages/contributor_detail_page.tsx` / `repository_detail_page.tsx` | One person's and one repository's trend and score, plus — for a person — the repositories they own |

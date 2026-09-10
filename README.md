@@ -324,10 +324,16 @@ codeHealth:
   defaultRange: 'day'
 ```
 
-Every tab shares one range control. It offers the rolling ranges above and, under **By month…**, any
-single calendar month the backfill has reached: arrows step a month at a time, and the month and year
-dropdowns jump anywhere. Months outside the ingested history stay visible but unselectable, so a gap
-reads as "not collected yet" rather than as a list that mysteriously starts in April.
+One range control, and one selection behind it. The dropdown lists the rolling ranges above under
+**Rolling**, and every calendar month the backfill has reached under **Calendar months**, by name and
+newest first — **September 2026**, **August 2026**, and so on — so picking a month is one click and
+the list itself shows how far back the history goes. The arrows beside it step a month at a time,
+which is the fast path for "and the month before that", and both stop at the ends of what has been
+ingested so the control can never ask for a period that would come back empty.
+
+The pick follows you across the tabs. Insights, Contributors and Repositories all read the same
+selection, so a month chosen on one is still the month on the next; each still resolves it against
+its own clock, which is what keeps `today` meaning today on a tab opened after midnight.
 
 The Insights tab has no settings of its own. Its cadence chart buckets by day, week or month
 according to the range already selected — a year of daily points is noise and a week of monthly
