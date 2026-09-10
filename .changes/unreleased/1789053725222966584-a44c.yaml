@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'corrected the release documentation now that AutoBump `3.0.3` carries project-layer refresh (rios0rios0/autobump#348): `refresh: true` in this repository''s `.autobump.yaml` is honoured on its own, so the interim instruction to repeat it in a releaser''s own `~/.autobump.yaml` is gone and `CLAUDE.md` states the version floor instead'
+time: '2026-09-10T15:22:05.222904541Z'

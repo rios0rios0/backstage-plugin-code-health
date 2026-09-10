@@ -386,15 +386,12 @@ Releasing is [AutoBump](https://github.com/rios0rios0/autobump)'s job: `autobump
 `[Unreleased]`, derives the version, moves the entries under a dated heading, writes that version to
 all four `package.json` files, regenerates `yarn.lock`, branches `chore/bump-x.x.x`, and opens the PR.
 
-**Requires AutoBump with project-layer refresh** (rios0rios0/autobump#348). `refresh: true` lives in
-this repository's `.autobump.yaml`, under `languages.typescript`, beside the pattern that makes it
-necessary.
-
-> **Interim, until #348 is released.** It is still open, and the latest tag is **3.0.2**, cut before
-> it. On 3.0.2 a project file's `refresh: true` is warned about and dropped, so the line in
-> `.autobump.yaml` does nothing yet and you **also** need `refresh: true` under
-> `languages.typescript` in your own `~/.autobump.yaml`. Once a release carries #348, this note and
-> that line both go.
+**Requires AutoBump 3.0.3 or newer** — the first release carrying project-layer refresh
+(rios0rios0/autobump#348, merged 2026-09-03). `refresh: true` lives in this repository's
+`.autobump.yaml`, under `languages.typescript`, beside the pattern that makes it necessary, and
+nothing has to be set in your own `~/.autobump.yaml`. On anything older a project file's
+`refresh: true` is warned about and dropped, and the release comes out with the stale lockfile
+described below.
 
 That is a change from 3.0.0, where `refresh` was read from a project's own file only when it was
 `false` and an enable had to come from your `~/.autobump.yaml`. Releases 2.3.0, 3.0.0 and 4.0.0 all
