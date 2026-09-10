@@ -26,7 +26,7 @@ describe("EMPTY_REPOSITORY_ACTIVITY", () => {
     // then
     // A repository with no events in the window renders from this value, so a
     // non-zero default would silently invent activity that never happened.
-    expect(values).toHaveLength(13);
+    expect(values).toHaveLength(14);
     expect(values.every((value) => value === 0)).toBe(true);
   });
 });

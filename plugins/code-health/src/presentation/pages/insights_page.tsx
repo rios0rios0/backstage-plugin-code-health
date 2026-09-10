@@ -4,28 +4,16 @@ import type {
   TimeSeriesBucket,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import Box from "@material-ui/core/Box";
-import Divider from "@material-ui/core/Divider";
 import Grid from "@material-ui/core/Grid";
-import Typography from "@material-ui/core/Typography";
 import { useMemo } from "react";
 import type { CodeHealthConfig } from "../../domain/entities/code_health_config";
 import {
-  apiCandidates,
-  apiExposureBreakdown,
-  complianceBreakdown,
   computeKpis,
   COVERAGE_TARGET,
   coverageBreakdown,
   coverageStats,
-  documentationBreakdown,
   lowestCoverageRepositories,
-  qualityGateBreakdown,
   toCadence,
-  topContributorsByCommits,
-  topRepositoriesByCommits,
-  topReviewers,
-  undocumented,
-  unpublishedDocumentation,
 } from "../../domain/entities/insights";
 import type {
   ContributorService,
@@ -34,7 +22,6 @@ import type {
 } from "../../domain/services/dashboard_service";
 import { BackfillProgress } from "../components/backfill_progress";
 import { CadenceChart } from "../components/charts/cadence_chart";
-import { GapList } from "../components/charts/gap_list";
 import { RankingChart } from "../components/charts/ranking_chart";
 import { StatTile } from "../components/charts/stat_tile";
 import { StatusBreakdown } from "../components/charts/status_breakdown";
@@ -107,34 +94,12 @@ export const InsightsPage = ({
     () => computeKpis(repositories, contributors),
     [repositories, contributors],
   );
-  const contributorRanking = useMemo(
-    () => topContributorsByCommits(contributors),
-    [contributors],
-  );
-  const reviewerRanking = useMemo(() => topReviewers(contributors), [contributors]);
-  const repositoryRanking = useMemo(
-    () => topRepositoriesByCommits(repositories),
-    [repositories],
-  );
-  const qualityGates = useMemo(() => qualityGateBreakdown(repositories), [repositories]);
   const testCoverage = useMemo(() => coverageStats(repositories), [repositories]);
   const coverageSlices = useMemo(() => coverageBreakdown(repositories), [repositories]);
   const leastCovered = useMemo(
     () => lowestCoverageRepositories(repositories),
     [repositories],
   );
-  const documentation = useMemo(
-    () => documentationBreakdown(repositories),
-    [repositories],
-  );
-  const docsUnpublished = useMemo(
-    () => unpublishedDocumentation(repositories),
-    [repositories],
-  );
-  const docsMissing = useMemo(() => undocumented(repositories), [repositories]);
-  const apiSlices = useMemo(() => apiExposureBreakdown(repositories), [repositories]);
-  const apiGaps = useMemo(() => apiCandidates(repositories), [repositories]);
-  const compliance = useMemo(() => complianceBreakdown(repositories), [repositories]);
   const cadencePoints = useMemo(() => toCadence(cadence), [cadence]);
 
   const showEmpty = !isLoading && repositories.length === 0 && error === null;
@@ -237,42 +202,6 @@ export const InsightsPage = ({
             </InfoCard>
           </Grid>
 
-          <Grid item xs={12} md={6}>
-            <InfoCard title="Top contributors" subheader="By commits in the window">
-              <RankingChart
-                items={contributorRanking}
-                unit="commits"
-                showAvatars
-                emptyMessage="No commits were recorded in this window."
-              />
-            </InfoCard>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <InfoCard title="Most active repositories" subheader="By commits in the window">
-              <RankingChart
-                items={repositoryRanking}
-                unit="commits"
-                emptyMessage="No commits were recorded in this window."
-              />
-            </InfoCard>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <InfoCard
-              title="Review load"
-              subheader="Who is reviewing — concentration here is a bus factor"
-            >
-              <RankingChart
-                items={reviewerRanking}
-                unit="reviews"
-                showAvatars
-                emptyMessage="No reviews were recorded in this window."
-              />
-            </InfoCard>
-          </Grid>
-
-
           <Grid item xs={12}>
             <InfoCard
               title="Test coverage across the fleet"
@@ -325,60 +254,6 @@ export const InsightsPage = ({
             </InfoCard>
           </Grid>
 
-          <Grid item xs={12} md={6}>
-            <InfoCard
-              title="Documentation"
-              subheader="Where TechDocs is wired up, and where the docs exist but nobody pointed at them"
-            >
-              <StatusBreakdown slices={documentation} />
-              <Box my={2}>
-                <Divider />
-              </Box>
-              <Box mb={1} fontWeight={500}>
-                Written but not published
-              </Box>
-              <GapList
-                gaps={docsUnpublished}
-                emptyMessage="Every repository that writes documentation publishes it."
-              />
-              <Box my={2}>
-                <Divider />
-              </Box>
-              <Box mb={1} fontWeight={500}>
-                No documentation at all
-              </Box>
-              <GapList
-                gaps={docsMissing}
-                emptyMessage="Nothing in the fleet is completely undocumented."
-              />
-            </InfoCard>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <InfoCard
-              title="Catalog APIs"
-              subheader="Repositories that could be an API entity in the catalog and are not"
-            >
-              <StatusBreakdown slices={apiSlices} />
-              <Box my={2}>
-                <Divider />
-              </Box>
-              <Box mb={1} fontWeight={500}>
-                Missing a `providesApis` entry
-              </Box>
-              <GapList
-                gaps={apiGaps}
-                emptyMessage="Every repository that looks like it serves an API already declares one."
-              />
-              <Box mt={2}>
-                <Typography variant="caption" color="textSecondary">
-                  A path is a definition found in the repository; “typed as a service” is
-                  inferred from the entity’s `spec.type` alone and is the weaker signal.
-                </Typography>
-              </Box>
-            </InfoCard>
-          </Grid>
-
           {capabilities.wakatime ? (
             <WakaTimeInsights repositories={repositories} contributors={contributors} />
           ) : null}
@@ -390,22 +265,6 @@ export const InsightsPage = ({
           {capabilities.confluence ? (
             <ConfluenceInsights repositories={repositories} contributors={contributors} />
           ) : null}
-
-          <Grid item xs={12} md={6}>
-            <InfoCard title="Fleet health">
-              <Box mb={1} fontWeight={500}>
-                Quality gates
-              </Box>
-              <StatusBreakdown slices={qualityGates} />
-              <Box my={2}>
-                <Divider />
-              </Box>
-              <Box mb={1} fontWeight={500}>
-                Branch and build policy
-              </Box>
-              <StatusBreakdown slices={compliance} />
-            </InfoCard>
-          </Grid>
         </Grid>
       ) : null}
     </>

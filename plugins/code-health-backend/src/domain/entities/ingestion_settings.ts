@@ -82,6 +82,15 @@ export interface AtlassianSettings {
 }
 
 export interface CodeHealthSettings {
+  /**
+   * Catalog entity references — users or groups — allowed to start the history
+   * collection over. Empty means nobody, which is the default.
+   *
+   * Normalised on the way in, so `jane`, `user:jane` and `user:default/jane`
+   * are one entry rather than three that fail to match the reference an
+   * identity actually carries.
+   */
+  readonly administrators: readonly string[];
   readonly ingestion: IngestionSettings;
   readonly sonar: SonarSettings;
   readonly wakaTime: WakaTimeSettings;

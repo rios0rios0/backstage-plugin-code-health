@@ -1,8 +1,10 @@
 import { codeHealthApis } from "../src/main/apis";
 import { CodeHealthPage, codeHealthPlugin } from "../src/plugin";
 import {
+  contributorDetailRouteRef,
   contributorsRouteRef,
   repositoriesRouteRef,
+  repositoryDetailRouteRef,
   rootRouteRef,
 } from "../src/routes";
 
@@ -26,17 +28,20 @@ describe("codeHealthPlugin", () => {
     // now that the backend authenticates through `integrations`.
     expect(apis).toHaveLength(codeHealthApis.length);
     expect(apis.map((api) => api.api.id).sort()).toEqual([
+      "plugin.code-health.administration",
       "plugin.code-health.config",
       "plugin.code-health.contributors",
       "plugin.code-health.coverage",
       "plugin.code-health.identities",
       "plugin.code-health.integrations",
+      "plugin.code-health.ownership",
       "plugin.code-health.repositories",
       "plugin.code-health.time-series",
+      "plugin.code-health.trends",
     ]);
   });
 
-  it("should publish the root route and both sub routes", () => {
+  it("should publish the root route, both table routes and both detail routes", () => {
     // given / when
     const routes = codeHealthPlugin.routes;
 
@@ -45,7 +50,9 @@ describe("codeHealthPlugin", () => {
     // app deep-linking to the old `/insights` path has to move to the root.
     expect(routes.root).toBe(rootRouteRef);
     expect(routes.contributors).toBe(contributorsRouteRef);
+    expect(routes.contributor).toBe(contributorDetailRouteRef);
     expect(routes.repositories).toBe(repositoriesRouteRef);
+    expect(routes.repository).toBe(repositoryDetailRouteRef);
   });
 
   it("should provide the page as a renderable routable extension", () => {

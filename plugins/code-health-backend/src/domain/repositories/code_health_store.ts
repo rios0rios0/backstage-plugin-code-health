@@ -185,6 +185,21 @@ export interface CodeHealthStore {
     repositoryIds?: readonly string[];
   }): Promise<RepositorySnapshot[]>;
 
+  /**
+   * Every snapshot in `[from, to]`, ascending by day.
+   *
+   * The trend routes need the state a repository was in at the end of each
+   * bucket, and asking `listLatestSnapshots` once per bucket would be one query
+   * per point on the chart. One range read plus a baseline of the most recent
+   * snapshot at or before `from` answers every bucket, because a day with no
+   * snapshot inherits the last one taken before it.
+   */
+  listSnapshots(options: {
+    from: Day;
+    to: Day;
+    repositoryIds?: readonly string[];
+  }): Promise<RepositorySnapshot[]>;
+
   listEvents(options: {
     from: Date;
     to: Date;
@@ -193,4 +208,23 @@ export interface CodeHealthStore {
   }): Promise<CodeHealthEvent[]>;
 
   getCoverage(): Promise<CoverageCounts>;
+
+  /**
+   * Sends every tracked repository's history collection back to the start,
+   * reaching `days` back.
+   *
+   * The walk re-collects commits, pull requests, reviews and builds, so those
+   * are dropped along with the days claimed as fetched; snapshots, releases and
+   * tags come from the daily snapshot rather than the walk and stay. A
+   * repository that has left the catalog is never ingested again, so its
+   * history is left alone rather than deleted with nothing to replace it.
+   *
+   * One transaction, for the same reason `commitIngestion` is one: a crash
+   * between deleting the events and moving the cursors would leave a repository
+   * claiming to have fetched days whose rows are gone.
+   */
+  resetIngestion(options: {
+    days: number;
+    now: Date;
+  }): Promise<{ repositories: number }>;
 }

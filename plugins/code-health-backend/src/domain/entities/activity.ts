@@ -55,9 +55,11 @@ export const aggregateActivity = (
           return { ...accumulator, releases: accumulator.releases + 1 };
         case "tag":
           return { ...accumulator, tags: accumulator.tags + 1 };
+        case "pr_review":
+          // Counted so review coverage can be read per repository. The actor
+          // widens the contributor count too, as it always did.
+          return { ...accumulator, reviews: accumulator.reviews + 1 };
         default:
-          // Reviews carry an actor and so widen the contributor count, but they
-          // are not activity of their own at the repository level.
           return accumulator;
       }
     },

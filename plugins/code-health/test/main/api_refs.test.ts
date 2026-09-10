@@ -1,8 +1,11 @@
 import {
+  codeHealthAdministrationApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
+  codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthTrendsApiRef,
 } from "../../src/main/api_refs";
 
 const refs = [
@@ -10,6 +13,9 @@ const refs = [
   codeHealthRepositoriesApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
+  codeHealthTrendsApiRef,
+  codeHealthOwnershipApiRef,
+  codeHealthAdministrationApiRef,
 ];
 
 describe("api_refs", () => {
@@ -38,5 +44,8 @@ describe("api_refs", () => {
     expect(codeHealthRepositoriesApiRef.id).toBe("plugin.code-health.repositories");
     expect(codeHealthContributorsApiRef.id).toBe("plugin.code-health.contributors");
     expect(codeHealthCoverageApiRef.id).toBe("plugin.code-health.coverage");
+    expect(codeHealthTrendsApiRef.id).toBe("plugin.code-health.trends");
+    expect(codeHealthOwnershipApiRef.id).toBe("plugin.code-health.ownership");
+    expect(codeHealthAdministrationApiRef.id).toBe("plugin.code-health.administration");
   });
 });

@@ -1,60 +1,106 @@
+import { renderInTestApp } from "@backstage/test-utils";
 import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
-import { render as renderBare, screen, fireEvent, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { screen, fireEvent, within } from "@testing-library/react";
 import { ContributorsTable } from "../../../src/presentation/components/contributors_table";
+import { rootRouteRef } from "../../../src/routes";
 import {
   ContributorBuilder,
   WakaTimeBuilder,
 } from "../../builders/contributor_builder";
 
-// A contributor linked to a catalog user renders a router `Link`, so these mount
-// inside a router — which is how the app renders the table.
-const render = (ui: React.ReactElement) => renderBare(<MemoryRouter>{ui}</MemoryRouter>);
+// Every name now links to the person's page, which the table resolves through
+// `useRouteRef` — and that throws outside a Backstage app however the markup is
+// wrapped. Mounting the plugin root is what gives the sub route a path to
+// resolve against, which is also how the app itself renders the table.
+const render = (ui: React.ReactElement) =>
+  renderInTestApp(ui, { mountedRoutes: { "/": rootRouteRef } });
 
 describe("ContributorsTable", () => {
-  it("should link a contributor to their catalog user", async () => {
+  it("should link a contributor's name to their page here", async () => {
     // given
-    // The catalog page is the destination rather than the provider profile: it
-    // carries ownership, group membership and the rest of the person's entity.
+    // The name used to lead to the catalog entity, which was the wrong
+    // destination once this plugin had something of its own to say about a
+    // person. The key carries a colon and a slash, so it has to travel encoded.
     const contributors = [
       ContributorBuilder.create()
         .withDisplayName("Dev Eloper")
+        .withKey("user:default/dev_example.com")
         .withEntityRef("user:default/dev_example.com")
         .build(),
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
     // then
-    const link = screen.getByText("Dev Eloper").closest("a");
-    expect(link).toHaveAttribute("href", "/catalog/default/user/dev_example.com");
+    expect(screen.getByText("Dev Eloper").closest("a")).toHaveAttribute(
+      "href",
+      "/contributors/person?key=user%3Adefault%2Fdev_example.com",
+    );
   });
 
-  it("should fall back to the provider profile when no catalog user matched", async () => {
+  it("should keep the catalog entity as a secondary link", async () => {
     // given
-    // Bots and commits from a personal address resolve to no entity, and linking
-    // them into the catalog would point at a page that does not exist.
+    // The catalog is still where ownership, group membership and the rest of
+    // the person's entity live — it is just no longer what the name means.
+    // A commit author with no provider account is common on Azure DevOps, so
+    // the catalog icon has to stand on its own.
+    const contributors = [
+      ContributorBuilder.create()
+        .withDisplayName("Dev Eloper")
+        .withEntityRef("user:default/dev_example.com")
+        .withoutProfile()
+        .build(),
+    ];
+
+    // when
+    await render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(screen.getByRole("link", { name: "Open in the catalog" })).toHaveAttribute(
+      "href",
+      "/catalog/default/user/dev_example.com",
+    );
+    expect(
+      screen.queryByRole("link", { name: "Open the provider profile" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should still reach the provider profile of an account with no entity", async () => {
+    // given
+    // Bots and commits from a personal address resolve to no entity, so the
+    // provider profile is the only way out to the account itself — and the row
+    // still leads to a page here, because a bot with a history is exactly the
+    // row somebody needs to look into.
     const contributors = [
       ContributorBuilder.create()
         .withDisplayName("ci-bot")
+        .withKey("vcs:ci-bot")
         .withEntityRef(null)
         .withProfileUrl("https://github.com/ci-bot")
         .build(),
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
     // then
     expect(screen.getByText("ci-bot").closest("a")).toHaveAttribute(
       "href",
-      "https://github.com/ci-bot",
+      "/contributors/person?key=vcs%3Aci-bot",
     );
+    expect(
+      screen.getByRole("link", { name: "Open the provider profile" }),
+    ).toHaveAttribute("href", "https://github.com/ci-bot");
+    expect(
+      screen.queryByRole("link", { name: "Open in the catalog" }),
+    ).not.toBeInTheDocument();
   });
 
   it("should show initials when the catalog user has no picture", async () => {
@@ -70,7 +116,7 @@ describe("ContributorsTable", () => {
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
@@ -83,17 +129,17 @@ describe("ContributorsTable", () => {
     isLoading: false,
   };
 
-  it("should render 'No contributors found.' when contributors is empty", () => {
+  it("should render 'No contributors found.' when contributors is empty", async () => {
     // given / when
-    render(<ContributorsTable {...defaultProps} contributors={[]} />);
+    await render(<ContributorsTable {...defaultProps} contributors={[]} />);
 
     // then
     expect(screen.getByText("No contributors found.")).toBeInTheDocument();
   });
 
-  it("should render loading skeleton when isLoading is true", () => {
+  it("should render loading skeleton when isLoading is true", async () => {
     // given / when
-    const { container } = render(
+    const { container } = await render(
       <ContributorsTable {...defaultProps} contributors={[]} isLoading />,
     );
 
@@ -102,7 +148,7 @@ describe("ContributorsTable", () => {
     expect(skeletonRows.length).toBeGreaterThan(0);
   });
 
-  it("should render contributor rows with avatar, displayName, PR counts, and LOC", () => {
+  it("should render contributor rows with avatar, displayName, PR counts, and LOC", async () => {
     // given
     const contributors = [
       ContributorBuilder.create()
@@ -113,7 +159,7 @@ describe("ContributorsTable", () => {
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable
         contributors={contributors}
         totalCount={1}
@@ -126,14 +172,14 @@ describe("ContributorsTable", () => {
     expect(screen.getByText("5,000")).toBeInTheDocument();
   });
 
-  it("should render approval rate with green color for rate >= 80", () => {
+  it("should render approval rate with green color for rate >= 80", async () => {
     // given
     const contributors = [
       ContributorBuilder.create().withPrApprovalRate(85).build(),
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable
         contributors={contributors}
         totalCount={1}
@@ -146,14 +192,14 @@ describe("ContributorsTable", () => {
     expect(rateEl.getAttribute("data-tone")).toBe("good");
   });
 
-  it("should render approval rate with yellow color for rate >= 50 and < 80", () => {
+  it("should render approval rate with yellow color for rate >= 50 and < 80", async () => {
     // given
     const contributors = [
       ContributorBuilder.create().withPrApprovalRate(65).build(),
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable
         contributors={contributors}
         totalCount={1}
@@ -167,14 +213,14 @@ describe("ContributorsTable", () => {
     expect(approvalRateEl.getAttribute("data-tone")).toBe("fair");
   });
 
-  it("should render approval rate with red color for rate < 50", () => {
+  it("should render approval rate with red color for rate < 50", async () => {
     // given
     const contributors = [
       ContributorBuilder.create().withPrApprovalRate(30).build(),
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable
         contributors={contributors}
         totalCount={1}
@@ -188,7 +234,7 @@ describe("ContributorsTable", () => {
     expect(approvalRateEl.getAttribute("data-tone")).toBe("poor");
   });
 
-  it("should show the WakaTime columns when the integration is configured", () => {
+  it("should show the WakaTime columns when the integration is configured", async () => {
     // given
     // Driven by configuration, not by the data: a WakaTime that was switched on
     // this morning has collected nothing until the nightly pass, and hiding its
@@ -201,7 +247,7 @@ describe("ContributorsTable", () => {
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable
         contributors={contributors}
         totalCount={1}
@@ -217,12 +263,12 @@ describe("ContributorsTable", () => {
     expect(screen.getByText("1h")).toBeInTheDocument();
   });
 
-  it("should show the WakaTime columns even before anything was collected", () => {
+  it("should show the WakaTime columns even before anything was collected", async () => {
     // given
     const contributors = [ContributorBuilder.create().build()];
 
     // when
-    render(
+    await render(
       <ContributorsTable
         contributors={contributors}
         totalCount={1}
@@ -237,7 +283,7 @@ describe("ContributorsTable", () => {
     expect(screen.getAllByText("-").length).toBeGreaterThan(0);
   });
 
-  it("should show the AI columns only once a row actually carries them", () => {
+  it("should show the AI columns only once a row actually carries them", async () => {
     // given
     // The AI figures are collected separately and opting out of them is a
     // supported way to run WakaTime, so a screen of em dashes would read as a
@@ -257,7 +303,7 @@ describe("ContributorsTable", () => {
     const capabilities = { ...NO_INTEGRATIONS, wakatime: true };
 
     // when
-    const { rerender } = render(
+    const { rerender } = await render(
       <ContributorsTable
         contributors={[withoutAi]}
         totalCount={1}
@@ -285,7 +331,7 @@ describe("ContributorsTable", () => {
     expect(screen.getByText("30%")).toBeInTheDocument();
   });
 
-  it("should hide the WakaTime columns when the integration is not configured", () => {
+  it("should hide the WakaTime columns when the integration is not configured", async () => {
     // given
     const contributors = [
       ContributorBuilder.create()
@@ -294,7 +340,7 @@ describe("ContributorsTable", () => {
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
@@ -302,7 +348,7 @@ describe("ContributorsTable", () => {
     expect(screen.queryByText("Coding time")).not.toBeInTheDocument();
   });
 
-  it("should name the systems merged onto one row", () => {
+  it("should name the systems merged onto one row", async () => {
     // given
     // A total nobody can trace back to its sources is a number nobody trusts.
     const contributor = ContributorBuilder.create()
@@ -314,7 +360,7 @@ describe("ContributorsTable", () => {
       .build();
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={[contributor]} totalCount={1} isLoading={false} />,
     );
 
@@ -322,7 +368,7 @@ describe("ContributorsTable", () => {
     expect(screen.getByText("vcs · wakatime")).toBeInTheDocument();
   });
 
-  it("should render contributor count", () => {
+  it("should render contributor count", async () => {
     // given
     const contributors = [
       ContributorBuilder.create().withDisplayName("a").build(),
@@ -330,7 +376,7 @@ describe("ContributorsTable", () => {
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable
         contributors={contributors}
         totalCount={5}
@@ -342,7 +388,7 @@ describe("ContributorsTable", () => {
     expect(screen.getByText(/2 of 5 contributors/)).toBeInTheDocument();
   });
 
-  it("should show a dash in every Sonar cell of a contributor with no metrics", () => {
+  it("should show a dash in every Sonar cell of a contributor with no metrics", async () => {
     // given
     const contributors = [
       ContributorBuilder.create().withDisplayName("unmeasured").build(),
@@ -350,7 +396,7 @@ describe("ContributorsTable", () => {
     const sonarHeaders = ["Bugs", "Smells", "Vulns", "Hotspots", "Coverage", "Dups", "Debt"];
 
     // when
-    render(<ContributorsTable {...defaultProps} contributors={contributors} totalCount={1} />);
+    await render(<ContributorsTable {...defaultProps} contributors={contributors} totalCount={1} />);
 
     // then
     const headerCells = screen.getAllByRole("columnheader");
@@ -361,7 +407,7 @@ describe("ContributorsTable", () => {
     }
   });
 
-  it("should render coverage, duplications and debt when Sonar measured the contributor", () => {
+  it("should render coverage, duplications and debt when Sonar measured the contributor", async () => {
     // given
     const contributors = [
       ContributorBuilder.create()
@@ -381,7 +427,7 @@ describe("ContributorsTable", () => {
     ];
 
     // when
-    render(<ContributorsTable {...defaultProps} contributors={contributors} totalCount={1} />);
+    await render(<ContributorsTable {...defaultProps} contributors={contributors} totalCount={1} />);
 
     // then
     expect(screen.getByText("87.5%")).toBeInTheDocument();
@@ -389,7 +435,7 @@ describe("ContributorsTable", () => {
     expect(screen.getByText("2h 15min")).toBeInTheDocument();
   });
 
-  it("should leave the WakaTime cells empty for a contributor with no tracked time", () => {
+  it("should leave the WakaTime cells empty for a contributor with no tracked time", async () => {
     // given
     const tracked = ContributorBuilder.create().withDisplayName("tracked").build();
     const untracked = ContributorBuilder.create().withDisplayName("untracked").build();
@@ -402,7 +448,7 @@ describe("ContributorsTable", () => {
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable
         {...defaultProps}
         contributors={contributors}
@@ -417,7 +463,7 @@ describe("ContributorsTable", () => {
     expect(screen.getAllByText("-").length).toBeGreaterThan(0);
   });
 
-  it("should page through more contributors than fit on one page", () => {
+  it("should page through more contributors than fit on one page", async () => {
     // given
     const contributors = Array.from({ length: 30 }, (_, index) =>
       ContributorBuilder.create()
@@ -425,7 +471,7 @@ describe("ContributorsTable", () => {
         .withLinesOfCode(index)
         .build(),
     );
-    render(
+    await render(
       <ContributorsTable {...defaultProps} contributors={contributors} totalCount={30} />,
     );
 
@@ -444,12 +490,12 @@ describe("ContributorsTable", () => {
 });
 
 describe("ContributorsTable churn and pull request columns", () => {
-  it("should show net lines with the additions and deletions underneath", () => {
+  it("should show net lines with the additions and deletions underneath", async () => {
     // given
     const contributors = [ContributorBuilder.create().withDisplayName("Dev").build()];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
@@ -458,7 +504,7 @@ describe("ContributorsTable churn and pull request columns", () => {
     expect(screen.getByText("-300")).toBeInTheDocument();
   });
 
-  it("should count files when the provider reported no line counts", () => {
+  it("should count files when the provider reported no line counts", async () => {
     // given
     // Azure DevOps carries added, edited and deleted *files* and exposes no
     // line count anywhere in its REST API, so a lines column against an Azure
@@ -468,7 +514,7 @@ describe("ContributorsTable churn and pull request columns", () => {
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
@@ -478,14 +524,14 @@ describe("ContributorsTable churn and pull request columns", () => {
     expect(screen.queryByText("+0")).not.toBeInTheDocument();
   });
 
-  it("should show nothing at all when the provider reported no churn", () => {
+  it("should show nothing at all when the provider reported no churn", async () => {
     // given
     const contributors = [
       ContributorBuilder.create().withDisplayName("Dev").withoutChurn().build(),
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
@@ -496,7 +542,7 @@ describe("ContributorsTable churn and pull request columns", () => {
     expect(screen.queryByText("+0")).not.toBeInTheDocument();
   });
 
-  it("should report created pull requests apart from reviewed ones", () => {
+  it("should report created pull requests apart from reviewed ones", async () => {
     // given
     const contributors = [
       ContributorBuilder.create()
@@ -506,7 +552,7 @@ describe("ContributorsTable churn and pull request columns", () => {
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
@@ -519,12 +565,12 @@ describe("ContributorsTable churn and pull request columns", () => {
     expect(screen.getByText("/ 10 reviewed")).toBeInTheDocument();
   });
 
-  it("should explain the approval rate and the pipeline column", () => {
+  it("should explain the approval rate and the pipeline column", async () => {
     // given
     const contributors = [ContributorBuilder.create().build()];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
@@ -539,7 +585,7 @@ describe("ContributorsTable churn and pull request columns", () => {
     ).toBeInTheDocument();
   });
 
-  it("should show the pipeline counts over the runs that reached a verdict", () => {
+  it("should show the pipeline counts over the runs that reached a verdict", async () => {
     // given
     // Cancelled and skipped runs are neither, so the denominator is not the
     // number of runs.
@@ -548,7 +594,7 @@ describe("ContributorsTable churn and pull request columns", () => {
     ];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
@@ -556,12 +602,12 @@ describe("ContributorsTable churn and pull request columns", () => {
     expect(screen.getByText("(6/8)")).toBeInTheDocument();
   });
 
-  it("should say on every Sonar heading that the figure is the repository's, not the person's", () => {
+  it("should say on every Sonar heading that the figure is the repository's, not the person's", async () => {
     // given
     const contributors = [ContributorBuilder.create().build()];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
@@ -574,13 +620,138 @@ describe("ContributorsTable churn and pull request columns", () => {
   });
 });
 
-describe("ContributorsTable header tooltips", () => {
-  it("should make every help tooltip reachable from the keyboard", () => {
+describe("ContributorsTable productivity column", () => {
+  it("should read every figure against the top one anybody recorded", async () => {
+    // given
+    // Half the commits and half the churn of the person above them, on a fleet
+    // of two — so the score has to come out below theirs rather than against
+    // some invented "forty commits is a good month".
+    const contributors = [
+      ContributorBuilder.create()
+        .withDisplayName("busy")
+        .withCommits(40)
+        .withLinesOfCode(4000)
+        .build(),
+      ContributorBuilder.create()
+        .withDisplayName("quiet")
+        .withCommits(20)
+        .withLinesOfCode(2000)
+        .build(),
+    ];
+
+    // when
+    await render(
+      <ContributorsTable contributors={contributors} totalCount={2} isLoading={false} />,
+    );
+
+    // then
+    const scores = screen
+      .getAllByRole("row")
+      .slice(2)
+      .map((row) => within(row).getAllByRole("cell")[1].textContent);
+    expect(Number(scores[0])).toBeGreaterThan(Number(scores[1]));
+  });
+
+  it("should band the score and show the workings behind it", async () => {
+    // given
+    // A score on a row carrying somebody's name is an accusation with no
+    // evidence until a reader can see which figure pulled it down.
+    const contributors = [
+      ContributorBuilder.create()
+        .withDisplayName("solo")
+        .withPipelineRuns({ runs: 10, succeeded: 9, failed: 1 })
+        .build(),
+    ];
+
+    // when
+    await render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    const cell = within(screen.getAllByRole("row")[2]).getAllByRole("cell")[1];
+    const score = within(cell).getByText(/^\d+$/u);
+    expect(score).toHaveAttribute("data-band", "good");
+    expect(score.closest("[title]")?.getAttribute("title")).toContain(
+      "9 of 10 decided runs succeeded",
+    );
+  });
+
+  it("should show a dash rather than a zero when nothing could be measured", async () => {
+    // given
+    // Nobody recorded anything in the window, which says nothing about anyone —
+    // and a zero would say a great deal.
+    const contributors = [
+      ContributorBuilder.create()
+        .withDisplayName("idle")
+        .withCommits(0)
+        .withPullRequests(0, 0)
+        .withReviewsGiven(0)
+        .withoutChurn()
+        .withPipelineRuns({ runs: 0, succeeded: 0, failed: 0 })
+        .build(),
+    ];
+
+    // when
+    await render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    const cell = within(screen.getAllByRole("row")[2]).getAllByRole("cell")[1];
+    expect(cell).toHaveTextContent("—");
+  });
+
+  it("should sort on the score", async () => {
+    // given
+    const contributors = [
+      ContributorBuilder.create().withDisplayName("quiet").withCommits(2).build(),
+      ContributorBuilder.create().withDisplayName("busy").withCommits(90).build(),
+    ];
+    await render(
+      <ContributorsTable contributors={contributors} totalCount={2} isLoading={false} />,
+    );
+    const leadingName = () =>
+      within(screen.getAllByRole("row")[2]).getAllByRole("cell")[0].textContent;
+
+    // when
+    // A numeric column leads with its highest, which is what somebody looking
+    // for the strongest quarter expects to see first.
+    fireEvent.click(screen.getByText("Productivity"));
+
+    // then
+    expect(leadingName()).toContain("busy");
+
+    // when
+    fireEvent.click(screen.getByText("Productivity"));
+
+    // then
+    expect(leadingName()).toContain("quiet");
+  });
+
+  it("should explain what the score is composed of on its heading", async () => {
     // given
     const contributors = [ContributorBuilder.create().build()];
 
     // when
-    render(
+    await render(
+      <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(
+      screen.getByRole("img", { name: /read as a share of the top figure/u }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("ContributorsTable header tooltips", () => {
+  it("should make every help tooltip reachable from the keyboard", async () => {
+    // given
+    const contributors = [ContributorBuilder.create().build()];
+
+    // when
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 
@@ -590,25 +761,27 @@ describe("ContributorsTable header tooltips", () => {
     // it however it is labelled — `getAllByRole` would find nothing at all. And
     // an SVG has no focus event of its own, so without a tab stop the tooltip
     // never opens for anybody not using a pointer.
-    // Filtered to the icons: a contributor avatar is an `img` too.
+    // Scoped to the headings: a contributor avatar is an `img` too, and so are
+    // the two icons that link a row out to the catalog and to the provider.
     const helps = screen
-      .getAllByRole("img")
+      .getAllByRole("columnheader")
+      .flatMap((header) => within(header).queryAllByRole("img"))
       .filter((element) => element.tagName.toLowerCase() === "svg");
-    // Five rate and count columns, and the seven Sonar columns that share one
-    // explanation.
-    expect(helps).toHaveLength(12);
+    // Productivity, five rate and count columns, and the seven Sonar columns
+    // that share one explanation.
+    expect(helps).toHaveLength(13);
     for (const help of helps) {
       expect(help).toHaveAttribute("tabindex", "0");
       expect(help).not.toHaveAttribute("aria-hidden", "true");
     }
   });
 
-  it("should not promise a negative churn figure it cannot show", () => {
+  it("should not promise a negative churn figure it cannot show", async () => {
     // given
     const contributors = [ContributorBuilder.create().build()];
 
     // when
-    render(
+    await render(
       <ContributorsTable contributors={contributors} totalCount={1} isLoading={false} />,
     );
 

@@ -68,6 +68,24 @@ plugins/code-health/src/
   domain/ service/ infrastructure/ presentation/ main/
 ```
 
+The whole read API lives under `/api/code-health/v1`:
+
+```
+GET  /repositories  /contributors  /timeseries  /coverage  /capabilities  /identities
+PUT  /identities/links            DELETE /identities/links/:source/:key
+GET  /contributors/:key/trend     GET /contributors/:key/repositories
+GET  /repositories/:id/trend
+GET  /access                      POST /ingestion/reset        POST /refresh
+```
+
+New files behind the trends, ownership and administration work:
+
+| Package | Files |
+|---|---|
+| `-common` | `score.ts`, `productivity_score.ts`, `repository_health_score.ts`, `trend.ts`, `ownership.ts` |
+| `-backend` | `domain/commands/get_contributor_trend.ts`, `get_repository_trend.ts`, `list_owned_repositories.ts`, `reset_ingestion.ts`, `authorize_administrator.ts`; `domain/entities/permissions.ts`, `bucket.ts`, `contributor_aggregation.ts`, `repository_summary_builder.ts`; `migrations/20260910000000_owner.js` |
+| frontend | `presentation/pages/contributor_detail_page.tsx`, `repository_detail_page.tsx`; `components/charts/trend_chart.tsx`, `components/score_card.tsx`, `components/trend_range_picker.tsx`, `components/owned_repositories_card.tsx`, `components/ingestion_reset_button.tsx`; `hooks/use_trend_window.ts`, `hooks/use_contributor_trend.ts`, `hooks/use_owned_repositories.ts`, `hooks/use_repository_trend.ts`, `hooks/use_access.ts`; `domain/entities/contributor_trend.ts`, `domain/entities/repository_trend.ts`, `domain/entities/reset_reach.ts` |
+
 ## Things not to change without understanding why
 
 - **Repositories come from the catalog only.** Nothing is enumerated from a provider API. Listing an
@@ -90,7 +108,35 @@ plugins/code-health/src/
 - **Insights is the landing tab**, at `/`. Contributors is `/contributors`, repositories is
   `/repositories`, and Identities is last at `/identities`. Insights leads because it is the only
   tab that answers a question about the fleet rather than about one row of it; Identities sits last
-  because it is maintenance, not a measurement.
+  because it is maintenance, not a measurement. Insights keeps at a glance, delivery cadence and
+  fleet test coverage plus a section per integration; the rankings live above the table they rank —
+  top contributors, review load and most active repositories on Contributors, documentation,
+  catalog APIs and fleet health on Repositories — and their rows link to the detail pages.
+- **A detail page is `/contributors/person?key=<person key>` and `/repositories/:id`.** The person
+  key is in the **query string** on purpose: it carries a colon and often a slash, and React Router
+  decodes a path segment before matching it, so an encoded slash splits the key in two and the
+  route never matches. Both pages offer 1-6 months (`TREND_MONTHS`), bucketed by `trendBucketFor` —
+  day up to 45 days, week beyond — and bounded by what the backfill has collected.
+- **A score is never rendered without its components.** `combineScore` drops anything unmeasured and
+  shares its weight among the rest, and `evidence` says how much survived. Never default a missing
+  figure to zero: "we do not know" and "they did badly" are different claims, on rows people are
+  evaluated by. Productivity reads output (commits 20%, merged PRs 20%, churn 10%, reviews 15%) as a
+  share of the fleet's top figure in the same window and reliability/quality absolutely (pipeline
+  15%, gate 10%, coverage 10%); churn is only compared inside its own `churnUnit`. Repository health
+  is absolute throughout (gate 15%, coverage 15%, defects 10%, duplication 5%, debt 5%, branch build
+  10%, build success 10%, policy 10%, docs 5%, review coverage 10%, PRs landed 5%). The two Sonar
+  components on a person describe the repositories they changed, not the code they wrote.
+- **Ownership is the catalog's `spec.owner`**, stored on the repository row as `owner_ref` by
+  discovery and normalised as the catalog normalises it (a bare name is a group in the default
+  namespace). A person owns a repository when its owner is their `User` entity or a group they
+  belong to, parents included (`memberOf` then `childOf`). An unlinked account owns nothing — the
+  Identities tab is where the link is made.
+- **Only a configured administrator the permission framework also allows may reset the ingestion.**
+  `codeHealth.administrators` is empty by default and `code-health.ingestion.reset` can be denied on
+  top of it; both must allow, and the route authorises on every request rather than trusting that
+  the browser hid the button. A reset discards the stored commits, pull requests, reviews and
+  pipeline runs inside the chosen reach and re-walks them; it keeps releases, tags, the daily
+  snapshots and every identity link.
 - **The documentation and API grades need both halves of the evidence.** The catalog half comes from
   discovery, the repository half from the daily snapshot, so both read `null` — "not measured" —
   until a snapshot exists. Grading on half of it reports gaps that are not there.

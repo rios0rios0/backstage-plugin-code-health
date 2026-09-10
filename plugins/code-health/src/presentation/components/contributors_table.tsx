@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useRouteRef } from "@backstage/core-plugin-api";
 import Avatar from "@material-ui/core/Avatar";
 import Box from "@material-ui/core/Box";
 import Link from "@material-ui/core/Link";
@@ -6,6 +7,8 @@ import Tooltip from "@material-ui/core/Tooltip";
 import Typography from "@material-ui/core/Typography";
 import { makeStyles } from "@material-ui/core/styles";
 import HelpOutlineIcon from "@material-ui/icons/HelpOutline";
+import OpenInNewIcon from "@material-ui/icons/OpenInNew";
+import PersonOutlineIcon from "@material-ui/icons/PersonOutline";
 import type {
   ColumnDef,
   ColumnFiltersState,
@@ -20,13 +23,24 @@ import {
 } from "@tanstack/react-table";
 import type {
   ContributorSummary,
+  FleetReference,
   IntegrationCapabilities,
+  ProductivityScore,
+  ScoreBand,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
   catalogEntityPath,
+  computeProductivityScore,
+  fleetReferenceOf,
+  formatScoreValue,
   NO_INTEGRATIONS,
+  scoreBand,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import { Link as RouterLink } from "react-router-dom";
+import { contributorDetailRouteRef } from "../../routes";
+// The page owns the parameter name it reads, and the table is the only thing
+// that writes one; importing it is what keeps the two spellings identical.
+import { CONTRIBUTOR_KEY_PARAM } from "../pages/contributor_detail_page";
 import { confluenceContributorColumns } from "./columns/confluence_columns";
 import { jiraContributorColumns } from "./columns/jira_columns";
 import {
@@ -59,10 +73,19 @@ const useStyles = makeStyles((theme) => ({
   good: { color: theme.palette.success.main },
   fair: { color: theme.palette.warning.main },
   poor: { color: theme.palette.error.main },
+  unknown: { color: theme.palette.text.secondary },
   added: { color: theme.palette.success.main },
   removed: { color: theme.palette.error.main },
   help: { fontSize: "0.85rem", opacity: 0.6 },
   header: { display: "inline-flex", alignItems: "center", gap: 4 },
+  secondaryLink: {
+    display: "inline-flex",
+    alignItems: "center",
+    color: theme.palette.text.secondary,
+  },
+  secondaryIcon: { fontSize: "0.95rem" },
+  nameRow: { display: "inline-flex", alignItems: "center", gap: 6 },
+  score: { fontWeight: 500, fontVariantNumeric: "tabular-nums" },
 }));
 
 const rateTone = (rate: number): "good" | "fair" | "poor" => {
@@ -134,42 +157,69 @@ const initialsOf = (displayName: string): string => {
 };
 
 /**
- * Links a contributor to their catalog user when one matched.
+ * The person's name, linking to their page here rather than out of the plugin.
  *
- * The catalog page is the destination rather than the provider profile: it is
- * where ownership, group membership and the rest of the person's entity live.
- * An identity with no matching user — a bot, a service account, a commit from a
- * personal address — stays plain text rather than linking somewhere misleading.
+ * The name used to lead to the catalog entity, which was the wrong destination
+ * once this plugin had something of its own to say about a person: the catalog
+ * describes who they are, and the detail page describes how their quarter has
+ * gone. Every row now leads somewhere, including a bot's and a commit author's
+ * — an account nobody has linked has a key and a history like anybody else, and
+ * a row that led nowhere was exactly the row somebody needed to look into.
+ *
+ * The two outbound links stay, demoted to icons: the catalog entity is where
+ * ownership and group membership live, and the provider profile is the only
+ * way to reach an account that has no entity at all. The key is encoded because
+ * it routinely carries a colon and a slash.
  */
 const ContributorName = ({
   contributor,
 }: {
   contributor: ContributorSummary;
 }) => {
+  const classes = useStyles();
+  const detailPath = useRouteRef(contributorDetailRouteRef);
   const entityPath =
     contributor.entityRef === null
       ? null
       : catalogEntityPath(contributor.entityRef);
 
-  if (entityPath !== null) {
-    return (
-      <Link component={RouterLink} to={entityPath} title="Open in the catalog">
-        {contributor.displayName}
-      </Link>
-    );
-  }
-  if (contributor.profileUrl !== null) {
-    return (
+  return (
+    <Box component="span" className={classes.nameRow}>
       <Link
-        href={contributor.profileUrl}
-        target="_blank"
-        rel="noopener noreferrer"
+        component={RouterLink}
+        to={`${detailPath()}?${CONTRIBUTOR_KEY_PARAM}=${encodeURIComponent(contributor.key)}`}
       >
         {contributor.displayName}
       </Link>
-    );
-  }
-  return <Typography variant="body2">{contributor.displayName}</Typography>;
+      {entityPath === null ? null : (
+        <Link
+          component={RouterLink}
+          to={entityPath}
+          title="Open in the catalog"
+          className={classes.secondaryLink}
+        >
+          <PersonOutlineIcon
+            className={classes.secondaryIcon}
+            titleAccess="Open in the catalog"
+          />
+        </Link>
+      )}
+      {contributor.profileUrl === null ? null : (
+        <Link
+          href={contributor.profileUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open the provider profile"
+          className={classes.secondaryLink}
+        >
+          <OpenInNewIcon
+            className={classes.secondaryIcon}
+            titleAccess="Open the provider profile"
+          />
+        </Link>
+      )}
+    </Box>
+  );
 };
 
 /**
@@ -280,6 +330,74 @@ const ChurnCell = ({ contributor }: { contributor: ContributorSummary }) => {
  */
 const SONAR_HELP =
   "Sonar measures a repository, not a person. This is the total over the repositories this person committed to or merged into in the window — what the code they worked on looks like, not what they wrote — so two people on the same repository show the same figure, and reviewing or building there does not count.";
+
+const PRODUCTIVITY_HELP =
+  "One score out of 100 over the whole window. Output — commits, merged pull requests, churn and reviews — is read as a share of the top figure anybody recorded in the same window, so a quiet month for the whole team is a quiet month rather than everybody's failure. Reliability and quality — the pipeline success rate, and the gate and coverage of the code touched — are absolute. Anything that could not be measured is left out rather than scored as zero, so a dash means nothing measurable was recorded. Hover a score for the workings.";
+
+/** Which of the theme's status colours each band borrows. */
+const BAND_CLASSES: Readonly<Record<ScoreBand, "good" | "fair" | "poor" | "unknown">> = {
+  good: "good",
+  fair: "fair",
+  poor: "poor",
+  unknown: "unknown",
+};
+
+const ProductivityCell = ({ score }: { score: ProductivityScore }) => {
+  const classes = useStyles();
+  const band = scoreBand(score.value);
+
+  return (
+    <Tooltip
+      title={
+        // The components, not just the number: a score is an accusation with no
+        // evidence until a reader can see which figure pulled it down.
+        score.components
+          .map((component) => `${component.label}: ${component.detail}`)
+          .join("\n")
+      }
+    >
+      <Typography
+        variant="body2"
+        component="span"
+        className={`${classes.score} ${classes[BAND_CLASSES[band]]}`}
+        data-band={band}
+        tabIndex={0}
+      >
+        {formatScoreValue(score.value)}
+      </Typography>
+    </Tooltip>
+  );
+};
+
+/**
+ * The productivity column, bound to the fleet the table is showing.
+ *
+ * It is a factory rather than a constant because the score is relative: every
+ * figure is read against the top one anybody recorded in the same window, so
+ * the column cannot be built until the rows are known. Each row's score is
+ * computed once and kept, because the accessor runs on every comparison a sort
+ * makes and the cell needs the same object's components for its tooltip.
+ */
+const productivityColumn = (
+  reference: FleetReference,
+): ColumnDef<ContributorSummary> => {
+  const scores = new WeakMap<ContributorSummary, ProductivityScore>();
+  const scoreOf = (row: ContributorSummary): ProductivityScore => {
+    const known = scores.get(row);
+    if (known !== undefined) return known;
+    const score = computeProductivityScore(row, reference);
+    scores.set(row, score);
+    return score;
+  };
+
+  return {
+    id: "productivity",
+    accessorFn: (row) => scoreOf(row).value,
+    header: () => <HeaderWithHelp label="Productivity" help={PRODUCTIVITY_HELP} />,
+    cell: ({ row }) => <ProductivityCell score={scoreOf(row.original)} />,
+    enableColumnFilter: false,
+  };
+};
 
 const columns: ColumnDef<ContributorSummary>[] = [
   {
@@ -424,6 +542,11 @@ const columns: ColumnDef<ContributorSummary>[] = [
   },
 ];
 
+// Productivity sits immediately after the name, because it is the one column
+// that answers the question the table is opened with; everything to its right
+// is a figure the score was composed from.
+const [nameColumn, ...metricColumns] = columns;
+
 export const ContributorsTable = ({
   contributors,
   totalCount,
@@ -435,19 +558,31 @@ export const ContributorsTable = ({
   ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
+  // The score is relative, so the column cannot exist before the rows do: every
+  // figure is read against the top one anybody recorded in the same window.
+  const reference = useMemo(() => fleetReferenceOf(contributors), [contributors]);
+
   // The AI columns are gated on the data as well as on the integration, because
   // they are collected separately and opting out of them is a supported way to
   // run WakaTime — a screen of em dashes reads as a fault rather than a choice.
   const showAiColumns = capabilities.wakatime && hasAiMetrics(contributors);
   const allColumns = useMemo(
     () => [
-      ...columns,
+      nameColumn,
+      productivityColumn(reference),
+      ...metricColumns,
       ...(capabilities.wakatime ? wakaTimeContributorColumns() : []),
       ...(showAiColumns ? wakaTimeAiColumns() : []),
       ...(capabilities.jira ? jiraContributorColumns() : []),
       ...(capabilities.confluence ? confluenceContributorColumns() : []),
     ],
-    [capabilities.wakatime, capabilities.jira, capabilities.confluence, showAiColumns],
+    [
+      reference,
+      capabilities.wakatime,
+      capabilities.jira,
+      capabilities.confluence,
+      showAiColumns,
+    ],
   );
 
   const table = useReactTable({

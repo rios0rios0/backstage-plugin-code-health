@@ -13,10 +13,19 @@ export interface UseContributorsResult {
   refetch: () => Promise<void>;
 }
 
+/**
+ * The contributors of a window, or of one repository inside it.
+ *
+ * `repositoryId` narrows the same read the Contributors tab makes, which is
+ * what a repository's page asks for when it wants to know who works on it —
+ * the same rows, computed by the same code, so the two screens can never
+ * disagree about who a person is.
+ */
 export const useContributors = (
   contributorService: ContributorService,
   window: TimeWindow,
   enabled: boolean,
+  repositoryId?: string,
 ): UseContributorsResult => {
   const [contributors, setContributors] = useState<ContributorSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -34,7 +43,7 @@ export const useContributors = (
     setError(null);
 
     try {
-      const items = await contributorService.listContributors(window);
+      const items = await contributorService.listContributors(window, repositoryId);
       if (requestId.current !== current) return;
       setContributors(items);
       setLastFetchedAt(new Date());
@@ -44,7 +53,7 @@ export const useContributors = (
     } finally {
       if (requestId.current === current) setIsLoading(false);
     }
-  }, [contributorService, enabled, window]);
+  }, [contributorService, enabled, window, repositoryId]);
 
   useEffect(() => {
     fetchContributors();

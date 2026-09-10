@@ -2,15 +2,21 @@ import type { DiscoveryApi, FetchApi } from "@backstage/core-plugin-api";
 import type {
   ContributorSummary,
   CoverageInfo,
+  GetAccessResponse,
   GetCapabilitiesResponse,
+  GetContributorTrendResponse,
+  GetRepositoryTrendResponse,
   GetTimeSeriesResponse,
   IdentityRow,
   IdentitySource,
   IntegrationCapabilities,
   ListContributorsResponse,
   ListIdentitiesResponse,
+  ListOwnedRepositoriesResponse,
   ListRepositoriesResponse,
   RepositorySummary,
+  ResetIngestionRequest,
+  ResetIngestionResponse,
   TimeSeriesBucket,
   TimeSeriesPoint,
   TimeWindow,
@@ -21,12 +27,15 @@ import {
   parseIntegrationCapabilities,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import type {
+  AdministrationService,
   ContributorService,
   CoverageService,
   DashboardService,
   IdentityService,
   IntegrationsService,
+  OwnershipService,
   TimeSeriesService,
+  TrendService,
 } from "../../domain/services/dashboard_service";
 
 export interface CodeHealthBackendClientOptions {
@@ -52,7 +61,10 @@ export class CodeHealthBackendClient
     CoverageService,
     TimeSeriesService,
     IntegrationsService,
-    IdentityService
+    IdentityService,
+    TrendService,
+    OwnershipService,
+    AdministrationService
 {
   constructor(private readonly options: CodeHealthBackendClientOptions) {}
 
@@ -138,7 +150,54 @@ export class CodeHealthBackendClient
     await this.send("POST", `${CODE_HEALTH_API_VERSION}/refresh`);
   }
 
-  private async send(method: string, path: string, body?: unknown): Promise<void> {
+  async getContributorTrend(
+    key: string,
+    window: TimeWindow,
+    bucket: TimeSeriesBucket,
+  ): Promise<GetContributorTrendResponse> {
+    // A person key carries a colon and, for a linked person, a slash, so it is
+    // encoded as one path segment rather than spliced in verbatim.
+    return this.get<GetContributorTrendResponse>(
+      `contributors/${encodeURIComponent(key)}/trend`,
+      { from: window.from, to: window.to, bucket },
+    );
+  }
+
+  async getRepositoryTrend(
+    id: string,
+    window: TimeWindow,
+    bucket: TimeSeriesBucket,
+  ): Promise<GetRepositoryTrendResponse> {
+    return this.get<GetRepositoryTrendResponse>(
+      `repositories/${encodeURIComponent(id)}/trend`,
+      { from: window.from, to: window.to, bucket },
+    );
+  }
+
+  async listOwnedRepositories(
+    key: string,
+    window: TimeWindow,
+  ): Promise<ListOwnedRepositoriesResponse> {
+    return this.get<ListOwnedRepositoriesResponse>(
+      `contributors/${encodeURIComponent(key)}/repositories`,
+      { from: window.from, to: window.to },
+    );
+  }
+
+  async getAccess(): Promise<GetAccessResponse> {
+    return this.get<GetAccessResponse>("access", {});
+  }
+
+  async resetIngestion(request: ResetIngestionRequest): Promise<ResetIngestionResponse> {
+    const response = await this.send(
+      "POST",
+      `${CODE_HEALTH_API_VERSION}/ingestion/reset`,
+      request,
+    );
+    return (await response.json()) as ResetIngestionResponse;
+  }
+
+  private async send(method: string, path: string, body?: unknown): Promise<Response> {
     const baseUrl = await this.baseUrl();
     const response = await this.options.fetchApi.fetch(`${baseUrl}/${path}`, {
       method,
@@ -147,6 +206,7 @@ export class CodeHealthBackendClient
         : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
     });
     if (!response.ok) throw await this.toError(response, path);
+    return response;
   }
 
   /**

@@ -1,19 +1,25 @@
 import {
+  codeHealthAdministrationApiFactory,
   codeHealthApis,
   codeHealthConfigApiFactory,
   codeHealthContributorsApiFactory,
   codeHealthCoverageApiFactory,
+  codeHealthOwnershipApiFactory,
   codeHealthRepositoriesApiFactory,
   codeHealthTimeSeriesApiFactory,
+  codeHealthTrendsApiFactory,
 } from "../../src/main/apis";
 import {
+  codeHealthAdministrationApiRef,
   codeHealthConfigApiRef,
   codeHealthContributorsApiRef,
   codeHealthCoverageApiRef,
   codeHealthRepositoriesApiRef,
   codeHealthIdentitiesApiRef,
   codeHealthIntegrationsApiRef,
+  codeHealthOwnershipApiRef,
   codeHealthTimeSeriesApiRef,
+  codeHealthTrendsApiRef,
 } from "../../src/main/api_refs";
 import { CodeHealthBackendClient } from "../../src/infrastructure/http/code_health_backend_client";
 import {
@@ -42,6 +48,9 @@ describe("codeHealthApis", () => {
       codeHealthIntegrationsApiRef.id,
       codeHealthRepositoriesApiRef.id,
       codeHealthTimeSeriesApiRef.id,
+      codeHealthTrendsApiRef.id,
+      codeHealthOwnershipApiRef.id,
+      codeHealthAdministrationApiRef.id,
     ].sort());
   });
 
@@ -52,6 +61,9 @@ describe("codeHealthApis", () => {
       codeHealthContributorsApiFactory.factory(clientDeps()),
       codeHealthCoverageApiFactory.factory(clientDeps()),
       codeHealthTimeSeriesApiFactory.factory(clientDeps()),
+      codeHealthTrendsApiFactory.factory(clientDeps()),
+      codeHealthOwnershipApiFactory.factory(clientDeps()),
+      codeHealthAdministrationApiFactory.factory(clientDeps()),
     ];
 
     // then

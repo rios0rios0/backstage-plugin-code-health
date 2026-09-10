@@ -1,5 +1,5 @@
 import type { HttpAuthService, SchedulerService } from "@backstage/backend-plugin-api";
-import { InputError, NotFoundError } from "@backstage/errors";
+import { InputError, NotAllowedError, NotFoundError } from "@backstage/errors";
 import {
   CODE_HEALTH_API_VERSION,
   isIdentitySource,
@@ -11,7 +11,10 @@ import {
 import express from "express";
 import Router from "express-promise-router";
 import { z } from "zod";
+import type { AuthorizeAdministrator } from "../../domain/commands/authorize_administrator";
+import type { GetContributorTrend } from "../../domain/commands/get_contributor_trend";
 import type { GetRepositoryTimeSeries } from "../../domain/commands/get_repository_time_series";
+import type { GetRepositoryTrend } from "../../domain/commands/get_repository_trend";
 import {
   MalformedEntityRefError,
   UnknownIdentityError,
@@ -20,7 +23,9 @@ import {
 } from "../../domain/commands/link_identity";
 import type { ListContributorSummaries } from "../../domain/commands/list_contributor_summaries";
 import type { ListIdentities } from "../../domain/commands/list_identities";
+import type { ListOwnedRepositories } from "../../domain/commands/list_owned_repositories";
 import type { ListRepositorySummaries } from "../../domain/commands/list_repository_summaries";
+import type { ResetIngestion } from "../../domain/commands/reset_ingestion";
 import type { CodeHealthStore } from "../../domain/repositories/code_health_store";
 
 /** Asked for nothing in particular, the dashboard gets the last day. */
@@ -81,6 +86,17 @@ const linkSchema = z.object({
 });
 
 /**
+ * How far back a reset reaches.
+ *
+ * A whole number of days, at least one — the walk is keyed by day, so half a
+ * day is not a thing it can be asked for. The upper bound is the configured
+ * retention and is checked in the route, where that number is known.
+ */
+const resetSchema = z.object({
+  days: z.number().int().min(1),
+});
+
+/**
  * Reads the `source` query parameter, which narrows the Identities screen to
  * one system. An unrecognised value is rejected rather than ignored: silently
  * returning every source would look like a filter that does not work.
@@ -126,10 +142,19 @@ export interface CodeHealthRouterOptions {
   readonly repositories: ListRepositorySummaries;
   readonly contributors: ListContributorSummaries;
   readonly timeSeries: GetRepositoryTimeSeries;
+  readonly contributorTrend: GetContributorTrend;
+  readonly repositoryTrend: GetRepositoryTrend;
+  readonly owned: ListOwnedRepositories;
   readonly identities: ListIdentities;
   readonly links: LinkIdentity;
+  readonly access: AuthorizeAdministrator;
+  readonly reset: ResetIngestion;
+  /** The furthest back a reset may be asked to reach. */
+  readonly retentionDays: number;
   readonly capabilities: IntegrationCapabilities;
   readonly refreshableTaskIds: readonly string[];
+  /** Triggered after a reset, and by the refresh route. */
+  readonly ingestionTaskId: string;
 }
 
 /**
@@ -279,6 +304,27 @@ export const createCodeHealthRouter = (options: CodeHealthRouterOptions): expres
     });
   });
 
+  router.get(`/${version}/repositories/:id/trend`, async (request, response) => {
+    const window = readWindow(request.query);
+    const bucket = readBucket(request.query.bucket);
+
+    const tracked = await options.store.getTrackedRepository(request.params.id);
+    if (!tracked) throw new NotFoundError(`no repository with id ${request.params.id}`);
+
+    const trend = await options.repositoryTrend.run({
+      repositoryId: request.params.id,
+      ...window,
+      bucket,
+    });
+
+    response.json({
+      id: request.params.id,
+      window: { from: window.from.toISOString(), to: window.to.toISOString() },
+      bucket,
+      ...trend,
+    });
+  });
+
   router.get(`/${version}/contributors`, async (request, response) => {
     const window = readWindow(request.query);
     const repositoryId = request.query.repositoryId;
@@ -293,6 +339,90 @@ export const createCodeHealthRouter = (options: CodeHealthRouterOptions): expres
         ...(repositoryId === undefined ? {} : { repositoryId }),
       }),
     });
+  });
+
+  /**
+   * One person's history, bucketed.
+   *
+   * The key arrives percent-encoded, because a linked person's key is an entity
+   * reference and carries both a colon and a slash; Express decodes the
+   * parameter before this sees it, so the route reads it verbatim.
+   */
+  router.get(`/${version}/contributors/:key/trend`, async (request, response) => {
+    const window = readWindow(request.query);
+    const bucket = readBucket(request.query.bucket);
+
+    const trend = await options.contributorTrend.run({
+      key: request.params.key,
+      ...window,
+      bucket,
+    });
+
+    response.json({
+      key: request.params.key,
+      window: { from: window.from.toISOString(), to: window.to.toISOString() },
+      bucket,
+      ...trend,
+    });
+  });
+
+  // The repositories a person is responsible for, which is `spec.owner` rather
+  // than where they committed.
+  router.get(`/${version}/contributors/:key/repositories`, async (request, response) => {
+    const window = readWindow(request.query);
+
+    response.json({
+      window: { from: window.from.toISOString(), to: window.to.toISOString() },
+      ...(await options.owned.run({ key: request.params.key, ...window })),
+    });
+  });
+
+  /**
+   * What the caller may do beyond reading.
+   *
+   * Never a 403: a dashboard asks this before it decides whether to draw a
+   * button, and refusing to answer would make "you are not an administrator"
+   * indistinguishable from "the backend is broken". A service principal and an
+   * anonymous decision both read as false.
+   */
+  router.get(`/${version}/access`, async (request, response) => {
+    const credentials = await options.httpAuth.credentials(request);
+
+    response.json({
+      canResetIngestion: await options.access.isAdministrator(credentials),
+      retentionDays: options.retentionDays,
+    });
+  });
+
+  router.post(`/${version}/ingestion/reset`, async (request, response) => {
+    const credentials = await options.httpAuth.credentials(request);
+    if (!(await options.access.isAdministrator(credentials))) {
+      throw new NotAllowedError("only a Code Health administrator may reset the ingestion");
+    }
+
+    const parsed = resetSchema.safeParse(request.body);
+    if (!parsed.success) throw new InputError(parsed.error.message);
+    // Bounded by the retention rather than trusted: reaching further back than
+    // the read API will ever answer for spends a day of provider requests on
+    // history no window can ask about.
+    if (parsed.data.days > options.retentionDays) {
+      throw new InputError(
+        `\`days\` must not exceed the configured retention of ${options.retentionDays} days`,
+      );
+    }
+
+    const result = await options.reset.run({ days: parsed.data.days, now: new Date() });
+
+    const triggered: string[] = [];
+    try {
+      await options.scheduler.triggerTask(options.ingestionTaskId);
+      triggered.push(options.ingestionTaskId);
+    } catch {
+      // Already running, which is a perfectly good answer to "start again now":
+      // the run in flight reads the cursors this just moved.
+    }
+
+    response.json({ repositories: result.repositories, days: parsed.data.days, triggered });
   });
 
   router.post(`/${version}/refresh`, async (request, response) => {

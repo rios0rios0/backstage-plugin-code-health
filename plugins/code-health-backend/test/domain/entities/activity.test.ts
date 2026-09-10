@@ -44,6 +44,22 @@ describe("aggregateActivity", () => {
     expect(result.deletions).toBe(0);
   });
 
+  it("should count reviews as review coverage, not as repository activity", () => {
+    // given
+    const events = [
+      EventBuilder.review("approved").build(),
+      EventBuilder.review("rejected").build(),
+      EventBuilder.commit().build(),
+    ];
+
+    // when
+    const result = aggregateActivity(events);
+
+    // then
+    expect(result.reviews).toBe(2);
+    expect(result.commits).toBe(1);
+  });
+
   it("should count opened and merged pull requests separately", () => {
     // given
     // The two are stored as separate events precisely so a pull request that

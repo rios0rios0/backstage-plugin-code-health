@@ -1,12 +1,15 @@
 import { createApiRef } from "@backstage/core-plugin-api";
 import type { CodeHealthConfig } from "../domain/entities/code_health_config";
 import type {
+  AdministrationService,
   ContributorService,
   CoverageService,
   DashboardService,
   IdentityService,
   IntegrationsService,
+  OwnershipService,
   TimeSeriesService,
+  TrendService,
 } from "../domain/services/dashboard_service";
 
 /** Values pinned by an administrator in `app-config.yaml`. */
@@ -52,4 +55,22 @@ export const codeHealthIntegrationsApiRef = createApiRef<IntegrationsService>({
 /** The accounts the plugin has seen, and which person each one belongs to. */
 export const codeHealthIdentitiesApiRef = createApiRef<IdentityService>({
   id: "plugin.code-health.identities",
+});
+
+/** One person's or one repository's history, bucketed, for the detail pages. */
+export const codeHealthTrendsApiRef = createApiRef<TrendService>({
+  id: "plugin.code-health.trends",
+});
+
+/** The repositories a person owns through the catalog, for the contributor page. */
+export const codeHealthOwnershipApiRef = createApiRef<OwnershipService>({
+  id: "plugin.code-health.ownership",
+});
+
+/**
+ * What the signed-in person may do beyond reading, and the one write that
+ * needs it: starting the history collection over.
+ */
+export const codeHealthAdministrationApiRef = createApiRef<AdministrationService>({
+  id: "plugin.code-health.administration",
 });

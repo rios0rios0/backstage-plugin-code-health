@@ -24,6 +24,7 @@ export class RepositoryBuilder {
     this.props = {
       id: `id-${counter}`,
       entityRef: `component:default/repo-${counter}`,
+      ownerRef: null,
       platform: "github",
       name: `repo-${counter}`,
       fullName: `user/repo-${counter}`,
@@ -67,6 +68,11 @@ export class RepositoryBuilder {
 
   withId(id: string): this {
     this.props = { ...this.props, id };
+    return this;
+  }
+
+  withOwner(ownerRef: string | null): this {
+    this.props = { ...this.props, ownerRef };
     return this;
   }
 

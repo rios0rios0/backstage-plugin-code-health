@@ -381,6 +381,85 @@ describe("AnnotationRepositoryResolver catalog facts", () => {
     });
   });
 
+  it("should read a bare owner as the group the catalog would read it as", () => {
+    // given
+    // `spec.owner: team-a` means `group:default/team-a` everywhere else in
+    // Backstage, and storing the raw string would leave one group failing to
+    // match itself across two entities that spell it differently.
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withOwner("team-a")
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.ownerRef).toBe("group:default/team-a");
+  });
+
+  it("should keep a kind-qualified owner as it was written", () => {
+    // given
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withOwner("user:default/jane")
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.ownerRef).toBe("user:default/jane");
+  });
+
+  it("should fold the kind and namespace of an owner but keep the name's case", () => {
+    // given
+    // The catalog does exactly this, and a comparison that did not would treat
+    // two spellings of one group as two groups.
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withOwner("Group:Default/Platform")
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.ownerRef).toBe("group:default/Platform");
+  });
+
+  it("should leave the owner null when the entity declares none", () => {
+    // given
+    // Null rather than a guess: nothing about a repository name says who is
+    // responsible for it.
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withOwner(undefined)
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.ownerRef).toBeNull();
+  });
+
+  it("should leave the owner null when it is blank", () => {
+    // given
+    // Catalog entities are user-authored YAML, so an owner key with nothing
+    // after it is a shape that reaches here.
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withOwner("   ")
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.ownerRef).toBeNull();
+  });
+
   it("should leave the type null when the entity declares none", () => {
     // given
     const entity = EntityBuilder.create()

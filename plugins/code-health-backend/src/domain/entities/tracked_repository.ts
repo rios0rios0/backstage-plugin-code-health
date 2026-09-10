@@ -14,6 +14,17 @@ export interface RepositoryCatalogFacts {
   readonly entityKind: string;
   /** `spec.type`, e.g. `service`. Null when the entity declares none. */
   readonly entityType: string | null;
+  /**
+   * `spec.owner` as a full entity reference — `group:default/platform`,
+   * `user:default/jane` — or null when the entity declares none.
+   *
+   * Normalised on the way in, because the catalog accepts `team-a`,
+   * `group:team-a` and `group:default/team-a` as the same owner and two
+   * spellings of one group would otherwise fail to match each other. It is what
+   * ties a repository to the people responsible for it, which is a different
+   * question from who committed to it.
+   */
+  readonly ownerRef: string | null;
   /** `backstage.io/techdocs-ref`, when the entity carries one. */
   readonly techDocsRef: string | null;
   /** How many entries `spec.providesApis` names. */
@@ -42,6 +53,7 @@ export interface RepositoryCatalogFacts {
 export const EMPTY_CATALOG_FACTS: RepositoryCatalogFacts = {
   entityKind: "Component",
   entityType: null,
+  ownerRef: null,
   techDocsRef: null,
   providesApis: 0,
   hasExternalDocs: false,

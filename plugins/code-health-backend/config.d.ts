@@ -9,6 +9,27 @@
  */
 export interface Config {
   codeHealth?: {
+    /**
+     * Who may start the history collection over, as catalog entity references
+     * of users or groups — `user:default/jane`, `group:default/platform`. A
+     * bare name defaults to a user, so `jane` means `user:default/jane`.
+     *
+     * Empty by default, which means nobody: resetting drops every collected
+     * commit, pull request, review and build and re-walks the providers, which
+     * is hours of rate-limited requests, so it is not something an install
+     * should acquire by upgrading.
+     *
+     * This list is one of two levers and the framework is the other. On a stock
+     * Backstage the default permission policy allows everything, so the
+     * permission alone cannot say "administrators only" — this list is what
+     * makes the restriction real out of the box. An installed policy, or the
+     * RBAC plugin, denies `code-health.ingestion.reset` and overrides this list
+     * in the other direction: a name here that the policy refuses is refused.
+     *
+     * @visibility backend
+     */
+    administrators?: string[];
+
     catalog?: {
       /**
        * Entity filters passed straight through to the catalog when discovering

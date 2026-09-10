@@ -22,3 +22,26 @@ export const repositoriesRouteRef = createSubRouteRef({
   parent: rootRouteRef,
   path: "/repositories",
 });
+
+/**
+ * One person's detail page, nested under the Contributors tab.
+ *
+ * The person is named in the query string (`?key=`) rather than in the path.
+ * A person key is `user:default/jane` for a linked person and
+ * `vcs:jane@acme.com` for an unlinked account; both carry characters that a
+ * path segment has to encode, and React Router decodes a segment before it
+ * matches it, so an encoded slash splits the key into two segments and the
+ * route never matches. A query value survives the round trip intact.
+ */
+export const contributorDetailRouteRef = createSubRouteRef({
+  id: "code-health:contributor",
+  parent: rootRouteRef,
+  path: "/contributors/person",
+});
+
+/** One repository's detail page, nested under the Repositories tab. */
+export const repositoryDetailRouteRef = createSubRouteRef({
+  id: "code-health:repository",
+  parent: rootRouteRef,
+  path: "/repositories/:id",
+});

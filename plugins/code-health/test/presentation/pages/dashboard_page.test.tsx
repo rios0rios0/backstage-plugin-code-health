@@ -1,16 +1,21 @@
 import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
-import { fireEvent, render as renderBare, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { renderInTestApp } from "@backstage/test-utils";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
 import type { UseCoverageResult } from "../../../src/presentation/hooks/use_coverage";
 import { DashboardPage } from "../../../src/presentation/pages/dashboard_page";
+import { rootRouteRef } from "../../../src/routes";
 import { RepositoryBuilder } from "../../builders/repository_builder";
 import { aCoverageInfo } from "../../doubles/stub_coverage_service";
 import { StubDashboardService } from "../../doubles/stub_dashboard_service";
 
-// The repository table links names to catalog entities through a router `Link`,
-// so the page only mounts inside a router — which is how the app renders it.
-const render = (ui: React.ReactElement) => renderBare(<MemoryRouter>{ui}</MemoryRouter>);
+/**
+ * The repositories table sends each name to the plugin's own detail page, which
+ * it resolves with `useRouteRef` — so the page needs a Backstage app around it
+ * rather than a bare router, which is also how the app renders it.
+ */
+const render = (ui: React.ReactElement) =>
+  renderInTestApp(ui, { mountedRoutes: { "/": rootRouteRef } });
 
 const coverageResult = (overrides: Partial<UseCoverageResult> = {}): UseCoverageResult => ({
   coverage: aCoverageInfo(),
@@ -28,7 +33,7 @@ describe("DashboardPage", () => {
     ]);
 
     // when
-    render(
+    await render(
       <DashboardPage
         dashboardService={service}
         coverage={coverageResult()}
@@ -46,7 +51,7 @@ describe("DashboardPage", () => {
     const service = new StubDashboardService().withError(new Error("Server error"));
 
     // when
-    render(
+    await render(
       <DashboardPage
         dashboardService={service}
         coverage={coverageResult()}
@@ -64,7 +69,7 @@ describe("DashboardPage", () => {
     const service = new StubDashboardService().withRepositories([]);
 
     // when
-    render(
+    await render(
       <DashboardPage
         dashboardService={service}
         coverage={coverageResult()}
@@ -85,7 +90,7 @@ describe("DashboardPage", () => {
     // the same period however many times it is refreshed, so the button says
     // the numbers moved when nothing did.
     const service = new StubDashboardService().withRepositories([]);
-    render(
+    await render(
       <DashboardPage
         dashboardService={service}
         coverage={coverageResult()}
@@ -111,7 +116,7 @@ describe("DashboardPage", () => {
     const service = new StubDashboardService().withRepositories([]);
 
     // when
-    render(
+    await render(
       <DashboardPage
         dashboardService={service}
         coverage={coverageResult({ coverage: aCoverageInfo({ earliestDay: null }) })}
@@ -131,7 +136,7 @@ describe("DashboardPage", () => {
     const service = new StubDashboardService().withRepositories([]);
 
     // when
-    render(
+    await render(
       <DashboardPage
         dashboardService={service}
         coverage={coverageResult({
@@ -155,7 +160,7 @@ describe("DashboardPage", () => {
     ]);
 
     // when
-    render(
+    await render(
       <DashboardPage
         dashboardService={service}
         coverage={coverageResult()}
@@ -170,5 +175,40 @@ describe("DashboardPage", () => {
       expect(screen.getByText("No repositories found.")).toBeInTheDocument(),
     );
     expect(service.callCount).toBe(0);
+  });
+});
+
+describe("DashboardPage audits", () => {
+  it("should audit documentation, catalog APIs and policy above the table", async () => {
+    // given
+    // All three findings name a repository and are closed by editing one or its
+    // catalog entity, so they sit beside the list of them rather than on the
+    // fleet's overview.
+    const service = new StubDashboardService().withRepositories([
+      RepositoryBuilder.create()
+        .withName("gateway")
+        .withDocumentationState("unpublished", { hasDocsSource: true })
+        .withApiExposureState("candidate", "api/openapi.yaml")
+        .withComplianceColor("green")
+        .build(),
+    ]);
+
+    // when
+    await render(
+      <DashboardPage
+        dashboardService={service}
+        coverage={coverageResult()}
+        config={DEFAULT_CODE_HEALTH_CONFIG}
+        capabilities={NO_INTEGRATIONS}
+      />,
+    );
+
+    // then
+    await waitFor(() => expect(screen.getByText("Documentation")).toBeInTheDocument());
+    expect(screen.getByText("has a docs/ tree")).toBeInTheDocument();
+    expect(screen.getByText("Catalog APIs")).toBeInTheDocument();
+    expect(screen.getByText("api/openapi.yaml")).toBeInTheDocument();
+    expect(screen.getByText("Fleet health")).toBeInTheDocument();
+    expect(screen.getByLabelText("Compliant: 1 of 1")).toBeInTheDocument();
   });
 });

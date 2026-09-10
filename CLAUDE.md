@@ -74,6 +74,15 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/domain/entities/person_directory.ts` | Which person an account belongs to, built per request from the link table |
 | `src/domain/commands/reconcile_identities.ts` | The one automatic link: an account whose e-mail matches a catalog `User` |
 | `src/domain/commands/link_identity.ts` / `list_identities.ts` | The Identities screen's read and its two writes |
+| `src/domain/commands/get_contributor_trend.ts` / `get_repository_trend.ts` | One person's and one repository's history, bucketed, each bucket carrying the summary and the score it earns |
+| `src/domain/commands/list_owned_repositories.ts` | The repositories a person owns, through `spec.owner` and their group ancestry |
+| `src/domain/commands/reset_ingestion.ts` | Sends every tracked repository's cursors back over the reach asked for and drops what the walk re-collects |
+| `src/domain/commands/authorize_administrator.ts` | The two gates a reset passes: named in `codeHealth.administrators`, *and* allowed by the permission framework |
+| `src/domain/entities/permissions.ts` | `code-health.ingestion.reset`, registered by the plugin and exported so a policy or the RBAC plugin can name it |
+| `src/domain/entities/bucket.ts` | Where a day's bucket starts and ends — shared by the cadence series and both trends, with the end bounded by the window so no snapshot taken after it is read |
+| `src/domain/entities/contributor_aggregation.ts` | The per-person accumulation the contributors list and a trend's every bucket run through, split from the naming and Sonar pass that needs the catalog |
+| `src/domain/entities/repository_summary_builder.ts` | One repository row from a snapshot and a window's events, built once for the table and once per bucket for a trend |
+| `migrations/20260910000000_owner.js` | The `owner_ref` column discovery writes the catalog's `spec.owner` to |
 | `src/infrastructure/services/collectors/` | Azure DevOps and GitHub collectors |
 | `src/infrastructure/services/wakatime_enricher.ts` | Coding time and AI tokens, per member per day |
 | `src/infrastructure/services/atlassian/` | One client, the Jira enricher and the Confluence enricher |
@@ -88,7 +97,7 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | File | Purpose |
 |---|---|
 | `src/plugin.ts` / `src/alpha.tsx` | Legacy and declarative entry points |
-| `src/main/apis.ts` / `src/main/api_refs.ts` | `createApiFactory` wiring; one stateless client behind six data refs (repositories, contributors, coverage, time series, integrations, identities), plus a separate config ref |
+| `src/main/apis.ts` / `src/main/api_refs.ts` | `createApiFactory` wiring; one stateless client behind nine data refs (repositories, contributors, coverage, time series, integrations, identities, trends, ownership, administration), plus a separate config ref |
 | `src/infrastructure/http/code_health_backend_client.ts` | The only thing the browser talks to |
 | `src/main/router.tsx` | Page composition, the backend-reachability gate and the capabilities probe; Insights is the root tab |
 | `src/presentation/pages/identities_page.tsx` | Attaching an account to a catalog `User` — the plugin's only write |
@@ -97,6 +106,32 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/domain/entities/time_range.ts` | Which windows are offered, bounded by coverage — rolling ranges and calendar months |
 | `src/presentation/components/range_picker.tsx` | One control for both, so the two can never disagree |
 | `src/presentation/components/backfill_progress.tsx` | Why wider ranges are not available yet |
+| `src/routes.ts` | The route refs, and why a person key travels in the query string rather than a path segment |
+| `src/presentation/pages/contributor_detail_page.tsx` / `repository_detail_page.tsx` | One person's and one repository's trend and score, plus — for a person — the repositories they own |
+| `src/presentation/components/charts/trend_chart.tsx` | Any column of a summary drawn over the buckets the backend returned |
+| `src/presentation/components/score_card.tsx` | A score beside the components it was folded from; the number is never drawn without them |
+| `src/presentation/components/trend_range_picker.tsx` | One to six months, bounded by what the backfill reached |
+| `src/presentation/hooks/use_trend_window.ts` | The months picked, turned into a window and the bucket `trendBucketFor` implies |
+| `src/domain/entities/contributor_trend.ts` | Turns a person's trend points into chart series, with null where a bucket measured nothing and zero where it measured nothing happening |
+| `src/presentation/hooks/use_contributor_trend.ts` / `use_owned_repositories.ts` | The contributor page's two reads |
+| `src/presentation/components/owned_repositories_card.tsx` | The repositories a person owns, worst health first, and what to do when they own none |
+| `src/domain/entities/repository_trend.ts` / `src/presentation/hooks/use_repository_trend.ts` | The repository page's series and its one read; a backend 404 reads as "not tracked" rather than as a failure |
+| `src/presentation/components/ingestion_reset_button.tsx` | The administrator's reset — the access probe, the reach and the confirmation |
+| `src/presentation/hooks/use_access.ts` | `/v1/access`, asked once; unreachable reads as "not an administrator" rather than as an error panel |
+| `src/domain/entities/reset_reach.ts` | Which reaches a reset offers, in months, each converted to days and bounded by the retention |
+
+### Common (`plugins/code-health-common`)
+
+The wire contract, and the pure functions both sides have to agree on.
+
+| File | Purpose |
+|---|---|
+| `src/api.ts` | Every request and response shape, and the plugin id both packages register under |
+| `src/score.ts` | What a score is — a value, the evidence behind it, the components it was folded from — and `combineScore`, which redistributes the weight of anything unmeasured |
+| `src/productivity_score.ts` | The per-person components and weights, and the fleet reference the relative ones are read against |
+| `src/repository_health_score.ts` | The per-repository components, weights and decay constants |
+| `src/trend.ts` | The bucketed point shapes, `TREND_MONTHS`, and `trendBucketFor` — day up to 45 days, week beyond |
+| `src/ownership.ts` | `OwnershipInfo`, and `ownerEntityRef`, which normalises `spec.owner` exactly as the catalog does |
 
 ## Decisions worth not re-litigating
 
@@ -224,6 +259,52 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
   stored. The migration resets every *tracked* repository's cursors and removes what the walk
   re-collects; releases and tags stay, and a repository that left the catalog keeps its history
   because nothing would ever put it back.
+- **A score is never drawn without its components.** A bare `62` on a person's row is an accusation
+  with no evidence, and a bare `71` on a repository's is a figure nobody can act on. Every score
+  carries what was measured, the share of the total it held and the sentence explaining how it was
+  read, and `ScoreCard` renders them beside the number rather than behind it. A view that shows only
+  `score.value` is a bug, not a compact rendering.
+- **Output is relative to the fleet; reliability and quality are absolute.** Commits, merged pull
+  requests, churn and reviews are read as a share of the top figure anybody recorded *in the same
+  window*, so a quiet month for the whole team is a quiet month rather than everybody's failure and
+  there is no invented "forty commits is a good month" to argue with. A pipeline success rate and a
+  quality gate mean the same thing whoever else is on the team, so those are read against
+  themselves. Churn is only ever compared inside its own unit — `churnUnit` decides which reference
+  a row is measured against, and a lines figure is never held up against a files figure.
+- **What was not measured is left out, never scored as zero.** A repository with no Sonar project
+  has an unknown quality gate, not a failing one; somebody whose pipeline never ran has no success
+  rate, not a bad one. `combineScore` drops an unmeasured component and shares its weight among the
+  rest, and `evidence` reports how much of the total survived — which is what stops a score resting
+  on one component passing for one resting on all of them. Defaulting a missing figure to zero would
+  turn "we do not know" into "they did badly", on rows people are evaluated by.
+- **Only a configured administrator whom the permission framework also allows may reset the
+  ingestion.** `codeHealth.administrators` is empty by default, so a fresh install is read-only for
+  everybody, and `code-health.ingestion.reset` (from `@backstage/plugin-permission-common`,
+  registered by the backend and exported from its package) can be denied by a policy or the RBAC
+  plugin on top of that. Both must allow: the configuration is where the plugin names its
+  administrators, the permission framework is where an organisation states a rule about them, and
+  neither stands in for the other. The frontend asks `/v1/access` before drawing the control, but
+  the route authorises again on every request — a button the browser did not draw is not an access
+  control.
+- **Ownership comes from `spec.owner`, with group ancestry.** Discovery stores the entity's owner on
+  the repository row (`owner_ref`, normalised the way the catalog normalises it, so a bare `team-a`
+  and `group:default/team-a` match), and a person owns a repository when its owner is their `User`
+  entity or a group they belong to, parents included — `memberOf` then `childOf`. That is how
+  Backstage decides ownership everywhere else, and inventing a second answer would make the plugin
+  disagree with the catalog page next to it. An account nobody has linked owns nothing, because
+  ownership is a fact about the catalog and an unlinked account has no entity there.
+- **The person key travels in the query string, the repository id in the path.** A person key is
+  `user:default/jane` for somebody linked and `vcs:jane@acme.com` for an account nobody has, and
+  both carry characters a path segment has to encode. React Router decodes a segment *before* it
+  matches, so an encoded slash splits the key into two segments and the route stops matching
+  entirely — the page then 404s for exactly the people who have been linked properly. A query value
+  survives the round trip intact.
+- **Insights keeps only what is about the fleet; the rankings moved to their tables.** At a glance,
+  delivery cadence and fleet test coverage stay, with a section per configured integration. Top
+  contributors, review load and most active repositories now sit above the contributors table, and
+  documentation, catalog APIs and fleet health above the repositories table. A ranking is a way
+  *into* a row, so a tab away from the rows it ranks made a reader carry a name across the screen by
+  hand; the entries now link to the plugin's own detail pages.
 
 ## Conventions
 

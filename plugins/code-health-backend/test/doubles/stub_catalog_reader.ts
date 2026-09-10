@@ -8,14 +8,28 @@ export class StubCatalogReader implements CatalogReader {
 
   private users = new Map<string, CatalogUser>();
 
+  private ownership = new Map<string, readonly string[]>();
+
   /** Filters each call was made with, so tests can assert what was requested. */
   readonly calls: Array<readonly EntityFilter[]> = [];
 
   /** E-mails each user lookup was made with, for the same reason. */
   readonly emailLookups: Array<readonly string[]> = [];
 
+  /** References each ownership lookup was made with, for the same reason. */
+  readonly ownershipLookups: string[] = [];
+
   withUsers(users: Record<string, CatalogUser>): StubCatalogReader {
     this.users = new Map(Object.entries(users));
+    return this;
+  }
+
+  /**
+   * Declares which groups a user belongs to, already expanded through their
+   * parents — which is what the real reader returns, since it does the walk.
+   */
+  withMemberships(userEntityRef: string, groupRefs: readonly string[]): StubCatalogReader {
+    this.ownership.set(userEntityRef, groupRefs);
     return this;
   }
 
@@ -50,5 +64,17 @@ export class StubCatalogReader implements CatalogReader {
         .map(([email, user]) => [email.toLowerCase(), user] as const)
         .filter(([email]) => wanted.has(email)),
     );
+  }
+
+  async listOwnershipRefs(userEntityRef: string): Promise<string[]> {
+    this.ownershipLookups.push(userEntityRef);
+    if (this.failure) throw this.failure;
+
+    const groups = this.ownership.get(userEntityRef);
+    // Mirrors the adapter: a reference the catalog does not hold owns nothing,
+    // and one it does owns at least itself. `withMemberships(ref, [])` is
+    // therefore how a test says "this user exists and is in no group".
+    if (groups === undefined) return [];
+    return [userEntityRef, ...groups];
   }
 }

@@ -1,10 +1,16 @@
 import type {
   ContributorSummary,
   CoverageInfo,
+  GetAccessResponse,
+  GetContributorTrendResponse,
+  GetRepositoryTrendResponse,
   IdentityRow,
   IdentitySource,
   IntegrationCapabilities,
+  ListOwnedRepositoriesResponse,
   RepositorySummary,
+  ResetIngestionRequest,
+  ResetIngestionResponse,
   TimeSeriesBucket,
   TimeSeriesPoint,
   TimeWindow,
@@ -83,4 +89,52 @@ export interface IdentityService {
     source: IdentitySource;
     sourceKey: string;
   }): Promise<void>;
+}
+
+/**
+ * One person's or one repository's history, bucketed.
+ *
+ * Bucketed by the backend, like the fleet cadence, so a six-month trend is a
+ * few dozen points rather than every event the person ever produced. Each
+ * point carries the same summary row the tables show, so a chart of any
+ * column is a chart of the same number the table prints.
+ */
+export interface TrendService {
+  getContributorTrend(
+    key: string,
+    window: TimeWindow,
+    bucket: TimeSeriesBucket,
+  ): Promise<GetContributorTrendResponse>;
+
+  getRepositoryTrend(
+    id: string,
+    window: TimeWindow,
+    bucket: TimeSeriesBucket,
+  ): Promise<GetRepositoryTrendResponse>;
+}
+
+/**
+ * The repositories a person is responsible for, by the catalog's `spec.owner`.
+ *
+ * A different question from where somebody committed: this is what a team
+ * lead asking "are they looking after their projects" means, and it is
+ * answered by the backend because only the backend can walk the person's
+ * group memberships without putting a catalog query on every render.
+ */
+export interface OwnershipService {
+  listOwnedRepositories(key: string, window: TimeWindow): Promise<ListOwnedRepositoriesResponse>;
+}
+
+/**
+ * The one thing on the dashboard reserved for administrators.
+ *
+ * Starting the history collection over throws away every commit, pull
+ * request, review and run already stored and re-reads them from the
+ * providers, which is a day of rate-limited requests on a large fleet. Who may
+ * ask for that is decided by the backend, and asked of it before the button is
+ * drawn, so the control and the route can never disagree.
+ */
+export interface AdministrationService {
+  getAccess(): Promise<GetAccessResponse>;
+  resetIngestion(request: ResetIngestionRequest): Promise<ResetIngestionResponse>;
 }

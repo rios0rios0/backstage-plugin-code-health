@@ -80,6 +80,14 @@ export interface RankingChartProps {
   readonly scaleMax?: number;
   /** Renders the number. Defaults to a plain localised integer. */
   readonly formatValue?: (value: number) => string;
+  /**
+   * Where a row's label goes, or null for plain text.
+   *
+   * Defaults to the row's catalog entity. The Contributors and Repositories
+   * tabs point their rankings at the plugin's own detail pages instead, so
+   * clicking a name opens the trend rather than leaving the plugin.
+   */
+  readonly linkTo?: (item: RankedItem) => string | null;
 }
 
 /**
@@ -100,6 +108,7 @@ export const RankingChart = ({
   emptyMessage,
   scaleMax,
   formatValue = (value) => value.toLocaleString(),
+  linkTo = (item) => (item.entityRef === null ? null : catalogEntityPath(item.entityRef)),
 }: RankingChartProps) => {
   const classes = useStyles();
   const palette = useChartPalette();
@@ -117,7 +126,7 @@ export const RankingChart = ({
   return (
     <Box role="list">
       {items.map((item) => {
-        const path = item.entityRef === null ? null : catalogEntityPath(item.entityRef);
+        const path = linkTo(item);
         const width = max === 0 ? 0 : (item.value / max) * 100;
 
         return (

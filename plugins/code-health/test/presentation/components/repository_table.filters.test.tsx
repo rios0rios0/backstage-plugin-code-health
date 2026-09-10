@@ -1,13 +1,19 @@
-import { fireEvent, render as renderBare, screen, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { renderInTestApp } from "@backstage/test-utils";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { RepositoryTable } from "../../../src/presentation/components/repository_table";
 import type { BadgeStatus, ComplianceStatus } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { RepositorySummary } from "@rios0rios0/backstage-plugin-code-health-common";
+import { rootRouteRef } from "../../../src/routes";
 import { RepositoryBuilder } from "../../builders/repository_builder";
 
-// The repository name links to the catalog entity through a router `Link`, so the
-// component only mounts inside a router — which is how the app renders it.
-const render = (ui: React.ReactElement) => renderBare(<MemoryRouter>{ui}</MemoryRouter>);
+/**
+ * The repository name resolves the plugin's own detail route with `useRouteRef`,
+ * which throws outside an app that has that route mounted — so these render
+ * through a test app rather than a bare router, which is also how the app itself
+ * renders the table.
+ */
+const render = (ui: React.ReactElement) =>
+  renderInTestApp(ui, { mountedRoutes: { "/": rootRouteRef } });
 
 const daysAgo = (days: number): string =>
   new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
@@ -37,16 +43,19 @@ const renderTable = (repositories: RepositorySummary[]) =>
 const selectFilter = (columnId: string, value: string) =>
   fireEvent.change(screen.getByLabelText(`Filter ${columnId}`), { target: { value } });
 
+/** The name is the first cell; the owner and health columns follow it. */
+const NAME_COLUMN = 0;
+
 const visibleRepositoryNames = (): string[] =>
   screen
     .getAllByRole("row")
     .slice(2)
-    .map((row) => within(row).getAllByRole("cell")[0].textContent ?? "");
+    .map((row) => within(row).getAllByRole("cell")[NAME_COLUMN].textContent ?? "");
 
 describe("RepositoryTable column filters", () => {
-  it("should keep only passing repositories when the CI filter is 'passing'", () => {
+  it("should keep only passing repositories when the CI filter is 'passing'", async () => {
     // given
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create().withName("green").withCiStatus("SUCCESS").build(),
       RepositoryBuilder.create().withName("red").withCiStatus("FAILURE").build(),
       RepositoryBuilder.create().withName("none").build(),
@@ -60,9 +69,9 @@ describe("RepositoryTable column filters", () => {
     expect(visibleRepositoryNames().join()).not.toContain("red");
   });
 
-  it("should keep only broken repositories when the CI filter is 'failing'", () => {
+  it("should keep only broken repositories when the CI filter is 'failing'", async () => {
     // given
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create().withName("green").withCiStatus("SUCCESS").build(),
       RepositoryBuilder.create().withName("red").withCiStatus("FAILURE").build(),
       RepositoryBuilder.create().withName("none").build(),
@@ -78,9 +87,9 @@ describe("RepositoryTable column filters", () => {
     expect(names).not.toContain("none");
   });
 
-  it("should keep only repositories without CI when the CI filter is 'no-ci'", () => {
+  it("should keep only repositories without CI when the CI filter is 'no-ci'", async () => {
     // given
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create().withName("green").withCiStatus("SUCCESS").build(),
       RepositoryBuilder.create().withName("none").build(),
     ]);
@@ -94,9 +103,9 @@ describe("RepositoryTable column filters", () => {
     expect(names).not.toContain("green");
   });
 
-  it("should keep every repository when the CI filter is reset to 'all'", () => {
+  it("should keep every repository when the CI filter is reset to 'all'", async () => {
     // given
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create().withName("green").withCiStatus("SUCCESS").build(),
       RepositoryBuilder.create().withName("none").build(),
     ]);
@@ -109,9 +118,9 @@ describe("RepositoryTable column filters", () => {
     expect(visibleRepositoryNames()).toHaveLength(2);
   });
 
-  it("should filter by compliance colour", () => {
+  it("should filter by compliance colour", async () => {
     // given
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create().withName("compliant").withComplianceStatus(compliance("green")).build(),
       RepositoryBuilder.create().withName("failing").withComplianceStatus(compliance("red")).build(),
       RepositoryBuilder.create().withName("unchecked").build(),
@@ -125,9 +134,9 @@ describe("RepositoryTable column filters", () => {
     expect(visibleRepositoryNames()[0]).toContain("compliant");
   });
 
-  it("should filter by badge colour", () => {
+  it("should filter by badge colour", async () => {
     // given
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create().withName("badged").withBadgeStatus(badges("green")).build(),
       RepositoryBuilder.create().withName("partial").withBadgeStatus(badges("yellow")).build(),
     ]);
@@ -140,9 +149,9 @@ describe("RepositoryTable column filters", () => {
     expect(visibleRepositoryNames()[0]).toContain("partial");
   });
 
-  it("should filter by visibility", () => {
+  it("should filter by visibility", async () => {
     // given
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create().withName("open").build(),
       RepositoryBuilder.create().withName("closed").asPrivate().build(),
     ]);
@@ -155,7 +164,7 @@ describe("RepositoryTable column filters", () => {
     expect(visibleRepositoryNames()[0]).toContain("closed");
   });
 
-  it("should filter by quality gate status", () => {
+  it("should filter by quality gate status", async () => {
     // given
     const withGate = (name: string, status: "OK" | "ERROR") => {
       const repo = RepositoryBuilder.create().withName(name).build();
@@ -174,7 +183,7 @@ describe("RepositoryTable column filters", () => {
         },
       };
     };
-    renderTable([withGate("passing", "OK"), withGate("failing", "ERROR")]);
+    await renderTable([withGate("passing", "OK"), withGate("failing", "ERROR")]);
 
     // when
     selectFilter("qualityGate", "ERROR");
@@ -184,9 +193,9 @@ describe("RepositoryTable column filters", () => {
     expect(visibleRepositoryNames()[0]).toContain("failing");
   });
 
-  it("should show every repository again when a select filter is cleared", () => {
+  it("should show every repository again when a select filter is cleared", async () => {
     // given
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create().withName("open").build(),
       RepositoryBuilder.create().withName("closed").asPrivate().build(),
     ]);
@@ -207,9 +216,9 @@ describe("RepositoryTable relative dates", () => {
     [5, "5d ago"],
     [70, "2mo ago"],
     [800, "2y ago"],
-  ])("should render an update %s days old as %s", (days, expected) => {
+  ])("should render an update %s days old as %s", async (days, expected) => {
     // given / when
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create().withName("dated").withUpdatedAt(daysAgo(days)).build(),
     ]);
 
@@ -219,9 +228,9 @@ describe("RepositoryTable relative dates", () => {
 });
 
 describe("RepositoryTable quality gate cell", () => {
-  it("should show nothing when Sonar reports no quality gate", () => {
+  it("should show nothing when Sonar reports no quality gate", async () => {
     // given / when
-    renderTable([RepositoryBuilder.create().withName("unmeasured").build()]);
+    await renderTable([RepositoryBuilder.create().withName("unmeasured").build()]);
 
     // then
     expect(screen.queryByText("Passed")).not.toBeInTheDocument();
@@ -235,18 +244,18 @@ describe("RepositoryTable pagination", () => {
       RepositoryBuilder.create().withName(`repo-${String(index).padStart(2, "0")}`).build(),
     );
 
-  it("should show only the first page when there are more rows than the page size", () => {
+  it("should show only the first page when there are more rows than the page size", async () => {
     // given / when
-    renderTable(manyRepos());
+    await renderTable(manyRepos());
 
     // then
     expect(visibleRepositoryNames()).toHaveLength(25);
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
   });
 
-  it("should move to the next page and back again", () => {
+  it("should move to the next page and back again", async () => {
     // given
-    renderTable(manyRepos());
+    await renderTable(manyRepos());
 
     // when
     fireEvent.click(screen.getByText("Next"));
@@ -262,9 +271,9 @@ describe("RepositoryTable pagination", () => {
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
   });
 
-  it("should hide the pagination controls when everything fits on one page", () => {
+  it("should hide the pagination controls when everything fits on one page", async () => {
     // given / when
-    renderTable([RepositoryBuilder.create().withName("only").build()]);
+    await renderTable([RepositoryBuilder.create().withName("only").build()]);
 
     // then
     expect(screen.queryByText("Next")).not.toBeInTheDocument();
@@ -272,9 +281,9 @@ describe("RepositoryTable pagination", () => {
 });
 
 describe("RepositoryTable documentation and API columns", () => {
-  it("should keep only the repositories whose docs were never published", () => {
+  it("should keep only the repositories whose docs were never published", async () => {
     // given
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create()
         .withName("unpublished")
         .withDocumentationState("unpublished")
@@ -292,11 +301,11 @@ describe("RepositoryTable documentation and API columns", () => {
     expect(visibleRepositoryNames()).toEqual(["user/unpublished"]);
   });
 
-  it("should keep only the repositories that ship an undeclared API", () => {
+  it("should keep only the repositories that ship an undeclared API", async () => {
     // given
     // This is the flag: the definition is in the repository, so only the
     // catalog wiring is missing.
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create()
         .withName("undeclared")
         .withApiExposureState("candidate", "openapi.yaml")
@@ -311,9 +320,9 @@ describe("RepositoryTable documentation and API columns", () => {
     expect(visibleRepositoryNames()).toEqual(["user/undeclared"]);
   });
 
-  it("should show everything when neither filter is set", () => {
+  it("should show everything when neither filter is set", async () => {
     // given
-    renderTable([
+    await renderTable([
       RepositoryBuilder.create().withName("one").withDocumentationState("missing").build(),
       RepositoryBuilder.create().withName("two").build(),
     ]);

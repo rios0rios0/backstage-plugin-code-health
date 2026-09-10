@@ -1,7 +1,9 @@
 import {
   readSchedulerServiceTaskScheduleDefinitionFromConfig,
+  type LoggerService,
   type SchedulerServiceTaskScheduleDefinition,
 } from "@backstage/backend-plugin-api";
+import { parseEntityRef, stringifyEntityRef } from "@backstage/catalog-model";
 import type { Config } from "@backstage/config";
 import type { ConfluenceSettings } from "../../domain/entities/confluence_settings";
 import {
@@ -94,6 +96,42 @@ const readConfluenceSettings = (config: Config | undefined): ConfluenceSettings 
   ),
 });
 
+/**
+ * The administrators, as full entity references.
+ *
+ * `spec.owner`-style shorthand is accepted for the same reason the catalog
+ * accepts it — an operator writes `jane`, not `user:default/jane` — and
+ * defaults to a user rather than a group, because the list names people far
+ * more often than teams. A malformed entry is skipped with a warning rather
+ * than aborting the plugin's startup: one typo in a list of five must not take
+ * the dashboard down for everybody, and the warning is what makes the entry
+ * that stopped working findable.
+ */
+const readAdministrators = (
+  config: Config | undefined,
+  logger: LoggerService | undefined,
+): readonly string[] => {
+  const configured = readStringList(config, "administrators");
+
+  return configured.flatMap((entry) => {
+    try {
+      return [
+        stringifyEntityRef(
+          parseEntityRef(entry.trim(), {
+            defaultKind: "user",
+            defaultNamespace: "default",
+          }),
+        ),
+      ];
+    } catch {
+      logger?.warn(
+        `ignoring \`codeHealth.administrators\` entry ${entry}: it is not an entity reference`,
+      );
+      return [];
+    }
+  });
+};
+
 const readEntityFilters = (config: Config | undefined): readonly EntityFilter[] => {
   const filters = config?.getOptional("catalog.entityFilter");
   if (!Array.isArray(filters) || filters.length === 0) return DEFAULT_ENTITY_FILTERS;
@@ -111,13 +149,20 @@ const readEntityFilters = (config: Config | undefined): readonly EntityFilter[] 
  * Provider credentials are intentionally not read here. They come from the host
  * application's `integrations` configuration, so an operator who has already
  * configured Backstage for GitHub or Azure DevOps configures nothing further.
+ *
+ * The logger is optional so this stays callable from a test that only cares
+ * about the numbers; the only thing it reports is a malformed administrator.
  */
-export const readCodeHealthSettings = (rootConfig: Config): CodeHealthSettings => {
+export const readCodeHealthSettings = (
+  rootConfig: Config,
+  logger?: LoggerService,
+): CodeHealthSettings => {
   const config = rootConfig.getOptionalConfig("codeHealth");
   const ingestion = config?.getOptionalConfig("ingestion");
   const atlassian = config?.getOptionalConfig("atlassian");
 
   return {
+    administrators: readAdministrators(config, logger),
     ingestion: {
       entityFilters: readEntityFilters(config),
       retentionDays: readPositiveNumber(ingestion, "retentionDays", DEFAULT_RETENTION_DAYS),

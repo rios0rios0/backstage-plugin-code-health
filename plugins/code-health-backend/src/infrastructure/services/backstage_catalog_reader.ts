@@ -1,5 +1,10 @@
 import type { AuthService } from "@backstage/backend-plugin-api";
-import type { Entity } from "@backstage/catalog-model";
+import {
+  RELATION_CHILD_OF,
+  RELATION_MEMBER_OF,
+  stringifyEntityRef,
+  type Entity,
+} from "@backstage/catalog-model";
 import type { CatalogService } from "@backstage/plugin-catalog-node";
 import type { DirectoryUser } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { EntityFilter } from "../../domain/entities/ingestion_settings";
@@ -28,6 +33,19 @@ const REQUIRED_FIELDS = [
 /** Discovery never reads a profile, so the user lookup asks for its own fields. */
 const USER_FIELDS = ["kind", "metadata.name", "metadata.namespace", "spec.profile"];
 
+/** Walking the group tree needs the edges and the name, and nothing else. */
+const OWNERSHIP_FIELDS = ["kind", "metadata.name", "metadata.namespace", "relations"];
+
+/**
+ * How far up a group tree the ownership walk goes.
+ *
+ * Deep enough for any organisation chart anybody actually maintains, and a
+ * ceiling rather than a promise: the walk already refuses to revisit a group,
+ * so this only bounds a chart that is genuinely that deep rather than one that
+ * loops.
+ */
+export const MAX_OWNERSHIP_DEPTH = 10;
+
 /** Azure DevOps reports commit authors by e-mail; GitHub reports a login. */
 const isEmail = (value: string): boolean => value.includes("@");
 
@@ -55,6 +73,15 @@ const toDirectoryUser = (entity: Entity): DirectoryUser => {
     picture: typeof profile?.picture === "string" ? profile.picture : null,
   };
 };
+
+/** The targets of one kind of relation on an entity, deduplicated. */
+const relatedRefs = (entity: Entity, type: string): string[] => [
+  ...new Set(
+    (entity.relations ?? [])
+      .filter((relation) => relation.type === type)
+      .map((relation) => relation.targetRef),
+  ),
+];
 
 export class BackstageCatalogReader implements CatalogReader, DirectoryReader {
   constructor(
@@ -101,6 +128,49 @@ export class BackstageCatalogReader implements CatalogReader, DirectoryReader {
       });
     }
     return found;
+  }
+
+  async listOwnershipRefs(userEntityRef: string): Promise<string[]> {
+    const credentials = await this.auth.getOwnServiceCredentials();
+
+    // By reference rather than by filter: the reference is exactly what the
+    // link table stores. It takes no `fields`, which costs one whole entity —
+    // the group hops below, which are the unbounded half, do narrow theirs.
+    const user = await this.catalog.getEntityByRef(userEntityRef, { credentials });
+    // A link outlives the person it names. Somebody who left the organisation
+    // owns nothing, which is a row, not a failed request.
+    if (user === undefined) return [];
+
+    const owned = [stringifyEntityRef(user)];
+    const seen = new Set(owned);
+    let frontier = relatedRefs(user, RELATION_MEMBER_OF).filter((ref) => !seen.has(ref));
+
+    for (let depth = 0; depth < MAX_OWNERSHIP_DEPTH && frontier.length > 0; depth += 1) {
+      for (const ref of frontier) {
+        seen.add(ref);
+        owned.push(ref);
+      }
+
+      // One request per level rather than one per group: a person in eight
+      // teams under three departments is two round trips, not eleven.
+      const { items } = await this.catalog.getEntitiesByRefs(
+        { entityRefs: frontier, fields: OWNERSHIP_FIELDS },
+        { credentials },
+      );
+
+      const next = new Set<string>();
+      for (const item of items) {
+        if (item === undefined) continue;
+        for (const parent of relatedRefs(item, RELATION_CHILD_OF)) {
+          // The guard is what keeps a group tree somebody drew as a cycle from
+          // walking for ever — the catalog does not forbid one.
+          if (!seen.has(parent)) next.add(parent);
+        }
+      }
+      frontier = [...next];
+    }
+
+    return owned;
   }
 
   async listUsers(): Promise<DirectoryUser[]> {

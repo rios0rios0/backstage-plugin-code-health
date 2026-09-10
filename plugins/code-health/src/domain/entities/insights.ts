@@ -3,7 +3,10 @@ import type {
   RepositorySummary,
   TimeSeriesPoint,
 } from "@rios0rios0/backstage-plugin-code-health-common";
-import { computeRate } from "@rios0rios0/backstage-plugin-code-health-common";
+import {
+  computeRate,
+  SONAR_COVERAGE_TARGET,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 
 /** One bar of a ranking chart. */
 export interface RankedItem {
@@ -218,9 +221,10 @@ export const computeKpis = (
  * The share a repository has to reach before its coverage stops being a
  * finding. Eighty percent is SonarQube's own default "coverage on new code"
  * gate, so it is the number a team already sees on its quality gate rather
- * than a second target invented here.
+ * than a second target invented here — and the same figure both health scores
+ * read, so the Insights tab and a score can never disagree about the target.
  */
-export const COVERAGE_TARGET = 80;
+export const COVERAGE_TARGET = SONAR_COVERAGE_TARGET;
 
 export interface CoverageStats {
   /** Repositories with a Sonar coverage measure. */

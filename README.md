@@ -39,7 +39,12 @@ rather than showing an empty dashboard.
 - **Contributor metrics**: commits, code churn, pull requests created and pull requests approved as separate columns, review approval rate and pipeline success rate — every rate explains what it divides in a tooltip on its heading
 - **Merged work is credited to whoever did it, not to whoever merged it**: a squash commit goes to the pull request's author whatever the provider stamped on it, a merge commit is not counted at all and the pull request's own commits are, and a pipeline run belongs to the author of the change it built. See [Attribution](plugins/code-health-backend/docs/attribution.md)
 - **Honest churn units**: GitHub reports added and deleted lines; Azure DevOps reports changed files and exposes no line count anywhere in its API, so each row prints the unit its provider actually gave rather than showing zero
-- **Insights**: the landing tab, with the fleet-level figures and charts — delivery cadence, top contributors, most active repositories, review load, quality-gate and branch-policy breakdowns, test-coverage distribution, and the documentation and catalog-API gaps
+- **Insights**: the landing tab, holding the questions that are about the fleet rather than about one row of it — at a glance, delivery cadence and test coverage across the fleet, plus a section for each configured integration
+- **Cards that live with their table**: top contributors, review load and most active repositories sit above the contributors table; documentation, catalog APIs and fleet health sit above the repositories table. A ranking is a way *into* a row, so it belongs beside the rows it ranks — and every entry links straight to that person's or that repository's page
+- **Detail pages**: one person's or one repository's last one to six months, bucketed by day up to forty-five days and by week beyond it, plotting the same figures the tables print and bounded by what the backfill has actually collected
+- **Two scores, never shown without their workings**: a productivity score per person and a health score per repository, each `0`–`100` and each rendered beside the components it was built from. A component nothing could measure is left out and its weight shared among the rest, never counted as a zero
+- **Ownership**: the repositories a person is responsible for, read from the catalog's `spec.owner` and matched against their `User` entity and the groups they belong to, parent groups included — the same rule Backstage applies everywhere else
+- **Re-collecting the history**: an administrator named in configuration, and allowed by the permission framework, can send the ingestion back to the start for a chosen number of days
 - **Catalog links**: repository rows and contributors link through to their catalog entity, and a contributor matched to a `User` shows that entity's name and picture
 - **Sonar integration** through the community `sonarqube` backend plugin, so its token stays where that plugin already keeps it
 - **One row per person, not per account**: commits arrive under a commit e-mail or a login, coding time under a WakaTime username, tickets under an Atlassian account id. The **Identities** tab links them, so a contributor row adds up — and because links are applied when a row is built, correcting one fixes last March's numbers too
@@ -90,6 +95,12 @@ sidebar entry; an app that places nav items explicitly needs these extension IDs
 | `api:code-health/repositories` | The repositories view's data source |
 | `api:code-health/contributors` | The contributors view's data source |
 | `api:code-health/coverage` | How much history the backend holds |
+| `api:code-health/time-series` | Fleet activity over time, for the Insights charts |
+| `api:code-health/integrations` | Which optional integrations the backend was configured with |
+| `api:code-health/identities` | Every account seen, and which person it belongs to |
+| `api:code-health/trends` | One person's or one repository's history, for the detail pages |
+| `api:code-health/ownership` | The repositories a person owns through the catalog |
+| `api:code-health/administration` | What the caller may do beyond reading, and the reset itself |
 
 There is no `nav-item:code-health` to reference.
 
@@ -323,6 +334,112 @@ according to the range already selected — a year of daily points is noise and 
 ones is a single dot, so the only correct setting is implied by the range and is not offered as a
 second control.
 
+Four tabs, in the order somebody reads them. **Insights** leads and keeps only what is about the
+fleet rather than about one row of it: at a glance, delivery cadence, test coverage across the
+fleet, and a section for each configured integration. The rankings that used to sit there —
+top contributors, review load, most active repositories — now sit above the **Contributors** table,
+and documentation, catalog APIs and fleet health sit above the **Repositories** table. A ranking is
+a way into a row, so putting it a tab away from the rows it ranks made a reader carry a name across
+the screen by hand; every entry now links to that person's or that repository's page. **Identities**
+stays last, because it is maintenance rather than a measurement.
+
+### Trends and scores
+
+Clicking a contributor's name — in the table, or in a ranking above it — opens that person's page;
+clicking a repository opens the repository's. Both offer the last one to six months and plot the
+same figures the tables print, bucketed by day up to forty-five days and by week beyond that. The
+threshold is derived from the window rather than offered as a second control: a hundred and eighty
+daily points across a card read as noise, and four weekly points across a month read as nothing, so
+the only correct setting is the one the months already imply. The list of months is bounded by what
+the backfill has reached, and the page says so when the list is short.
+
+A person travels in the **query string** — `/contributors/person?key=user:default/jane` — rather
+than in a path segment. A person key carries a colon and, for somebody linked to a catalog `User`, a
+slash; React Router decodes a segment before it matches it, so an encoded slash splits the key into
+two segments and the route stops matching at all. A repository id has no such characters and sits in
+the path: `/repositories/<id>`.
+
+Both pages head themselves with a score, and neither ever prints the number on its own. A bare `62`
+on a person is an accusation with no evidence; a bare `71` on a repository is a figure nobody can
+act on. So a score always carries its components — what was measured, how much of the total it
+carried, and the sentence explaining how it was read — and the page renders them beside the number
+rather than behind it.
+
+A component that could not be measured is **left out and its weight shared among the ones that
+could**, never scored as zero: a repository with no Sonar project has an unknown quality gate, not a
+failing one, and somebody whose pipeline never ran has no success rate rather than a bad one. Each
+score reports how much of the weight survived, so one resting on a single component cannot pass for
+one resting on all of them.
+
+#### Productivity — one person, over one window
+
+A reading aid, not a verdict. The four output components are read **as a share of the fleet's top
+figure in the same window** rather than against a constant, so a quiet month for the whole team is a
+quiet month rather than everybody's failure, and there is no invented "forty commits is a good
+month" for anyone to argue with. Reliability and quality are absolute, because a pipeline success
+rate means the same thing whoever else happens to be on the team. Churn is only ever compared within
+its own unit — GitHub's lines against lines, Azure DevOps's files against files — because the two
+are not the same measurement wearing different labels.
+
+| Component | Weight | Read as |
+|---|---|---|
+| Commits | 20% | share of the window's top figure |
+| Pull requests merged | 20% | share of the window's top figure |
+| Code churn | 10% | share of the top figure **in the same unit** |
+| Reviews given | 15% | share of the window's top figure |
+| Pipeline success | 15% | absolute, over the runs that reached a verdict |
+| Quality gate of code touched | 10% | absolute |
+| Test coverage of code touched | 10% | absolute, against the 80% Sonar gate |
+
+The last two describe **the repositories the person changed, not the code they wrote** — Sonar
+measures a project — which is why they carry the least weight and why every Sonar heading says so.
+
+#### Repository health — one repository, absolutely
+
+Every component is absolute here: a failing gate is a failing gate whatever the rest of the fleet
+looks like. Three of them decay rather than cut off, because "five bugs" and "five hundred bugs"
+should not read the same.
+
+| Component | Weight | Read as |
+|---|---|---|
+| Quality gate | 15% | passing or failing |
+| Test coverage | 15% | against the 80% Sonar gate |
+| Bugs and vulnerabilities | 10% | a vulnerability counts double; five bug-equivalents halve it |
+| Duplication | 5% | 20% duplicated scores nothing |
+| Technical debt | 5% | five working days halve it |
+| Default branch build | 10% | the last run on the default branch |
+| Build success | 10% | over the builds that reached a verdict |
+| Branch and build policy | 10% | how many of the four checks pass |
+| Documentation | 5% | published 1, written but unpublished 0.5, missing 0, archived not asked |
+| Review coverage | 10% | reviews per merged pull request, capped at one each |
+| Pull requests landed | 5% | merged rather than abandoned |
+
+Sonar, compliance and badge figures cannot be backfilled, so a repository's score is thinner on the
+day it is installed than it will be the day after — which the evidence figure states rather than
+quietly hiding.
+
+### Ownership — the repositories a person is responsible for
+
+Where somebody commits and what somebody is responsible for are different questions, and a team lead
+asking "are they looking after their projects" means the second one. Discovery stores each catalog
+entity's `spec.owner` on the repository row, normalised the way the catalog normalises it: a bare
+`team-a` becomes `group:default/team-a`, because an unqualified owner defaults to a group in the
+default namespace and two spellings of one group otherwise fail to match each other.
+
+A person owns a repository when its owner is their own `User` entity or a group they belong to,
+**including that group's parents** — `memberOf` followed by `childOf`. That is how Backstage decides
+ownership everywhere else, so the plugin does not invent a second answer to a question the catalog
+has already answered.
+
+An account nobody has linked to a catalog `User` owns nothing, and its page says exactly that rather
+than showing an empty list, which would read as neglect. The **Identities** tab is where the link is
+made, and because links are applied when a row is built, making one there fills the ownership in at
+once.
+
+**Upgrading.** `RepositorySummary.ownerRef` and `RepositoryActivity.reviews` are new **required**
+fields of the wire contract. All three packages carry one version and are released together, so
+upgrade them as a set: a frontend on this version against an older backend gets rows missing both.
+
 ### What the documentation and API audits read
 
 Both grades combine what the catalog entity says with what the repository contains, so the daily
@@ -364,6 +481,49 @@ curl -X POST localhost:7007/api/code-health/.backstage/scheduler/v1/tasks/code-h
 `GET /api/code-health/v1/coverage` reports how far the backfill has got, which repositories are
 failing, and the instant every repository has data through.
 
+### Re-collecting the history
+
+Nobody can start the collection over by default. Two things have to allow it, and the backend checks
+both on every request rather than trusting the browser to have hidden a button:
+
+```yaml
+codeHealth:
+  # Catalog entity references. A group grants it to everybody in the group,
+  # parents included. Empty by default, which is what makes a fresh install
+  # read-only for everyone.
+  administrators:
+    - 'group:default/platform'
+    - 'user:default/jane'
+```
+
+and the `code-health.ingestion.reset` permission, registered with
+`@backstage/plugin-permission-common` and exported from the backend package, which a permission
+policy or the RBAC plugin can deny. Being named in `administrators` is not enough if the policy
+refuses, and passing the policy is not enough if nobody named you. The configuration is where the
+plugin says who its administrators are; the permission framework stays where an organisation
+expresses a rule about them, and neither is asked to stand in for the other.
+
+An administrator gets a **Re-collect history** control in the page header. It asks how far back
+before it does anything, up to `codeHealth.ingestion.retentionDays`, because a year across two
+hundred repositories is most of a day of rate-limited requests and somebody who only needs last
+quarter re-read after a fix should not pay for the other three.
+
+What a reset does is what a fresh install does. Every commit, pull request, review and pipeline run
+inside the chosen reach is discarded, every tracked repository's cursors go back to the start, and
+the actor walks the history again at whatever rate the providers allow. Until it catches up, the
+dashboards answer for the last day only and wider ranges unlock as it advances — the same
+**Collecting history** bar that shows after installation comes back while it runs.
+
+What a reset keeps: releases, tags, the daily snapshots (Sonar, compliance and README badges) and
+every identity link. The snapshots because no provider can say what they looked like last March, so
+discarding them would lose them for good; the links because they are a statement a person made
+rather than something a provider reported.
+
+| Route | Answers |
+|---|---|
+| `GET /api/code-health/v1/access` | whether this caller may reset, and the retention in days |
+| `POST /api/code-health/v1/ingestion/reset` | `{ "days": 365 }` — `403` when either check refuses, `400` outside `1..retentionDays` |
+
 ## Architecture
 
 ```
@@ -384,6 +544,27 @@ budget per run, retries `429` and `5xx` with jittered backoff, and opens a circu
 that keeps failing. It reads `Retry-After` and the `X-RateLimit-*` headers on **every** response,
 not only on errors — Azure DevOps applies throttling as latency on a successful `200` and sends
 those headers before it starts delaying.
+
+The whole API, under `/api/code-health/v1`:
+
+| Route | What it answers |
+|---|---|
+| `GET /repositories` | one row per tracked repository, over a window |
+| `GET /contributors` | one row per person, over a window |
+| `GET /timeseries` | fleet activity, bucketed by day, week or month |
+| `GET /coverage` | how far the backfill has got, and what is failing |
+| `GET /capabilities` | which optional integrations the backend was configured with |
+| `GET /identities` | every account seen, and which person it resolved to |
+| `PUT /identities/links` · `DELETE /identities/links/:source/:key` | attach an account to a catalog `User`, or detach it |
+| `GET /contributors/:key/trend` | one person's history, bucketed, with the score for each bucket |
+| `GET /contributors/:key/repositories` | the repositories that person owns through the catalog |
+| `GET /repositories/:id/trend` | one repository's history, bucketed, with the score for each bucket |
+| `GET /access` | what this caller may do beyond reading |
+| `POST /ingestion/reset` | send the ingestion cursors back and re-read |
+| `POST /refresh` | run the scheduled tasks now |
+
+Of these, `POST /ingestion/reset` is the only one gated on more than being signed in, and the gate
+is the backend's own — a control the browser did not draw is not an access control.
 
 ## Development
 
