@@ -1,12 +1,18 @@
+import { renderInTestApp } from "@backstage/test-utils";
 import type {
   ConfluenceContributorMetrics,
   ConfluenceSpaceMetrics,
   ContributorSummary,
   RepositorySummary,
 } from "@rios0rios0/backstage-plugin-code-health-common";
-import { render as renderBare, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { ConfluenceInsights } from "../../../../src/presentation/components/insights/confluence_insights";
+import Grid from "@material-ui/core/Grid";
+import { screen } from "@testing-library/react";
+import {
+  ConfluenceContributorInsights,
+  ConfluenceFleetInsights,
+  ConfluenceRepositoryInsights,
+} from "../../../../src/presentation/components/insights/confluence_insights";
+import { rootRouteRef } from "../../../../src/routes";
 import { ContributorBuilder } from "../../../builders/contributor_builder";
 import { RepositoryBuilder } from "../../../builders/repository_builder";
 
@@ -74,12 +80,19 @@ const aRepository = (
     confluenceMetrics: metrics,
   }) as RepositorySummary;
 
-// The ranking chart links a contributor to their catalog user, so the cards
-// mount inside a router — which is how the Insights page renders them.
-const render = (ui: React.ReactElement) => renderBare(<MemoryRouter>{ui}</MemoryRouter>);
+/**
+ * Each part emits `Grid item` children so it can drop into its page's own grid,
+ * so the test supplies the container the page would — and mounts the plugin
+ * root, because the ranking of people links to the contributor detail page and
+ * a route ref with nothing under it has no path to give.
+ */
+const render = (ui: React.ReactElement) =>
+  renderInTestApp(<Grid container>{ui}</Grid>, {
+    mountedRoutes: { "/": rootRouteRef },
+  });
 
-describe("ConfluenceInsights", () => {
-  it("should headline what the fleet wrote", () => {
+describe("ConfluenceFleetInsights", () => {
+  it("should headline what the fleet wrote", async () => {
     // given
     const repositories = [
       aRepository("a", space({ pagesCreated: 42, pagesEdited: 118, commentsWritten: 90 })),
@@ -87,8 +100,8 @@ describe("ConfluenceInsights", () => {
     const contributors = [aContributor("Ada", confluence({ pagesCreated: 12 }))];
 
     // when
-    render(
-      <ConfluenceInsights repositories={repositories} contributors={contributors} />,
+    await render(
+      <ConfluenceFleetInsights repositories={repositories} contributors={contributors} />,
     );
 
     // then
@@ -98,7 +111,7 @@ describe("ConfluenceInsights", () => {
       .toBeInTheDocument();
   });
 
-  it("should say the site has no analytics rather than reporting no readers", () => {
+  it("should say the site has no analytics rather than reporting no readers", async () => {
     // given
     // Page views are a Confluence Cloud Premium feature. A zero here would
     // claim nobody opened the pages, which is a different and much worse thing
@@ -108,7 +121,9 @@ describe("ConfluenceInsights", () => {
     ];
 
     // when
-    render(<ConfluenceInsights repositories={[]} contributors={contributors} />);
+    await render(
+      <ConfluenceFleetInsights repositories={[]} contributors={contributors} />,
+    );
 
     // then
     expect(
@@ -119,18 +134,20 @@ describe("ConfluenceInsights", () => {
     ).toBeInTheDocument();
   });
 
-  it("should say no page could be measured rather than reporting zero words", () => {
+  it("should say no page could be measured rather than reporting zero words", async () => {
     // given
     const contributors = [aContributor("Ada", confluence({ pagesCreated: 3 }))];
 
     // when
-    render(<ConfluenceInsights repositories={[]} contributors={contributors} />);
+    await render(
+      <ConfluenceFleetInsights repositories={[]} contributors={contributors} />,
+    );
 
     // then
     expect(screen.getByText("no page could be measured")).toBeInTheDocument();
   });
 
-  it("should report the written volume when the run could measure it", () => {
+  it("should report the written volume when the run could measure it", async () => {
     // given
     const contributors = [
       aContributor(
@@ -145,15 +162,33 @@ describe("ConfluenceInsights", () => {
     ];
 
     // when
-    render(<ConfluenceInsights repositories={[]} contributors={contributors} />);
+    await render(
+      <ConfluenceFleetInsights repositories={[]} contributors={contributors} />,
+    );
 
     // then
-    // The figure appears on the tile and again on the volume ranking beneath.
-    expect(screen.getAllByText("2,400").length).toBeGreaterThan(0);
+    expect(screen.getByText("2,400")).toBeInTheDocument();
     expect(screen.getByText("300 pruned")).toBeInTheDocument();
   });
 
-  it("should rank who is documenting", () => {
+  it("should leave the people and the rot to the tabs that list them", async () => {
+    // given
+    const repositories = [aRepository("a", space({ parentlessPages: 7 }))];
+    const contributors = [aContributor("Ada", confluence({ pagesCreated: 2 }))];
+
+    // when
+    await render(
+      <ConfluenceFleetInsights repositories={repositories} contributors={contributors} />,
+    );
+
+    // then
+    expect(screen.queryByText("Who is documenting")).not.toBeInTheDocument();
+    expect(screen.queryByText("Documentation rot")).not.toBeInTheDocument();
+  });
+});
+
+describe("ConfluenceContributorInsights", () => {
+  it("should rank who is documenting", async () => {
     // given
     const contributors = [
       aContributor("Ada", confluence({ pagesCreated: 2, commentsWritten: 40 })),
@@ -161,21 +196,37 @@ describe("ConfluenceInsights", () => {
     ];
 
     // when
-    render(<ConfluenceInsights repositories={[]} contributors={contributors} />);
+    await render(<ConfluenceContributorInsights contributors={contributors} />);
 
     // then
-    const ranking = screen.getByLabelText(/^Ada: 42 contributions/);
-    expect(ranking).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Ada: 42 contributions/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Bo: 1 contributions/)).toBeInTheDocument();
   });
 
-  it("should explain why no volume ranking is available", () => {
+  it("should send a row to the plugin's contributor page", async () => {
+    // given
+    // The person at the top of this ranking is usually nowhere near the top of
+    // the commit ranking, which is exactly the row somebody wants to open.
+    const contributors = [aContributor("Ada", confluence({ pagesCreated: 2 }))];
+
+    // when
+    await render(<ConfluenceContributorInsights contributors={contributors} />);
+
+    // then
+    expect(screen.getByRole("link", { name: "Ada" })).toHaveAttribute(
+      "href",
+      "/contributors/person?key=Ada",
+    );
+  });
+
+  it("should explain why no volume ranking is available", async () => {
     // given
     // The chart is empty because fetching page bodies costs requests, not
     // because nobody wrote anything — and the difference is actionable.
     const contributors = [aContributor("Ada", confluence({ pagesCreated: 2 }))];
 
     // when
-    render(<ConfluenceInsights repositories={[]} contributors={contributors} />);
+    await render(<ConfluenceContributorInsights contributors={contributors} />);
 
     // then
     expect(
@@ -183,7 +234,22 @@ describe("ConfluenceInsights", () => {
     ).toBeInTheDocument();
   });
 
-  it("should name the spaces carrying the most rot", () => {
+  it("should say nobody wrote anything when nothing has been collected yet", async () => {
+    // given
+    const contributors = [aContributor("Ada", null)];
+
+    // when
+    await render(<ConfluenceContributorInsights contributors={contributors} />);
+
+    // then
+    expect(
+      screen.getByText("Nobody wrote anything in Confluence in the measured window."),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("ConfluenceRepositoryInsights", () => {
+  it("should name the spaces carrying the most rot", async () => {
     // given
     const repositories = [
       aRepository(
@@ -203,21 +269,19 @@ describe("ConfluenceInsights", () => {
     ];
 
     // when
-    render(<ConfluenceInsights repositories={repositories} contributors={[]} />);
+    await render(<ConfluenceRepositoryInsights repositories={repositories} />);
 
     // then
     expect(screen.getByText("Operations")).toBeInTheDocument();
     expect(screen.getByText("60% stale · oldest 2021-03-04")).toBeInTheDocument();
   });
 
-  it("should list the spaces holding pages nothing links to", () => {
+  it("should list the spaces holding pages nothing links to", async () => {
     // given
-    const repositories = [
-      aRepository("a", space({ parentlessPages: 7 })),
-    ];
+    const repositories = [aRepository("a", space({ parentlessPages: 7 }))];
 
     // when
-    render(<ConfluenceInsights repositories={repositories} contributors={[]} />);
+    await render(<ConfluenceRepositoryInsights repositories={repositories} />);
 
     // then
     expect(screen.getByText("7 with no parent")).toBeInTheDocument();
@@ -226,20 +290,14 @@ describe("ConfluenceInsights", () => {
     expect(screen.getByText(/counts parentless pages/)).toBeInTheDocument();
   });
 
-  it("should degrade to empty messages when nothing has been collected yet", () => {
+  it("should degrade to empty messages when nothing has been collected yet", async () => {
     // given
     const repositories = [aRepository("a", null)];
-    const contributors = [aContributor("Ada", null)];
 
     // when
-    render(
-      <ConfluenceInsights repositories={repositories} contributors={contributors} />,
-    );
+    await render(<ConfluenceRepositoryInsights repositories={repositories} />);
 
     // then
-    expect(
-      screen.getByText("Nobody wrote anything in Confluence in the measured window."),
-    ).toBeInTheDocument();
     expect(
       screen.getByText("No space has pages older than the staleness threshold."),
     ).toBeInTheDocument();

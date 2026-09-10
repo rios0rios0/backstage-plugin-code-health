@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { renderInTestApp } from "@backstage/test-utils";
+import { screen } from "@testing-library/react";
 import type {
   ContributorSummary,
   JiraContributorMetrics,
@@ -10,8 +11,12 @@ import {
   EMPTY_JIRA_ISSUE_TYPES,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import Grid from "@material-ui/core/Grid";
-import { MemoryRouter } from "react-router-dom";
-import { JiraInsights } from "../../../../src/presentation/components/insights/jira_insights";
+import {
+  JiraContributorInsights,
+  JiraFleetInsights,
+  JiraRepositoryInsights,
+} from "../../../../src/presentation/components/insights/jira_insights";
+import { rootRouteRef } from "../../../../src/routes";
 import { ContributorBuilder } from "../../../builders/contributor_builder";
 import { RepositoryBuilder } from "../../../builders/repository_builder";
 
@@ -74,23 +79,18 @@ const aContributor = (
 });
 
 /**
- * The card emits loose `Grid item` children so it can drop into the Insights
- * page's own grid, so the test supplies the container the page would.
+ * Each part emits loose `Grid item` children so it can drop into its page's own
+ * grid, so the test supplies the container the page would — and mounts the
+ * plugin root, because the rankings of people resolve their links through
+ * `useRouteRef` and a route ref with nothing under it has no path to give.
  */
-const renderCard = (
-  repositories: readonly RepositorySummary[],
-  contributors: readonly ContributorSummary[],
-) =>
-  render(
-    <MemoryRouter>
-      <Grid container>
-        <JiraInsights repositories={repositories} contributors={contributors} />
-      </Grid>
-    </MemoryRouter>,
-  );
+const renderCard = (ui: React.ReactElement) =>
+  renderInTestApp(<Grid container>{ui}</Grid>, {
+    mountedRoutes: { "/": rootRouteRef },
+  });
 
-describe("JiraInsights", () => {
-  it("should explain itself rather than draw a page of blanks when nothing was measured", () => {
+describe("JiraFleetInsights", () => {
+  it("should explain itself rather than draw a page of blanks when nothing was measured", async () => {
     // given
     // Jira is on — the card would not be mounted otherwise — but no entity
     // carries an annotation, or the first snapshot has not run. Six cards of em
@@ -99,15 +99,16 @@ describe("JiraInsights", () => {
     const contributors = [aContributor("dev", null)];
 
     // when
-    renderCard(repositories, contributors);
+    await renderCard(
+      <JiraFleetInsights repositories={repositories} contributors={contributors} />,
+    );
 
     // then
     expect(screen.getByText(/jira\/project-key/u)).toBeInTheDocument();
     expect(screen.queryByText("Jira delivery")).not.toBeInTheDocument();
-    expect(screen.queryByText("Backlog flow")).not.toBeInTheDocument();
   });
 
-  it("should headline what the fleet closed, and against how many projects", () => {
+  it("should headline what the fleet closed, and against how many projects", async () => {
     // given
     const shared = projectMetrics({
       issuesCreated: 20,
@@ -124,7 +125,7 @@ describe("JiraInsights", () => {
     const repositories = [aRepository("gateway", shared), aRepository("worker", shared)];
 
     // when
-    renderCard(repositories, []);
+    await renderCard(<JiraFleetInsights repositories={repositories} contributors={[]} />);
 
     // then
     expect(screen.getByText("31")).toBeInTheDocument();
@@ -137,21 +138,68 @@ describe("JiraInsights", () => {
     expect(screen.getByText("6 of 31 closed")).toBeInTheDocument();
   });
 
-  it("should render an em dash for every figure Jira could not answer", () => {
+  it("should render an em dash for every figure Jira could not answer", async () => {
     // given
     // Story points and the backlog count are both routinely unavailable, and a
     // zero there reads as a team that estimates nothing and has no work.
     const repositories = [aRepository("gateway", projectMetrics())];
 
     // when
-    renderCard(repositories, []);
+    await renderCard(<JiraFleetInsights repositories={repositories} contributors={[]} />);
 
     // then
     const dashes = screen.getAllByText("—");
     expect(dashes.length).toBeGreaterThanOrEqual(4);
   });
 
-  it("should rank closing separately from board activity", () => {
+  it("should leave the people and the backlog to the tabs that list them", async () => {
+    // given
+    const repositories = [
+      aRepository("gateway", projectMetrics({ openIssues: 6, issuesResolved: 3 })),
+    ];
+    const contributors = [aContributor("Closer", personMetrics({ issuesResolved: 9 }))];
+
+    // when
+    await renderCard(
+      <JiraFleetInsights repositories={repositories} contributors={contributors} />,
+    );
+
+    // then
+    expect(screen.queryByText("Who closes tickets")).not.toBeInTheDocument();
+    expect(screen.queryByText("Backlog flow")).not.toBeInTheDocument();
+    expect(screen.queryByText("Oldest open work")).not.toBeInTheDocument();
+  });
+
+  it("should describe several projects in the plural", async () => {
+    // given
+    const repositories = [
+      aRepository("gateway", projectMetrics({ projectKey: "A" })),
+      aRepository("worker", projectMetrics({ projectKey: "B" })),
+    ];
+
+    // when
+    await renderCard(<JiraFleetInsights repositories={repositories} contributors={[]} />);
+
+    // then
+    expect(
+      screen.getByText("Across 2 projects named by 2 repositories."),
+    ).toBeInTheDocument();
+  });
+
+  it("should describe a single repository in the singular", async () => {
+    // given
+    const repositories = [aRepository("gateway", projectMetrics())];
+
+    // when
+    await renderCard(<JiraFleetInsights repositories={repositories} contributors={[]} />);
+
+    // then
+    expect(screen.getByText("Across 1 project named by 1 repository.")).toBeInTheDocument();
+  });
+});
+
+describe("JiraContributorInsights", () => {
+  it("should rank closing separately from board activity", async () => {
     // given
     // The two rankings only partly overlap on most teams, and the gap between
     // them is usually the person doing the work nobody writes code for.
@@ -166,29 +214,76 @@ describe("JiraInsights", () => {
     ];
 
     // when
-    renderCard([aRepository("gateway", projectMetrics())], contributors);
+    await renderCard(<JiraContributorInsights contributors={contributors} />);
 
     // then
     expect(screen.getByText("Who closes tickets")).toBeInTheDocument();
     expect(screen.getByText("Who keeps the board moving")).toBeInTheDocument();
-    expect(screen.getByText("Closer")).toBeInTheDocument();
-    expect(screen.getByText("Triager")).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Closer: 9 tickets/u)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Triager: 60 interactions/u)).toBeInTheDocument();
   });
 
-  it("should say the backlog by priority was not collected rather than draw an empty chart", () => {
+  it("should send a row to the plugin's contributor page", async () => {
+    // given
+    // Somebody who closed tickets and did nothing else is on the closing
+    // ranking alone, which is the point of having two of them.
+    const contributors = [aContributor("Closer", personMetrics({ issuesResolved: 9 }))];
+
+    // when
+    await renderCard(<JiraContributorInsights contributors={contributors} />);
+
+    // then
+    expect(screen.getByRole("link", { name: "Closer" })).toHaveAttribute(
+      "href",
+      "/contributors/person?key=Closer",
+    );
+  });
+
+  it("should say nobody carries a measurement rather than rank an empty board", async () => {
+    // given
+    // Jira is on and nobody has been measured, which is a different thing from
+    // a quiet week — and the reader should not have to open Insights to learn
+    // which of the two they are looking at.
+    const contributors = [aContributor("dev", null)];
+
+    // when
+    await renderCard(<JiraContributorInsights contributors={contributors} />);
+
+    // then
+    expect(screen.getByText(/nobody carries a measurement yet/u)).toBeInTheDocument();
+    expect(screen.queryByText("Who closes tickets")).not.toBeInTheDocument();
+  });
+
+  it("should say nothing was closed when Jira measured a quiet window", async () => {
+    // given
+    const contributors = [aContributor("dev", personMetrics())];
+
+    // when
+    await renderCard(<JiraContributorInsights contributors={contributors} />);
+
+    // then
+    expect(screen.getByText("No tickets were closed in this window.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No Jira activity was recorded in this window."),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("JiraRepositoryInsights", () => {
+  it("should say the backlog by priority was not collected rather than draw an empty chart", async () => {
     // given
     // The priority breakdown is the first thing a run gives up when its request
     // allowance runs low, and an empty chart would read as an empty backlog.
     const repositories = [aRepository("gateway", projectMetrics({ openIssues: 40 }))];
 
     // when
-    renderCard(repositories, []);
+    await renderCard(<JiraRepositoryInsights repositories={repositories} />);
 
     // then
     expect(screen.getByText(/request allowance is running low/u)).toBeInTheDocument();
   });
 
-  it("should chart the backlog by priority in the site's own severity order", () => {
+  it("should chart the backlog by priority in the site's own severity order", async () => {
     // given
     const repositories = [
       aRepository(
@@ -204,7 +299,7 @@ describe("JiraInsights", () => {
     ];
 
     // when
-    renderCard(repositories, []);
+    await renderCard(<JiraRepositoryInsights repositories={repositories} />);
 
     // then
     const rows = screen.getAllByRole("listitem").map((row) => row.getAttribute("aria-label"));
@@ -213,7 +308,7 @@ describe("JiraInsights", () => {
     expect(priorityRows[1]).toContain("Trivial");
   });
 
-  it("should name the ticket that has been waiting longest", () => {
+  it("should name the ticket that has been waiting longest", async () => {
     // given
     const repositories = [
       aRepository(
@@ -230,36 +325,25 @@ describe("JiraInsights", () => {
     ];
 
     // when
-    renderCard(repositories, []);
+    await renderCard(<JiraRepositoryInsights repositories={repositories} />);
 
     // then
+    expect(screen.getByText("Backlog flow")).toBeInTheDocument();
     expect(screen.getByText("PLAT-3 · 361d")).toBeInTheDocument();
   });
 
-  it("should describe several projects in the plural", () => {
+  it("should say no repository names a project rather than draw an empty backlog", async () => {
     // given
-    const repositories = [
-      aRepository("gateway", projectMetrics({ projectKey: "A" })),
-      aRepository("worker", projectMetrics({ projectKey: "B" })),
-    ];
+    // The Repositories tab never fetches contributors, so "somebody commented
+    // on a ticket" is not an answer available here — and it would not fill a
+    // backlog chart if it were.
+    const repositories = [aRepository("gateway", null)];
 
     // when
-    renderCard(repositories, []);
+    await renderCard(<JiraRepositoryInsights repositories={repositories} />);
 
     // then
-    expect(
-      screen.getByText("Across 2 projects named by 2 repositories."),
-    ).toBeInTheDocument();
-  });
-
-  it("should describe a single repository in the singular", () => {
-    // given
-    const repositories = [aRepository("gateway", projectMetrics())];
-
-    // when
-    renderCard(repositories, []);
-
-    // then
-    expect(screen.getByText("Across 1 project named by 1 repository.")).toBeInTheDocument();
+    expect(screen.getByText(/no repository names a project yet/u)).toBeInTheDocument();
+    expect(screen.queryByText("Backlog flow")).not.toBeInTheDocument();
   });
 });

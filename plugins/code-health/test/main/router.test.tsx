@@ -143,6 +143,49 @@ describe("Router", () => {
     expect(screen.getByText("Most active repositories")).toBeInTheDocument();
   });
 
+  it("should put an integration's people cards on the contributors tab", async () => {
+    // given
+    // Every integration follows the same split as the version control cards:
+    // what it says about a person belongs with the people, not on Insights.
+    const integrationsService = new StubIntegrationsService().withEnabled(
+      "wakatime",
+      "confluence",
+    );
+    const contributorService = new StubContributorService().withContributors([
+      ContributorBuilder.create().withDisplayName("alice").withCommits(30).build(),
+    ]);
+
+    // when
+    await renderRouter({ integrationsService, contributorService, path: "/contributors" });
+
+    // then
+    expect(await screen.findByText("Who spent the time")).toBeInTheDocument();
+    expect(screen.getByText("Who is documenting")).toBeInTheDocument();
+    expect(screen.queryByText("Where the time went")).not.toBeInTheDocument();
+    expect(screen.queryByText("Confluence")).not.toBeInTheDocument();
+  });
+
+  it("should put an integration's repository cards on the repositories tab", async () => {
+    // given
+    const integrationsService = new StubIntegrationsService().withEnabled(
+      "wakatime",
+      "confluence",
+    );
+    const dashboardService = new StubDashboardService().withRepositories([
+      RepositoryBuilder.create().withName("gateway").build(),
+    ]);
+
+    // when
+    await renderRouter({ integrationsService, dashboardService, path: "/repositories" });
+
+    // then
+    expect(
+      await screen.findByText("Where the time went, by repository"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Documentation rot")).toBeInTheDocument();
+    expect(screen.queryByText("Who spent the time")).not.toBeInTheDocument();
+  });
+
   it("should render the repositories table on its own tab, under the audits", async () => {
     // given
     const dashboardService = new StubDashboardService().withRepositories([

@@ -349,6 +349,18 @@ a way into a row, so putting it a tab away from the rows it ranks made a reader 
 the screen by hand; every entry now links to that person's or that repository's page. **Identities**
 stays last, because it is maintenance rather than a measurement.
 
+Each optional integration is split the same way. Insights keeps what WakaTime, Jira and Confluence
+say about the fleet — where the fleet's hours went and what they went into, the Jira delivery
+figures, the Confluence headline. What they say about a *person* sits above the Contributors table:
+who spent the coding time, who closes tickets, who keeps the board moving, who is documenting. What
+they say about a *repository* sits above the Repositories table: coding time by repository, backlog
+flow, open work by priority, the oldest open ticket, and documentation rot. Every row links to that
+person's or that repository's page, exactly as the version control rankings beside them do. Each
+section appears only when the backend reports that integration as configured — never because a row
+happens to carry a value, which cannot tell a switched-off integration from one that is on and has
+not collected yet — and each says for itself when it is configured and has nothing to show, so a
+reader never has to visit another tab to learn why a card is empty.
+
 ### Trends and scores
 
 Clicking a contributor's name — in the table, or in a ranking above it — opens that person's page;

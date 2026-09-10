@@ -1,20 +1,17 @@
 import { InfoCard } from "@backstage/core-components";
-import { useRouteRef } from "@backstage/core-plugin-api";
 import Grid from "@material-ui/core/Grid";
 import type {
   ContributorSummary,
   RepositorySummary,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import { useMemo } from "react";
-import type { RankedItem } from "../../../domain/entities/insights";
 import {
   topContributorsByCommits,
   topRepositoriesByCommits,
   topReviewers,
 } from "../../../domain/entities/insights";
-import { contributorDetailRouteRef, repositoryDetailRouteRef } from "../../../routes";
-import { CONTRIBUTOR_KEY_PARAM } from "../../pages/contributor_detail_page";
 import { RankingChart } from "../charts/ranking_chart";
+import { usePersonLink, useRepositoryLink } from "./detail_links";
 
 export interface ActivityRankingsProps {
   readonly repositories: readonly RepositorySummary[];
@@ -39,11 +36,8 @@ export interface ActivityRankingsProps {
  * is a way into the detail page below it. Insights answers questions about the
  * fleet; a name is not one of them.
  *
- * The rows link to the plugin's own detail pages rather than to the catalog.
- * A catalog entity says who somebody is; the detail page says what they did,
- * which is the question a reader of a ranking already has in hand. An account
- * nobody has linked resolves to no catalog entity at all, so linking to the
- * catalog would leave exactly the rows that need explaining as plain text.
+ * The rows link to the plugin's own detail pages rather than to the catalog —
+ * see `detail_links`, which every ranking on both tabs shares.
  *
  * Rendered as `Grid item` children so the page composes them into its own grid,
  * the same way the optional integration sections do.
@@ -53,8 +47,8 @@ export const ActivityRankings = ({
   contributors,
   repositoriesError = null,
 }: ActivityRankingsProps) => {
-  const contributorDetailPath = useRouteRef(contributorDetailRouteRef);
-  const repositoryDetailPath = useRouteRef(repositoryDetailRouteRef);
+  const linkToPerson = usePersonLink();
+  const linkToRepository = useRepositoryLink();
 
   const contributorRanking = useMemo(
     () => topContributorsByCommits(contributors),
@@ -65,14 +59,6 @@ export const ActivityRankings = ({
     () => topRepositoriesByCommits(repositories),
     [repositories],
   );
-
-  // A person key is `user:default/jane` for a linked person and
-  // `vcs:jane@acme.com` for an unlinked account, so it travels in the query
-  // string — see `contributorDetailRouteRef`.
-  const linkToPerson = (item: RankedItem): string =>
-    `${contributorDetailPath()}?${CONTRIBUTOR_KEY_PARAM}=${encodeURIComponent(item.id)}`;
-  const linkToRepository = (item: RankedItem): string =>
-    repositoryDetailPath({ id: item.id });
 
   return (
     <>

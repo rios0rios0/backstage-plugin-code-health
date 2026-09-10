@@ -102,7 +102,7 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/main/router.tsx` | Page composition, the backend-reachability gate and the capabilities probe; Insights is the root tab |
 | `src/presentation/pages/identities_page.tsx` | Attaching an account to a catalog `User` — the plugin's only write |
 | `src/presentation/components/columns/` | One column-group factory per integration, called only when its flag is set |
-| `src/presentation/components/insights/` | One Insights card set per integration, on the same terms |
+| `src/presentation/components/insights/` | Three card sets per integration — fleet, people, repositories — each gated on its flag; `detail_links.ts` is the one place a ranked row's link to a detail page is built |
 | `src/domain/entities/time_range.ts` | Which windows are offered, bounded by coverage — rolling ranges and calendar months |
 | `src/presentation/components/range_picker.tsx` | One control for both, so the two can never disagree; every offered month is in the list by name |
 | `src/presentation/hooks/range_selection_context.tsx` | The one selection the tabs share, so a month picked on one is still the month on the next |
@@ -305,7 +305,14 @@ The wire contract, and the pure functions both sides have to agree on.
   contributors, review load and most active repositories now sit above the contributors table, and
   documentation, catalog APIs and fleet health above the repositories table. A ranking is a way
   *into* a row, so a tab away from the rows it ranks made a reader carry a name across the screen by
-  hand; the entries now link to the plugin's own detail pages.
+  hand; the entries now link to the plugin's own detail pages. **Every optional integration is split
+  on the same line**, into a fleet part, a people part and a repository part: WakaTime's hours by
+  person and by repository, Jira's two rankings of people and its three views of a backlog, and
+  Confluence's authors and its documentation rot all leave Insights for the tab that lists the rows
+  they name, while the KPI cards stay. Each part is still gated on `capabilities.<integration>`
+  alone, and each carries its own empty and not-measured wording — the Jira notice in particular is
+  written three times rather than once, because a reader on the Contributors tab should not have to
+  open Insights to learn that no entity carries a `jira/project-key` annotation.
 
 ## Conventions
 
