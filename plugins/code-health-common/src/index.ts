@@ -168,8 +168,14 @@ export {
   EMPTY_FLEET_REFERENCE,
   fleetReferenceOf,
   PRODUCTIVITY_COMPONENTS,
+  productivityComponentsFor,
 } from "./productivity_score";
-export type { FleetReference, ProductivityScore } from "./productivity_score";
+export type {
+  FleetReference,
+  ProductivityComponentDefinition,
+  ProductivityComponentId,
+  ProductivityScore,
+} from "./productivity_score";
 
 export {
   computeRepositoryHealthScore,

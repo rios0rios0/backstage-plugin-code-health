@@ -391,13 +391,13 @@ one resting on all of them.
 
 #### Productivity — one person, over one window
 
-A reading aid, not a verdict. The four output components are read **as a share of the fleet's top
-figure in the same window** rather than against a constant, so a quiet month for the whole team is a
-quiet month rather than everybody's failure, and there is no invented "forty commits is a good
-month" for anyone to argue with. Reliability and quality are absolute, because a pipeline success
-rate means the same thing whoever else happens to be on the team. Churn is only ever compared within
-its own unit — GitHub's lines against lines, Azure DevOps's files against files — because the two
-are not the same measurement wearing different labels.
+A reading aid, not a verdict. The output components are read **as a share of the fleet's top figure
+in the same window** rather than against a constant, so a quiet month for the whole team is a quiet
+month rather than everybody's failure, and there is no invented "forty commits is a good month" for
+anyone to argue with. Reliability and quality are absolute, because a pipeline success rate means
+the same thing whoever else happens to be on the team. Churn is only ever compared within its own
+unit — GitHub's lines against lines, Azure DevOps's files against files — because the two are not
+the same measurement wearing different labels.
 
 | Component | Weight | Read as |
 |---|---|---|
@@ -408,9 +408,27 @@ are not the same measurement wearing different labels.
 | Pipeline success | 15% | absolute, over the runs that reached a verdict |
 | Quality gate of code touched | 10% | absolute |
 | Test coverage of code touched | 10% | absolute, against the 80% Sonar gate |
+| Coding time | 10% | **WakaTime only** — share of the window's top figure |
+| Tickets resolved | 15% | **Jira only** — share of the window's top figure |
+| Tickets that stayed done | 5% | **Jira only** — absolute, over this person's own resolved tickets |
+| Documentation written | 10% | **Confluence only** — share of the window's top figure |
 
-The last two describe **the repositories the person changed, not the code they wrote** — Sonar
-measures a project — which is why they carry the least weight and why every Sonar heading says so.
+The two Sonar components describe **the repositories the person changed, not the code they wrote** —
+Sonar measures a project — which is why they carry the least weight and why every Sonar heading says
+so.
+
+The last four exist only where their integration is **configured**, and their absence is read from
+the configuration rather than from the rows: a row carrying no ticket count cannot say whether Jira
+is switched off or simply has not been read yet, and grading on the second reading would make a
+freshly configured install look as though half its people had stopped working.
+
+**The weights above are nominal, and are shared out over whatever is enabled.** With every
+integration on they add up to 140%, so each is scaled to bring the total back to one — commits then
+carry about 14% rather than 20%. That way a weight states what its component is worth *against the
+others* instead of against a total that differs per install, and an install with nothing configured
+scores exactly the seven components at exactly the seven weights it always did. `productivityComponentsFor`
+is the one place that arithmetic happens, and the column heading, the score card and this table all
+read from it.
 
 #### Repository health — one repository, absolutely
 

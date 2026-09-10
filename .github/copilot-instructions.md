@@ -122,7 +122,13 @@ New files behind the trends, ownership and administration work:
   figure to zero: "we do not know" and "they did badly" are different claims, on rows people are
   evaluated by. Productivity reads output (commits 20%, merged PRs 20%, churn 10%, reviews 15%) as a
   share of the fleet's top figure in the same window and reliability/quality absolutely (pipeline
-  15%, gate 10%, coverage 10%); churn is only compared inside its own `churnUnit`. Repository health
+  15%, gate 10%, coverage 10%); churn is only compared inside its own `churnUnit`. Where an
+  integration is **configured**, it adds components on the same terms — coding time 10%, tickets
+  resolved 15% and documentation written 10% relative, tickets that stayed done 5% absolute — and
+  `productivityComponentsFor(capabilities)` renormalises every weight over the enabled set, so those
+  percentages are nominal (1.40 with all three on, making commits ~14%). Pass
+  `IntegrationCapabilities` to `computeProductivityScore`; never infer it from whether a row carries
+  a value, and never write a share out by hand — build the sentence from that function. Repository health
   is absolute throughout (gate 15%, coverage 15%, defects 10%, duplication 5%, debt 5%, branch build
   10%, build success 10%, policy 10%, docs 5%, review coverage 10%, PRs landed 5%). The two Sonar
   components on a person describe the repositories they changed, not the code they wrote.

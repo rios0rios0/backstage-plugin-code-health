@@ -129,7 +129,7 @@ The wire contract, and the pure functions both sides have to agree on.
 |---|---|
 | `src/api.ts` | Every request and response shape, and the plugin id both packages register under |
 | `src/score.ts` | What a score is — a value, the evidence behind it, the components it was folded from — and `combineScore`, which redistributes the weight of anything unmeasured |
-| `src/productivity_score.ts` | The per-person components and weights, and the fleet reference the relative ones are read against |
+| `src/productivity_score.ts` | The per-person components and their nominal weights, which integration each needs, the renormalisation over the configured set, and the fleet reference the relative ones are read against |
 | `src/repository_health_score.ts` | The per-repository components, weights and decay constants |
 | `src/trend.ts` | The bucketed point shapes, `TREND_MONTHS`, and `trendBucketFor` — day up to 45 days, week beyond |
 | `src/ownership.ts` | `OwnershipInfo`, and `ownerEntityRef`, which normalises `spec.owner` exactly as the catalog does |
@@ -272,6 +272,18 @@ The wire contract, and the pure functions both sides have to agree on.
   quality gate mean the same thing whoever else is on the team, so those are read against
   themselves. Churn is only ever compared inside its own unit — `churnUnit` decides which reference
   a row is measured against, and a lines figure is never held up against a files figure.
+- **The productivity score follows the same integration rule its columns do.** Coding time, tickets
+  resolved and documentation written join it on the same relative terms as output, and how much of
+  somebody's resolved work stayed resolved joins it as an absolute; each exists only where its
+  integration is *configured*, which `computeProductivityScore` is told through
+  `IntegrationCapabilities` rather than reading off whether a row carries a value. The weights in
+  `PRODUCTIVITY_COMPONENTS` are therefore **nominal** — 1.40 with everything on — and
+  `productivityComponentsFor` renormalises them over the enabled set, so commits carry 0.2/1.4 on a
+  full install and exactly 0.2 on one with nothing configured. Every sentence that names the
+  components or their shares is built from that function, because a heading with "commits 20%" typed
+  into it would be wrong on most installs and wrong in a way nobody would notice. Unmeasured is
+  still distinct from absent: an account nobody has linked says so by name ("no Jira account is
+  linked to this person"), which is the one cause of a missing figure somebody can go and fix.
 - **What was not measured is left out, never scored as zero.** A repository with no Sonar project
   has an unknown quality gate, not a failing one; somebody whose pipeline never ran has no success
   rate, not a bad one. `combineScore` drops an unmeasured component and shares its weight among the

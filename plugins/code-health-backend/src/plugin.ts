@@ -109,6 +109,12 @@ export const codeHealthPlugin = createBackendPlugin({
         // disagree with the first.
         const repositories = new ListRepositorySummaries(store);
 
+        // Read once and shared, because the capabilities probe and the
+        // productivity score have to agree about what is switched on: a
+        // dashboard showing Jira columns beside a score that never scored a
+        // ticket would be two answers to one question.
+        const capabilities = integrationCapabilitiesOf(settings);
+
         httpRouter.use(
           createCodeHealthRouter({
             store,
@@ -120,7 +126,11 @@ export const codeHealthPlugin = createBackendPlugin({
               directory: catalogReader,
             }),
             timeSeries: new GetRepositoryTimeSeries(store),
-            contributorTrend: new GetContributorTrend({ store, directory: catalogReader }),
+            contributorTrend: new GetContributorTrend({
+              store,
+              directory: catalogReader,
+              capabilities,
+            }),
             repositoryTrend: new GetRepositoryTrend(store),
             owned: new ListOwnedRepositories(repositories, catalogReader),
             identities: new ListIdentities(store, catalogReader),
@@ -135,7 +145,7 @@ export const codeHealthPlugin = createBackendPlugin({
               logger: logger.child({ component: "ingestion-reset" }),
             }),
             retentionDays: settings.ingestion.retentionDays,
-            capabilities: integrationCapabilitiesOf(settings),
+            capabilities,
             refreshableTaskIds: [DISCOVERY_TASK_ID, INGESTION_TASK_ID, SNAPSHOT_TASK_ID],
             ingestionTaskId: INGESTION_TASK_ID,
           }),
