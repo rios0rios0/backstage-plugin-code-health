@@ -1,3 +1,0 @@
-kind: 'Added'
-body: 'added the WakaTime, Jira and Confluence cards to the Contributors and Repositories tabs, on the same terms as the version-control cards: the cards about people — who spent the time, who closes tickets, who keeps the board moving, who is documenting — sit above the contributors table, the cards about repositories — where the time went by repository, backlog flow, open work by priority, the oldest open work, documentation rot — sit above the repositories table, and the fleet-level figures stay on Insights. Every ranking row links to the plugin''s own detail page. Each group is drawn only when its integration is configured, never inferred from data'
-time: '2026-09-10T00:39:34.066570454Z'

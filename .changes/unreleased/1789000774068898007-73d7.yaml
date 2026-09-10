@@ -1,3 +1,0 @@
-kind: 'Changed'
-body: 'changed the range picker to list every calendar month the backfill has reached by name, directly in the same dropdown as the rolling ranges, so picking "August 2026" is one click rather than a mode at the bottom of the list that reveals a month and a year select; the previous and next arrows stay for stepping through months. The pick now follows the reader across the Insights, Contributors and Repositories tabs instead of each tab falling back to the configured default range on its own'
-time: '2026-09-10T00:39:34.068860179Z'
