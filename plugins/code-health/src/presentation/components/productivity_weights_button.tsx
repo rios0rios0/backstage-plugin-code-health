@@ -134,7 +134,10 @@ interface ProductivityWeightsDialogProps {
   readonly weights: ProductivityWeightsByRole;
   readonly capabilities: IntegrationCapabilities;
   readonly onClose: () => void;
+  /** The roles whose sets were written; the editor is done. */
   readonly onSaved: (roles: readonly ContributorRole[]) => void;
+  /** One role sent back to its defaults; the editor stays open. */
+  readonly onRestored: (role: ContributorRole) => void;
 }
 
 /**
@@ -153,6 +156,7 @@ const ProductivityWeightsDialog = ({
   capabilities,
   onClose,
   onSaved,
+  onRestored,
 }: ProductivityWeightsDialogProps) => {
   const classes = useStyles();
   const [drafts, setDrafts] = useState<Drafts>(() => draftsOf(weights));
@@ -215,13 +219,15 @@ const ProductivityWeightsDialog = ({
     }
   };
 
+  // Restores one role and stays open. Closing here would throw away whatever
+  // was typed into the other role's column, and the two are edited together.
   const restore = async (role: ContributorRole) => {
     setIsSaving(true);
     setError(null);
     try {
       await scoringService.resetProductivityWeights(role);
       setDrafts((current) => ({ ...current, [role]: draftOf(DEFAULT_PRODUCTIVITY_WEIGHTS[role]) }));
-      onSaved([role]);
+      onRestored(role);
     } catch (caught) {
       setError(messageOf(caught));
     } finally {
@@ -283,7 +289,7 @@ const ProductivityWeightsDialog = ({
                             fullWidth
                             value={drafts[role][id]}
                             disabled={isSaving}
-                            error={weightsOf(drafts[role]) === null}
+                            error={parsed[role] === null}
                             onChange={(event) => edit(role, id, event.target.value)}
                             inputProps={{
                               min: 0,
@@ -371,13 +377,24 @@ export const ProductivityWeightsButton = ({
   onSaved,
 }: ProductivityWeightsButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [saved, setSaved] = useState<readonly ContributorRole[] | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   if (!access.canManageScoring) return null;
 
   const done = (roles: readonly ContributorRole[]) => {
     setIsOpen(false);
-    setSaved(roles);
+    setNotice(
+      `Productivity weights saved for ${roles
+        .map((role) => CONTRIBUTOR_ROLE_LABELS[role].toLowerCase())
+        .join(" and ")}. Every score is read through them from now on.`,
+    );
+    onSaved();
+  };
+
+  const restored = (role: ContributorRole) => {
+    setNotice(
+      `${CONTRIBUTOR_ROLE_LABELS[role]} weights restored to the defaults. Every score is read through them from now on.`,
+    );
     onSaved();
   };
 
@@ -401,20 +418,15 @@ export const ProductivityWeightsButton = ({
           capabilities={capabilities}
           onClose={() => setIsOpen(false)}
           onSaved={done}
+          onRestored={restored}
         />
       ) : null}
 
       <Snackbar
-        open={saved !== null}
+        open={notice !== null}
         autoHideDuration={CONFIRMATION_MS}
-        onClose={() => setSaved(null)}
-        message={
-          saved === null
-            ? ""
-            : `Productivity weights saved for ${saved
-                .map((role) => CONTRIBUTOR_ROLE_LABELS[role].toLowerCase())
-                .join(" and ")}. Every score is read through them from now on.`
-        }
+        onClose={() => setNotice(null)}
+        message={notice ?? ""}
       />
     </>
   );

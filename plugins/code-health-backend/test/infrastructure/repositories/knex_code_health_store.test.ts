@@ -1617,7 +1617,7 @@ describe("KnexCodeHealthStore", () => {
       expect(await store.knex.schema.hasTable("code_health_productivity_weights")).toBe(true);
     });
 
-    it("should store, replace and remove a person's role", async () => {
+    it("should store and replace a person's role", async () => {
       // given
       const store = await createStore();
       const earlier = new Date("2026-07-01T00:00:00.000Z");
@@ -1647,12 +1647,6 @@ describe("KnexCodeHealthStore", () => {
         assignedBy: "user:default/other",
         assignedAt: NOW,
       });
-
-      // when
-      await store.deleteContributorRole("vcs:dev@example.com");
-
-      // then
-      expect(await store.listContributorRoles()).toEqual([]);
     });
 
     it("should keep a role for a person with no link or account row at all", async () => {

@@ -211,8 +211,6 @@ export interface CodeHealthStore {
    */
   saveContributorRole(record: ContributorRoleRecord): Promise<void>;
 
-  deleteContributorRole(personKey: string): Promise<void>;
-
   /** The roles an administrator has given weights of their own; the rest use the defaults. */
   listProductivityWeights(): Promise<ProductivityWeightsRecord[]>;
 

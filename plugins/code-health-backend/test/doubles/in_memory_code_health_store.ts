@@ -351,10 +351,6 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
     this.contributorRoles.set(record.personKey, record);
   }
 
-  async deleteContributorRole(personKey: string): Promise<void> {
-    this.contributorRoles.delete(personKey);
-  }
-
   async listProductivityWeights(): Promise<ProductivityWeightsRecord[]> {
     return [...this.productivityWeights.values()];
   }

@@ -231,8 +231,46 @@ describe("ProductivityWeightsButton", () => {
 
     // then
     await waitFor(() => expect(service.resets).toEqual(["lead"]));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(saved).toBe(1);
+    // The editor stays open, with the lead's column back on the defaults, so
+    // an edit typed into the engineer's column is not thrown away with it.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await waitFor(() => expect(weightInput("Lead", "Reviews given").value).toBe("0.4"));
+    expect(
+      await screen.findByText(/Lead weights restored to the defaults\./u),
+    ).toBeInTheDocument();
+  });
+
+  it("should keep an edit to the other role when one is restored", async () => {
+    // given
+    const service = new StubScoringService().withWeights({
+      ...DEFAULT_PRODUCTIVITY_WEIGHTS,
+      lead: { ...DEFAULT_PRODUCTIVITY_WEIGHTS.lead, reviewsGiven: 0.6 },
+    });
+    render(
+      <ProductivityWeightsButton
+        access={MANAGER}
+        scoringService={service}
+        weights={{
+          ...DEFAULT_PRODUCTIVITY_WEIGHTS,
+          lead: { ...DEFAULT_PRODUCTIVITY_WEIGHTS.lead, reviewsGiven: 0.6 },
+        }}
+        capabilities={NO_INTEGRATIONS}
+        onSaved={() => undefined}
+      />,
+    );
+    await openDialog();
+    fireEvent.change(weightInput("Engineer", "Commits"), { target: { value: "0.5" } });
+
+    // when
+    fireEvent.click(screen.getByRole("button", { name: "Restore lead defaults" }));
+
+    // then
+    await waitFor(() => expect(service.resets).toEqual(["lead"]));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Save weights" })).toBeEnabled(),
+    );
+    expect(weightInput("Engineer", "Commits").value).toBe("0.5");
   });
 
   it("should show the backend's refusal without closing the editor", async () => {

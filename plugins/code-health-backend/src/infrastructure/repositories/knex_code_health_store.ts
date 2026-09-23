@@ -766,10 +766,6 @@ export class KnexCodeHealthStore implements CodeHealthStore {
       .merge(["role", "assigned_by", "assigned_at"]);
   }
 
-  async deleteContributorRole(personKey: string): Promise<void> {
-    await this.client(CONTRIBUTOR_ROLES).where({ person_key: personKey }).delete();
-  }
-
   async listProductivityWeights(): Promise<ProductivityWeightsRecord[]> {
     const rows = await this.client<ProductivityWeightsRow>(PRODUCTIVITY_WEIGHTS);
     return rows.flatMap((row) => {
