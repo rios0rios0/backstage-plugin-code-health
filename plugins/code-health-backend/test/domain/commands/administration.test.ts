@@ -33,14 +33,20 @@ const userInfoFor = (ownershipEntityRefs: readonly string[] | null): UserInfoSer
   },
 });
 
+/** A permission framework that decides by the name of what it is asked about. */
+const permissionsDeciding = (
+  decide: (permissionName: string) => AuthorizeResult,
+): PermissionsService =>
+  ({
+    authorize: async (requests: readonly { permission: { name: string } }[]) =>
+      requests.map((request) => ({ ...request, result: decide(request.permission.name) })),
+    authorizeConditional: async (requests: readonly { permission: { name: string } }[]) =>
+      requests.map((request) => ({ ...request, result: decide(request.permission.name) })),
+  }) as unknown as PermissionsService;
+
 /** A permission framework that always answers the same way. */
 const permissionsAnswering = (result: AuthorizeResult): PermissionsService =>
-  ({
-    authorize: async (requests: readonly unknown[]) =>
-      requests.map((request) => ({ ...(request as object), result })),
-    authorizeConditional: async (requests: readonly unknown[]) =>
-      requests.map((request) => ({ ...(request as object), result })),
-  }) as unknown as PermissionsService;
+  permissionsDeciding(() => result);
 
 describe("AuthorizeAdministrator", () => {
   it("should allow a caller the list names directly", async () => {
@@ -158,6 +164,112 @@ describe("AuthorizeAdministrator", () => {
 
     // then
     expect(allowed).toBe(false);
+  });
+});
+
+describe("AuthorizeAdministrator scoring", () => {
+  it("should let a listed caller change the scoring", async () => {
+    // given
+    const command = new AuthorizeAdministrator({
+      userInfo: userInfoFor(["user:default/jane"]),
+      permissions: permissionsAnswering(AuthorizeResult.ALLOW),
+      administrators: ["user:default/jane"],
+    });
+
+    // when
+    const allowed = await command.canManageScoring(someCredentials());
+
+    // then
+    expect(allowed).toBe(true);
+  });
+
+  it("should let nobody change the scoring when no administrator is configured", async () => {
+    // given
+    // The weights decide how every row is read; an install that acquires the
+    // route by upgrading must not acquire somebody who can move them with it.
+    const command = new AuthorizeAdministrator({
+      userInfo: userInfoFor(["user:default/jane"]),
+      permissions: permissionsAnswering(AuthorizeResult.ALLOW),
+      administrators: [],
+    });
+
+    // when
+    const allowed = await command.canManageScoring(someCredentials());
+
+    // then
+    expect(allowed).toBe(false);
+  });
+
+  it("should refuse a listed caller the permission framework denies", async () => {
+    // given
+    const command = new AuthorizeAdministrator({
+      userInfo: userInfoFor(["user:default/jane"]),
+      permissions: permissionsAnswering(AuthorizeResult.DENY),
+      administrators: ["user:default/jane"],
+    });
+
+    // when
+    const allowed = await command.canManageScoring(someCredentials());
+
+    // then
+    expect(allowed).toBe(false);
+  });
+
+  it("should refuse a service principal", async () => {
+    // given
+    // Saying how colleagues are read is a choice, and a token cannot choose.
+    const command = new AuthorizeAdministrator({
+      userInfo: userInfoFor(null),
+      permissions: permissionsAnswering(AuthorizeResult.ALLOW),
+      administrators: ["user:default/jane"],
+    });
+
+    // when
+    const allowed = await command.canManageScoring(someCredentials());
+
+    // then
+    expect(allowed).toBe(false);
+  });
+
+  it("should ask the framework about each thing by its own name", async () => {
+    // given
+    // A reset and the scoring are different kinds of decision, and an
+    // organisation may leave one with the platform team and the other with a
+    // manager. One permission could not say so; two can.
+    const command = new AuthorizeAdministrator({
+      userInfo: userInfoFor(["user:default/jane"]),
+      permissions: permissionsDeciding((name) =>
+        name === "code-health.ingestion.reset" ? AuthorizeResult.ALLOW : AuthorizeResult.DENY,
+      ),
+      administrators: ["user:default/jane"],
+    });
+
+    // when
+    const mayReset = await command.isAdministrator(someCredentials());
+    const mayScore = await command.canManageScoring(someCredentials());
+
+    // then
+    expect(mayReset).toBe(true);
+    expect(mayScore).toBe(false);
+  });
+
+  it("should grant the scoring on its own when only that is allowed", async () => {
+    // given
+    const command = new AuthorizeAdministrator({
+      userInfo: userInfoFor(["user:default/jane"]),
+      permissions: permissionsDeciding((name) =>
+        name === "code-health.scoring.manage" ? AuthorizeResult.ALLOW : AuthorizeResult.DENY,
+      ),
+      administrators: ["user:default/jane"],
+    });
+
+    // when
+    const mayReset = await command.isAdministrator(someCredentials());
+    const mayScore = await command.canManageScoring(someCredentials());
+
+    // then
+    expect(mayReset).toBe(false);
+    expect(mayScore).toBe(true);
   });
 });
 

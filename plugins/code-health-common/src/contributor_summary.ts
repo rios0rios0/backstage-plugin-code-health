@@ -1,4 +1,5 @@
 import type { ConfluenceContributorMetrics } from "./confluence_metrics";
+import type { ContributorRole } from "./contributor_role";
 import type { ContributorIdentity } from "./identity";
 import type { JiraContributorMetrics } from "./jira_metrics";
 import type { SonarMetrics } from "./sonar_metrics";
@@ -59,6 +60,16 @@ export interface ContributorSummary {
    * observed. A single-account row carries one entry, never zero.
    */
   readonly identities: readonly ContributorIdentity[];
+  /**
+   * What this person is scored as: the role whose weights the productivity
+   * score is read through.
+   *
+   * Resolved by the backend from the role an administrator assigned, through
+   * the same directory that resolves accounts to people, so a role assigned to
+   * one of somebody's accounts is the role of the row all their accounts share.
+   * An engineer until somebody says otherwise.
+   */
+  readonly role: ContributorRole;
   readonly commits: number;
   readonly linesAdded: number;
   readonly linesDeleted: number;

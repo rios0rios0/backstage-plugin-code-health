@@ -16,6 +16,7 @@ import {
   codeHealthIntegrationsApiRef,
   codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthScoringApiRef,
   codeHealthTimeSeriesApiRef,
   codeHealthTrendsApiRef,
 } from "./api_refs";
@@ -91,6 +92,12 @@ export const codeHealthAdministrationApiFactory = createApiFactory({
   factory: (deps) => new CodeHealthBackendClient(deps),
 });
 
+export const codeHealthScoringApiFactory = createApiFactory({
+  api: codeHealthScoringApiRef,
+  deps: clientDeps,
+  factory: (deps) => new CodeHealthBackendClient(deps),
+});
+
 export const codeHealthApis: AnyApiFactory[] = [
   codeHealthConfigApiFactory,
   codeHealthRepositoriesApiFactory,
@@ -102,4 +109,5 @@ export const codeHealthApis: AnyApiFactory[] = [
   codeHealthTrendsApiFactory,
   codeHealthOwnershipApiFactory,
   codeHealthAdministrationApiFactory,
+  codeHealthScoringApiFactory,
 ];

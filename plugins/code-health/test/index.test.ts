@@ -65,6 +65,7 @@ describe("public API", () => {
       "codeHealthOwnershipApiRef",
       "codeHealthPlugin",
       "codeHealthRepositoriesApiRef",
+      "codeHealthScoringApiRef",
       "codeHealthTrendsApiRef",
       "contributorDetailRouteRef",
       "contributorsRouteRef",

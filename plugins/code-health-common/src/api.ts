@@ -1,10 +1,15 @@
+import type { ContributorRole } from "./contributor_role";
 import type { ContributorSummary } from "./contributor_summary";
 import type { CoverageInfo } from "./coverage";
 import type { ContributorFleetRates } from "./fleet_rates";
 import type { DirectoryUser, IdentityRow } from "./identity";
 import type { IntegrationCapabilities } from "./integrations";
 import type { OwnershipInfo } from "./ownership";
-import type { ProductivityScore } from "./productivity_score";
+import type {
+  ProductivityScore,
+  ProductivityWeights,
+  ProductivityWeightsByRole,
+} from "./productivity_score";
 import type { RepositoryHealthScore } from "./repository_health_score";
 import type { RepositoryFleetRates } from "./repository_rates";
 import type { RepositorySummary } from "./repository_summary";
@@ -175,11 +180,49 @@ export interface ListOwnedRepositoriesResponse {
 export interface GetAccessResponse {
   readonly canResetIngestion: boolean;
   /**
+   * Whether this caller may change how the productivity score is read: the
+   * weights each role is scored on, and which role each person has. The same
+   * two gates as the reset — named in `codeHealth.administrators` and allowed
+   * by the permission framework — under a permission of its own, so a policy
+   * can grant one without the other.
+   */
+  readonly canManageScoring: boolean;
+  /**
    * How far back the backend is configured to keep history, in days. It is
    * the furthest a reset can be asked to reach, so the dialog offers nothing
    * the read API would then refuse to answer for.
    */
   readonly retentionDays: number;
+}
+
+/**
+ * The weights the productivity score is read through, one set per role, from
+ * `/v1/productivity/weights`.
+ *
+ * Answered for every caller, not only administrators: the contributors table
+ * folds each row's score in the browser and has to fold it through the same
+ * numbers the backend folds a trend through. A role nobody has customised
+ * carries its defaults, so the browser never has to decide what "unset" means.
+ */
+export interface GetProductivityWeightsResponse {
+  readonly weights: ProductivityWeightsByRole;
+}
+
+/**
+ * What an administrator sends to `PUT /v1/productivity/weights/:role`.
+ *
+ * The whole set, every component named. A partial set would leave the backend
+ * filling in what was left out, which stores weights the administrator never
+ * saw; the editor always has every component on screen, so it always has the
+ * whole set to send.
+ */
+export interface UpdateProductivityWeightsRequest {
+  readonly weights: ProductivityWeights;
+}
+
+/** What an administrator sends to `PUT /v1/contributors/:key/role`. */
+export interface AssignContributorRoleRequest {
+  readonly role: ContributorRole;
 }
 
 /**

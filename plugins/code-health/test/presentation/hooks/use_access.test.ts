@@ -15,7 +15,11 @@ describe("useAccess", () => {
 
     // then
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.access).toEqual({ canResetIngestion: true, retentionDays: 180 });
+    expect(result.current.access).toEqual({
+      canResetIngestion: true,
+      canManageScoring: false,
+      retentionDays: 180,
+    });
   });
 
   it("should report nothing beyond reading for a caller who is not an administrator", async () => {

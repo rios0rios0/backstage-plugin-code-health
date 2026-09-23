@@ -1,10 +1,13 @@
 import type {
   ContributorIdentity,
+  ContributorRole,
   EventKind,
   IdentitySource,
 } from "@rios0rios0/backstage-plugin-code-health-common";
+import { DEFAULT_CONTRIBUTOR_ROLE } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { ContributorMetricRow } from "../repositories/code_health_store";
 import type { CodeHealthEvent } from "./code_health_event";
+import { accountOfPersonKey, type ContributorRoleRecord } from "./contributor_role";
 import {
   identityKey,
   normalizeSourceKey,
@@ -31,25 +34,28 @@ const toContributorIdentity = (record: IdentityRef & { displayName?: string | nu
 });
 
 /**
- * Answers "whose row does this account belong on?", and "is that person
- * measured at all?".
+ * Answers "whose row does this account belong on?", "is that person measured
+ * at all?", and "what are they scored as?".
  *
- * Built once per request from the link and exclusion tables, then consulted for
- * every event and every stored measure. Doing the resolution on read rather
- * than baking it into the stored rows is what makes both decisions
- * retroactive: correct a link or include an account again today, and every
- * window the plugin ever collected reports the corrected total, instead of only
- * the windows collected afterwards.
+ * Built once per request from the link, exclusion and role tables, then
+ * consulted for every event and every stored measure. Doing the resolution on
+ * read rather than baking it into the stored rows is what makes every one of
+ * those decisions retroactive: correct a link, include an account again or
+ * make somebody a lead today, and every window the plugin ever collected
+ * reports the corrected reading, instead of only the windows collected
+ * afterwards.
  */
 export class PersonDirectory {
   private readonly linksByIdentity: Map<string, IdentityLinkRecord>;
   private readonly membersByPerson = new Map<string, IdentityRecord[]>();
   private readonly exclusionsByPerson = new Map<string, IdentityExclusionRecord>();
+  private readonly rolesByPerson = new Map<string, ContributorRoleRecord>();
 
   constructor(options: {
     readonly links: readonly IdentityLinkRecord[];
     readonly identities: readonly IdentityRecord[];
     readonly exclusions?: readonly IdentityExclusionRecord[];
+    readonly roles?: readonly ContributorRoleRecord[];
   }) {
     this.linksByIdentity = new Map(options.links.map((link) => [identityKey(link), link]));
 
@@ -78,10 +84,42 @@ export class PersonDirectory {
         this.exclusionsByPerson.set(key, exclusion);
       }
     }
+
+    // Keyed by person as well. A role recorded on an account before anybody
+    // linked it is resolved through the link on read, so it follows the
+    // account onto the linked row rather than staying behind on a key no row
+    // carries any more.
+    for (const role of options.roles ?? []) {
+      const key = this.personKeyOfSubject(role.personKey);
+      const existing = this.rolesByPerson.get(key);
+      // Newest wins, unlike an exclusion: a role is a description of what
+      // somebody does now, and the latest statement about it is the one that
+      // is true — a lead promoted from an engineer is a lead.
+      if (existing === undefined || role.assignedAt > existing.assignedAt) {
+        this.rolesByPerson.set(key, role);
+      }
+    }
   }
 
   keyOf(identity: IdentityRef): string {
     return personKeyOf(identity, this.linksByIdentity.get(identityKey(identity)));
+  }
+
+  /**
+   * The row a role's subject lands on today.
+   *
+   * A catalog reference is a person key already. An account key is resolved
+   * through the link table the way an event's actor is, which is what carries
+   * a role across a link made after it was assigned.
+   */
+  private personKeyOfSubject(personKey: string): string {
+    const account = accountOfPersonKey(personKey);
+    return account === null ? personKey : this.keyOf(account);
+  }
+
+  /** What the person is scored as: the assigned role, or an engineer. */
+  roleOf(personKey: string): ContributorRole {
+    return this.rolesByPerson.get(personKey)?.role ?? DEFAULT_CONTRIBUTOR_ROLE;
   }
 
   /**
@@ -242,27 +280,29 @@ export const measuredContributorMetrics = <T>(
   rows.filter((row) => people.isMeasured({ source, sourceKey: row.contributorKey }));
 
 /**
- * Reads the three small tables a directory is built from, in one round trip.
+ * Reads the four small tables a directory is built from, in one round trip.
  *
  * Every command that turns events into rows needs the same object, and the
  * alternative — each of them assembling it from its own reads — is how one of
  * them ends up built without the exclusions and quietly measures a build
- * service that every other view has dropped.
+ * service that every other view has dropped, or without the roles and scores
+ * a lead as an engineer on one screen and not the next.
  *
- * The reads run together, and all three tables are bounded by the number of
+ * The reads run together, and all four tables are bounded by the number of
  * accounts the plugin has ever seen rather than by the history, so this costs
  * the same on a fleet with a year of events as on a fresh install.
  */
 export const loadPersonDirectory = async (
   store: PersonDirectorySource,
 ): Promise<PersonDirectory> => {
-  const [links, identities, exclusions] = await Promise.all([
+  const [links, identities, exclusions, roles] = await Promise.all([
     store.listIdentityLinks(),
     store.listIdentities(),
     store.listIdentityExclusions(),
+    store.listContributorRoles(),
   ]);
 
-  return new PersonDirectory({ links, identities, exclusions });
+  return new PersonDirectory({ links, identities, exclusions, roles });
 };
 
 /** The slice of the persistence port a directory is built from. */
@@ -270,4 +310,5 @@ export interface PersonDirectorySource {
   listIdentityLinks(): Promise<IdentityLinkRecord[]>;
   listIdentities(): Promise<IdentityRecord[]>;
   listIdentityExclusions(): Promise<IdentityExclusionRecord[]>;
+  listContributorRoles(): Promise<ContributorRoleRecord[]>;
 }

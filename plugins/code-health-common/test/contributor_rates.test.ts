@@ -17,6 +17,7 @@ const aContributor = (overrides: Partial<ContributorSummary> = {}): ContributorS
   profileUrl: null,
   entityRef: null,
   identities: [],
+  role: "engineer",
   commits: 70,
   linesAdded: 0,
   linesDeleted: 0,

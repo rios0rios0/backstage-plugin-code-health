@@ -6,6 +6,7 @@ import type {
   IntegrationCapabilities,
   JiraContributorMetrics,
   ProductivityScore,
+  ProductivityWeightsByRole,
   SonarMetrics,
   TimeSeriesBucket,
   WakaTimeMetrics,
@@ -13,6 +14,7 @@ import type {
 import {
   computeProductivityScore,
   contributorFleetRatesOf,
+  DEFAULT_PRODUCTIVITY_WEIGHTS,
   fleetReferenceOf,
   NO_INTEGRATIONS,
   windowDaysOf,
@@ -103,6 +105,11 @@ const rowsWithin = <T>(
 ): ContributorMetricRow<T>[] =>
   rows.filter((row) => row.day >= from && row.day <= to);
 
+/** Where the weights each role is scored on come from. */
+export interface ProductivityWeightsReader {
+  run(): Promise<ProductivityWeightsByRole>;
+}
+
 export interface GetContributorTrendOptions {
   readonly store: CodeHealthStore;
   readonly directory?: DirectoryReader;
@@ -116,6 +123,16 @@ export interface GetContributorTrendOptions {
    * collected yet, and only the configuration can tell the three apart.
    */
   readonly capabilities?: IntegrationCapabilities;
+  /**
+   * The weights each role is scored on, as an administrator set them.
+   *
+   * Read per request, like everything else here, so a change to a role's
+   * weights shows on the next request. Without a reader the defaults apply,
+   * which is what the contributors table in the browser falls back to when the
+   * backend sends nothing — so the two never disagree about an install nobody
+   * has customised.
+   */
+  readonly weights?: ProductivityWeightsReader;
 }
 
 export class GetContributorTrend {
@@ -162,6 +179,7 @@ export class GetContributorTrend {
       baseline,
       rangeSnapshots,
       people,
+      weights,
     ] = await Promise.all([
       this.options.store.listEvents({ from: input.from, to: input.to }),
       this.options.store.listContributorMetrics<WakaTimeMetrics>({
@@ -185,6 +203,7 @@ export class GetContributorTrend {
       this.options.store.listLatestSnapshots({ day: from }),
       this.options.store.listSnapshots({ from, to }),
       loadPersonDirectory(this.options.store),
+      this.options.weights?.run() ?? DEFAULT_PRODUCTIVITY_WEIGHTS,
     ]);
 
     const sonar = sonarTimeline(baseline, rangeSnapshots);
@@ -221,6 +240,7 @@ export class GetContributorTrend {
             summary,
             fleetReferenceOf(windowRows, windowDays),
             capabilities,
+            weights,
           );
     // The same rows and the same day count the score's reference was taken
     // over, so the team column on the card and the sentence behind each score
@@ -275,10 +295,12 @@ export class GetContributorTrend {
         // The bucket's own length, not the window's: a rate is only comparable
         // against a mean taken over the same period, and the last bucket of a
         // weekly series is routinely a part week.
-        score: computeProductivityScore(row, fleetReferenceOf(rows, bucketDays), {
-          ...capabilities,
-          confluence: false,
-        }),
+        score: computeProductivityScore(
+          row,
+          fleetReferenceOf(rows, bucketDays),
+          { ...capabilities, confluence: false },
+          weights,
+        ),
       };
     });
 

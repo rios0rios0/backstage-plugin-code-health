@@ -8,6 +8,7 @@ const aContributor = (identities: ContributorSummary["identities"]): Contributor
   profileUrl: null,
   entityRef: null,
   identities,
+  role: "engineer",
   commits: 0,
   linesAdded: 0,
   linesDeleted: 0,

@@ -13,10 +13,15 @@ import {
 } from "../src";
 import {
   computeProductivityScore,
+  DEFAULT_PRODUCTIVITY_WEIGHTS,
   EMPTY_FLEET_REFERENCE,
   fleetReferenceOf,
+  parseProductivityWeights,
+  parseProductivityWeightsByRole,
+  PRODUCTIVITY_COMPONENT_IDS,
   PRODUCTIVITY_COMPONENTS,
   productivityComponentsFor,
+  type ProductivityWeights,
 } from "../src/productivity_score";
 import { WakaTimeMetricsBuilder } from "./builders/wakatime_metrics_builder";
 
@@ -27,6 +32,7 @@ const aContributor = (overrides: Partial<ContributorSummary> = {}): ContributorS
   profileUrl: null,
   entityRef: null,
   identities: [{ source: "vcs", sourceKey: "jane", displayName: "Jane" }],
+  role: "engineer",
   commits: 10,
   linesAdded: 500,
   linesDeleted: 100,
@@ -871,5 +877,322 @@ describe("computeProductivityScore", () => {
     // they resolved came back, which is full marks whoever else is on the team.
     expect(componentById(score, "reopened")?.normalized).toBe(1);
     expect(score.evidence).toBe(1);
+  });
+});
+
+describe("DEFAULT_PRODUCTIVITY_WEIGHTS", () => {
+  const total = (
+    weights: ProductivityWeights,
+    capabilities: IntegrationCapabilities = NO_INTEGRATIONS,
+  ): number =>
+    productivityComponentsFor(capabilities, DEFAULT_PRODUCTIVITY_WEIGHTS.engineer)
+      .map((definition) => weights[definition.id])
+      .reduce((sum, weight) => sum + weight, 0);
+
+  it("should give the engineer the weights the score always had", () => {
+    // given / when / then
+    // The engineer is the default role, so a fleet nobody has assigned a role
+    // on has to score exactly as it did before there were roles.
+    for (const definition of Object.values(PRODUCTIVITY_COMPONENTS)) {
+      expect(DEFAULT_PRODUCTIVITY_WEIGHTS.engineer[definition.id]).toBe(definition.weight);
+    }
+  });
+
+  it("should give both roles the same nominal total, with and without the integrations", () => {
+    // given / when / then
+    // Switching a role changes how the score is shared, never how much of it
+    // there is to share.
+    expect(total(DEFAULT_PRODUCTIVITY_WEIGHTS.engineer)).toBeCloseTo(1, 10);
+    expect(total(DEFAULT_PRODUCTIVITY_WEIGHTS.lead)).toBeCloseTo(1, 10);
+    expect(total(DEFAULT_PRODUCTIVITY_WEIGHTS.engineer, EVERYTHING)).toBeCloseTo(1.4, 10);
+    expect(total(DEFAULT_PRODUCTIVITY_WEIGHTS.lead, EVERYTHING)).toBeCloseTo(1.4, 10);
+  });
+
+  it("should lean an engineer on output and a lead on reviews", () => {
+    // given
+    const output = (weights: ProductivityWeights) =>
+      weights.commits + weights.pullRequestsMerged + weights.churn;
+
+    // when / then
+    // An engineer is expected to produce code, a lead to review more than
+    // they write — so the two halves have to sit the other way round.
+    expect(output(DEFAULT_PRODUCTIVITY_WEIGHTS.engineer)).toBeGreaterThan(
+      DEFAULT_PRODUCTIVITY_WEIGHTS.engineer.reviewsGiven,
+    );
+    expect(DEFAULT_PRODUCTIVITY_WEIGHTS.lead.reviewsGiven).toBeGreaterThan(
+      output(DEFAULT_PRODUCTIVITY_WEIGHTS.lead),
+    );
+  });
+
+  it("should keep reliability and quality where they were for a lead", () => {
+    // given / when / then
+    // A pipeline that fails and a gate that fails mean the same thing
+    // whoever's row they land on.
+    for (const id of ["pipelineSuccessRate", "qualityGate", "coverage", "reopened"] as const) {
+      expect(DEFAULT_PRODUCTIVITY_WEIGHTS.lead[id]).toBe(
+        DEFAULT_PRODUCTIVITY_WEIGHTS.engineer[id],
+      );
+    }
+  });
+
+  it("should count a lead's documentation double and their coding time half", () => {
+    // given / when / then
+    expect(DEFAULT_PRODUCTIVITY_WEIGHTS.lead.documentation).toBe(
+      DEFAULT_PRODUCTIVITY_WEIGHTS.engineer.documentation * 2,
+    );
+    expect(DEFAULT_PRODUCTIVITY_WEIGHTS.lead.codingTime).toBe(
+      DEFAULT_PRODUCTIVITY_WEIGHTS.engineer.codingTime / 2,
+    );
+  });
+});
+
+describe("productivityComponentsFor with weights", () => {
+  it("should share a role's own weights out over what is configured", () => {
+    // given / when
+    const lead = productivityComponentsFor(NO_INTEGRATIONS, DEFAULT_PRODUCTIVITY_WEIGHTS.lead);
+
+    // then
+    // Forty percent of a base install's score for reviews, and every share
+    // still adding up to one.
+    expect(lead.find((definition) => definition.id === "reviewsGiven")?.weight).toBeCloseTo(
+      0.4,
+      10,
+    );
+    expect(lead.reduce((sum, definition) => sum + definition.weight, 0)).toBeCloseTo(1, 10);
+  });
+
+  it("should leave a component weighted nothing in the score with no say", () => {
+    // given
+    // An administrator switching a component off for one role sets it to
+    // zero; it stays listed, so the workings still name it, and carries none of
+    // the score.
+    const weights: ProductivityWeights = { ...DEFAULT_PRODUCTIVITY_WEIGHTS.engineer, churn: 0 };
+
+    // when
+    const components = productivityComponentsFor(NO_INTEGRATIONS, weights);
+
+    // then
+    expect(components.map((definition) => definition.id)).toContain("churn");
+    expect(components.find((definition) => definition.id === "churn")?.weight).toBe(0);
+    expect(components.reduce((sum, definition) => sum + definition.weight, 0)).toBeCloseTo(1, 10);
+  });
+
+  it("should weight everything at zero rather than divide by nothing", () => {
+    // given
+    // Every enabled component at zero, which the parser refuses but which a
+    // role whose only positive weights sit on unconfigured integrations can
+    // still produce.
+    const weights: ProductivityWeights = {
+      ...DEFAULT_PRODUCTIVITY_WEIGHTS.engineer,
+      commits: 0,
+      pullRequestsMerged: 0,
+      churn: 0,
+      reviewsGiven: 0,
+      pipelineSuccessRate: 0,
+      qualityGate: 0,
+      coverage: 0,
+    };
+
+    // when
+    const components = productivityComponentsFor(NO_INTEGRATIONS, weights);
+
+    // then
+    expect(components.every((definition) => definition.weight === 0)).toBe(true);
+    expect(Number.isNaN(components[0]?.weight)).toBe(false);
+  });
+});
+
+describe("computeProductivityScore by role", () => {
+  /** A reviewer who writes little, beside a writer who reviews little. */
+  const fleet = () => [
+    aContributor({
+      key: "vcs:reviewer",
+      commits: 2,
+      pullRequestsMerged: 1,
+      linesOfCode: 50,
+      reviewsGiven: 20,
+      role: "lead",
+    }),
+    aContributor({
+      key: "vcs:writer",
+      commits: 20,
+      pullRequestsMerged: 10,
+      linesOfCode: 800,
+      reviewsGiven: 2,
+      role: "engineer",
+    }),
+  ];
+
+  it("should read a row through the weights of its own role", () => {
+    // given
+    const [reviewer, writer] = fleet();
+    const reference = fleetReferenceOf([reviewer, writer], 7);
+
+    // when
+    const asLead = computeProductivityScore(reviewer, reference);
+    const asEngineer = computeProductivityScore({ ...reviewer, role: "engineer" }, reference);
+
+    // then
+    // The same person, the same window; only the role moved, and the reviews
+    // they gave carry forty percent of one reading and fifteen of the other.
+    expect(componentById(asLead, "reviewsGiven")?.weight).toBeCloseTo(0.4, 10);
+    expect(componentById(asEngineer, "reviewsGiven")?.weight).toBeCloseTo(0.15, 10);
+    expect(asLead.value ?? 0).toBeGreaterThan(asEngineer.value ?? 0);
+  });
+
+  it("should score a reviewer well as a lead and a writer well as an engineer", () => {
+    // given
+    const [reviewer, writer] = fleet();
+    const reference = fleetReferenceOf([reviewer, writer], 7);
+
+    // when
+    const lead = computeProductivityScore(reviewer, reference);
+    const engineer = computeProductivityScore(writer, reference);
+
+    // then
+    // Read on one set of weights, a lead who spent the month reviewing looks
+    // like an engineer who wrote nothing. Read on their own, both are doing
+    // what they are expected to do.
+    expect(lead.value ?? 0).toBeGreaterThanOrEqual(50);
+    expect(engineer.value ?? 0).toBeGreaterThanOrEqual(50);
+  });
+
+  it("should use the weights it is handed rather than the defaults", () => {
+    // given
+    // An administrator who decided reviews are everything for a lead.
+    const [reviewer, writer] = fleet();
+    const reference = fleetReferenceOf([reviewer, writer], 7);
+    const weights = {
+      ...DEFAULT_PRODUCTIVITY_WEIGHTS,
+      lead: { ...DEFAULT_PRODUCTIVITY_WEIGHTS.lead, reviewsGiven: 5 },
+    };
+
+    // when
+    const score = computeProductivityScore(reviewer, reference, NO_INTEGRATIONS, weights);
+
+    // then
+    expect(componentById(score, "reviewsGiven")?.weight).toBeGreaterThan(0.8);
+    expect(score.components.reduce((sum, component) => sum + component.weight, 0)).toBeCloseTo(
+      1,
+      10,
+    );
+  });
+
+  it("should keep the workings naming a component an administrator weighted at nothing", () => {
+    // given
+    const [reviewer, writer] = fleet();
+    const reference = fleetReferenceOf([reviewer, writer], 7);
+    const weights = {
+      ...DEFAULT_PRODUCTIVITY_WEIGHTS,
+      engineer: { ...DEFAULT_PRODUCTIVITY_WEIGHTS.engineer, churn: 0 },
+    };
+
+    // when
+    const score = computeProductivityScore(
+      { ...writer, sonarMetrics: sonar({ coverage: 80 }) },
+      reference,
+      NO_INTEGRATIONS,
+      weights,
+    );
+
+    // then
+    // Still listed with its sentence, so a reader can see it was measured and
+    // set aside rather than never measured — and measured is what it counts
+    // as, so the evidence is whole.
+    expect(componentById(score, "churn")?.weight).toBe(0);
+    expect(componentById(score, "churn")?.normalized).not.toBeNull();
+    expect(score.evidence).toBe(1);
+  });
+});
+
+describe("parseProductivityWeights", () => {
+  const complete = (): Record<string, number> => ({ ...DEFAULT_PRODUCTIVITY_WEIGHTS.lead });
+
+  it("should accept a complete set of non-negative weights", () => {
+    // given / when
+    const parsed = parseProductivityWeights(complete());
+
+    // then
+    expect(parsed).toEqual(DEFAULT_PRODUCTIVITY_WEIGHTS.lead);
+  });
+
+  it("should keep only the components it knows", () => {
+    // given
+    // A stray key is not stored: the set is exactly the components, so a typo
+    // cannot ride along into the database and out to every browser.
+    const parsed = parseProductivityWeights({ ...complete(), velocity: 3 });
+
+    // when / then
+    expect(parsed === null ? [] : Object.keys(parsed).sort()).toEqual(
+      [...PRODUCTIVITY_COMPONENT_IDS].sort(),
+    );
+  });
+
+  it("should refuse a set with a component missing", () => {
+    // given
+    const { churn: _churn, ...partial } = complete();
+
+    // when / then
+    // Filling the gap in would store weights the administrator never saw.
+    expect(parseProductivityWeights(partial)).toBeNull();
+  });
+
+  it("should refuse a negative, an infinite and a non-numeric weight", () => {
+    // given / when / then
+    expect(parseProductivityWeights({ ...complete(), commits: -0.1 })).toBeNull();
+    expect(parseProductivityWeights({ ...complete(), commits: Number.POSITIVE_INFINITY })).toBeNull();
+    expect(parseProductivityWeights({ ...complete(), commits: Number.NaN })).toBeNull();
+    expect(parseProductivityWeights({ ...complete(), commits: "0.2" })).toBeNull();
+  });
+
+  it("should refuse a set that scores on nothing", () => {
+    // given
+    const nothing = Object.fromEntries(PRODUCTIVITY_COMPONENT_IDS.map((id) => [id, 0]));
+
+    // when / then
+    expect(parseProductivityWeights(nothing)).toBeNull();
+  });
+
+  it("should refuse anything that is not an object", () => {
+    // given / when / then
+    expect(parseProductivityWeights(null)).toBeNull();
+    expect(parseProductivityWeights("weights")).toBeNull();
+    expect(parseProductivityWeights([0.2, 0.2])).toBeNull();
+  });
+});
+
+describe("parseProductivityWeightsByRole", () => {
+  it("should read every role a backend sent", () => {
+    // given
+    const sent = {
+      engineer: { ...DEFAULT_PRODUCTIVITY_WEIGHTS.engineer, commits: 0.5 },
+      lead: { ...DEFAULT_PRODUCTIVITY_WEIGHTS.lead, reviewsGiven: 0.6 },
+    };
+
+    // when
+    const parsed = parseProductivityWeightsByRole(sent);
+
+    // then
+    expect(parsed.engineer.commits).toBe(0.5);
+    expect(parsed.lead.reviewsGiven).toBe(0.6);
+  });
+
+  it("should fall back to the defaults for a role that is missing or malformed", () => {
+    // given
+    // A backend one release behind sends nothing at all, and that has to read
+    // as the defaults rather than as a dashboard that scores nobody.
+    const sent = { lead: { reviewsGiven: "lots" } };
+
+    // when
+    const parsed = parseProductivityWeightsByRole(sent);
+
+    // then
+    expect(parsed).toEqual(DEFAULT_PRODUCTIVITY_WEIGHTS);
+  });
+
+  it("should read nothing at all as the defaults", () => {
+    // given / when / then
+    expect(parseProductivityWeightsByRole(undefined)).toEqual(DEFAULT_PRODUCTIVITY_WEIGHTS);
+    expect(parseProductivityWeightsByRole(null)).toEqual(DEFAULT_PRODUCTIVITY_WEIGHTS);
   });
 });

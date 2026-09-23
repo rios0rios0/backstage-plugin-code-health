@@ -1,5 +1,6 @@
 import { confluenceContributions } from "./confluence_metrics";
 import { describeRatePair } from "./contributor_rates";
+import { CONTRIBUTOR_ROLES, type ContributorRole } from "./contributor_role";
 import { measuredByVersionControl, type ContributorSummary } from "./contributor_summary";
 import type { IntegrationCapabilities, IntegrationId } from "./integrations";
 import { NO_INTEGRATIONS } from "./integrations";
@@ -203,7 +204,8 @@ export const fleetReferenceOf = (
 };
 
 /**
- * Every component, with the weight it carries before renormalisation.
+ * Every component, with the weight it carries for an engineer before
+ * renormalisation.
  *
  * These are *nominal*: with all three integrations configured they add up to
  * 1.40 rather than to one, and {@link productivityComponentsFor} is what shares
@@ -211,6 +213,10 @@ export const fleetReferenceOf = (
  * say what its component is worth against the others rather than against a
  * total that differs per install — turning Jira on should not mean rewriting
  * the six numbers it has nothing to do with.
+ *
+ * The weight here is the engineer's, which is the default role and the reading
+ * most rows want; {@link DEFAULT_PRODUCTIVITY_WEIGHTS} carries the lead's
+ * beside it, and an administrator can replace either set.
  */
 export const PRODUCTIVITY_COMPONENTS = {
   commits: { id: "commits", label: "Commits", weight: 0.2 },
@@ -257,6 +263,115 @@ export type ProductivityComponentId = keyof typeof PRODUCTIVITY_COMPONENTS;
 export interface ProductivityComponentDefinition extends ScoreComponentDefinition {
   readonly id: ProductivityComponentId;
 }
+
+/** The component ids, in the order a reader meets them. */
+export const PRODUCTIVITY_COMPONENT_IDS: readonly ProductivityComponentId[] = Object.keys(
+  PRODUCTIVITY_COMPONENTS,
+) as ProductivityComponentId[];
+
+/**
+ * The nominal weight of every component, for one role.
+ *
+ * Nominal in the same sense as {@link PRODUCTIVITY_COMPONENTS}: what each is
+ * worth against the others, shared out over whatever is configured by
+ * {@link productivityComponentsFor}. A weight of zero leaves the component in
+ * the score with no say, which is how an administrator switches a component
+ * off for one role without switching it off for the other.
+ */
+export type ProductivityWeights = Readonly<Record<ProductivityComponentId, number>>;
+
+/** One set of weights per role. */
+export type ProductivityWeightsByRole = Readonly<Record<ContributorRole, ProductivityWeights>>;
+
+const engineerWeights = (): ProductivityWeights =>
+  Object.fromEntries(
+    Object.values(PRODUCTIVITY_COMPONENTS).map((definition) => [definition.id, definition.weight]),
+  ) as Record<ProductivityComponentId, number>;
+
+/**
+ * What each role is scored on until an administrator says otherwise.
+ *
+ * Both sets add up to 1.00 on an install with no integration and to 1.40 with
+ * all three, so switching a role changes how the score is *shared*, never how
+ * much of it there is to share.
+ *
+ * The engineer's weights are the ones the score always had: half of a base
+ * install's score is output — commits, merged pull requests and churn — and
+ * reviews carry fifteen percent behind it. The lead's turn that around. A lead
+ * is expected to review more than they write, so reviews carry forty percent
+ * of a base install's score and output a quarter, with reliability and the
+ * quality of the code touched left where they were: a pipeline that fails and
+ * a gate that fails mean the same thing whoever's row they land on. Where the
+ * integrations are on, a lead's documentation counts double and their coding
+ * time half, for the same reason — steering a team is written down more than
+ * it is typed into an editor.
+ *
+ * Neither set claims to be right for every organisation, which is why they are
+ * defaults rather than constants: the point of a role is that the weights can
+ * be argued about per role rather than once for everybody.
+ */
+export const DEFAULT_PRODUCTIVITY_WEIGHTS: ProductivityWeightsByRole = {
+  engineer: engineerWeights(),
+  lead: {
+    commits: 0.1,
+    pullRequestsMerged: 0.1,
+    churn: 0.05,
+    reviewsGiven: 0.4,
+    pipelineSuccessRate: 0.15,
+    qualityGate: 0.1,
+    coverage: 0.1,
+    codingTime: 0.05,
+    ticketsResolved: 0.1,
+    reopened: 0.05,
+    documentation: 0.2,
+  },
+};
+
+/**
+ * Reads one role's weights out of an untyped value, or nothing.
+ *
+ * Every component has to be there, every weight has to be a finite number of
+ * zero or more, and at least one has to be above zero — a set that scores on
+ * nothing is not a set of weights. Nothing is defaulted in: a request that
+ * names nine components has forgotten two, and quietly filling them would
+ * store a set the administrator never saw.
+ */
+export const parseProductivityWeights = (value: unknown): ProductivityWeights | null => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+
+  const entries: Array<[ProductivityComponentId, number]> = [];
+  for (const id of PRODUCTIVITY_COMPONENT_IDS) {
+    const weight = record[id];
+    if (typeof weight !== "number" || !Number.isFinite(weight) || weight < 0) return null;
+    entries.push([id, weight]);
+  }
+  if (!entries.some(([, weight]) => weight > 0)) return null;
+
+  return Object.fromEntries(entries) as Record<ProductivityComponentId, number>;
+};
+
+/**
+ * Reads every role's weights out of an untyped response body, falling back to
+ * the defaults for any role that is missing or malformed.
+ *
+ * Lenient where {@link parseProductivityWeights} is strict, for the same reason
+ * `parseIntegrationCapabilities` is: this reads what a backend *sent*, and a
+ * backend one release behind sends nothing at all, which has to read as the
+ * defaults rather than as a dashboard that fails to score anybody.
+ */
+export const parseProductivityWeightsByRole = (value: unknown): ProductivityWeightsByRole => {
+  const record =
+    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+
+  return CONTRIBUTOR_ROLES.reduce<Record<ContributorRole, ProductivityWeights>>(
+    (weights, role) => ({
+      ...weights,
+      [role]: parseProductivityWeights(record[role]) ?? DEFAULT_PRODUCTIVITY_WEIGHTS[role],
+    }),
+    { ...DEFAULT_PRODUCTIVITY_WEIGHTS },
+  );
+};
 
 const plural = (count: number, noun: string): string =>
   `${formatCount(count)} ${noun}${count === 1 ? "" : "s"}`;
@@ -610,26 +725,43 @@ const READINGS: Readonly<Record<ProductivityComponentId, ComponentReading>> = {
  * column header, a card subheader or a page of documentation that wrote those
  * percentages out by hand would be wrong on most installs, and wrong in a way
  * nobody would ever notice.
+ *
+ * `weights` is one role's nominal set, the engineer's by default. A set whose
+ * enabled components all weigh nothing yields every component at zero rather
+ * than dividing by it, and the score then reads as unmeasured.
  */
 export const productivityComponentsFor = (
   capabilities: IntegrationCapabilities = NO_INTEGRATIONS,
+  weights: ProductivityWeights = DEFAULT_PRODUCTIVITY_WEIGHTS.engineer,
 ): readonly ProductivityComponentDefinition[] => {
   const enabled = Object.values(PRODUCTIVITY_COMPONENTS).filter((definition) => {
     const { integration } = READINGS[definition.id];
     return integration === null || capabilities[integration];
   });
-  const nominal = enabled.reduce((total, definition) => total + definition.weight, 0);
+  const nominal = enabled.reduce((total, definition) => total + weights[definition.id], 0);
 
-  return enabled.map((definition) => ({ ...definition, weight: definition.weight / nominal }));
+  return enabled.map((definition) => ({
+    ...definition,
+    weight: nominal <= 0 ? 0 : weights[definition.id] / nominal,
+  }));
 };
 
+/**
+ * The score, read through the weights of the row's own role.
+ *
+ * The role travels on the row and the weights arrive as one set per role,
+ * so a caller holding the fleet's rows and the backend's configuration scores
+ * every row without deciding anything itself — which is what keeps the table
+ * in the browser and the trend on the backend folding the same number.
+ */
 export const computeProductivityScore = (
   summary: ContributorSummary,
   reference: FleetReference,
   capabilities: IntegrationCapabilities = NO_INTEGRATIONS,
+  weights: ProductivityWeightsByRole = DEFAULT_PRODUCTIVITY_WEIGHTS,
 ): ProductivityScore =>
   combineScore(
-    productivityComponentsFor(capabilities).map((definition) =>
+    productivityComponentsFor(capabilities, weights[summary.role]).map((definition) =>
       READINGS[definition.id].read(definition, summary, reference),
     ),
   );

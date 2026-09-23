@@ -2,9 +2,12 @@ import type { HttpAuthService, SchedulerService } from "@backstage/backend-plugi
 import { InputError, NotAllowedError, NotFoundError } from "@backstage/errors";
 import {
   CODE_HEALTH_API_VERSION,
+  isContributorRole,
   isExclusionReason,
   isIdentitySource,
   isTimeSeriesBucket,
+  parseProductivityWeights,
+  type ContributorRole,
   type IdentitySource,
   type IntegrationCapabilities,
   type TimeSeriesBucket,
@@ -12,9 +15,14 @@ import {
 import express from "express";
 import Router from "express-promise-router";
 import { z } from "zod";
+import {
+  MalformedPersonKeyError,
+  type AssignContributorRole,
+} from "../../domain/commands/assign_contributor_role";
 import type { AuthorizeAdministrator } from "../../domain/commands/authorize_administrator";
 import type { ExcludeIdentity } from "../../domain/commands/exclude_identity";
 import type { GetContributorTrend } from "../../domain/commands/get_contributor_trend";
+import type { GetProductivityWeights } from "../../domain/commands/get_productivity_weights";
 import type { GetRepositoryTimeSeries } from "../../domain/commands/get_repository_time_series";
 import type { GetRepositoryTrend } from "../../domain/commands/get_repository_trend";
 import {
@@ -33,6 +41,7 @@ import type { ListIdentities } from "../../domain/commands/list_identities";
 import type { ListOwnedRepositories } from "../../domain/commands/list_owned_repositories";
 import type { ListRepositorySummaries } from "../../domain/commands/list_repository_summaries";
 import type { ResetIngestion } from "../../domain/commands/reset_ingestion";
+import type { UpdateProductivityWeights } from "../../domain/commands/update_productivity_weights";
 import type { CodeHealthStore } from "../../domain/repositories/code_health_store";
 
 /** Asked for nothing in particular, the dashboard gets the last day. */
@@ -122,6 +131,29 @@ const resetSchema = z.object({
 });
 
 /**
+ * One role's weights, as the editor sends them.
+ *
+ * The set itself is checked by the parser the common package shares with the
+ * browser — every component named, nothing negative, something above zero —
+ * so the route and the editor refuse exactly the same shapes.
+ */
+const weightsSchema = z.object({
+  weights: z.unknown(),
+});
+
+const roleSchema = z.object({
+  role: z.string(),
+});
+
+const ROLE_MESSAGE = "`role` must be one of engineer or lead";
+
+/** Reads a role out of a path segment or a body, refusing anything else by name. */
+const readRole = (value: unknown): ContributorRole => {
+  if (!isContributorRole(value)) throw new InputError(ROLE_MESSAGE);
+  return value;
+};
+
+/**
  * Reads the `source` query parameter, which narrows the Identities screen to
  * one system. An unrecognised value is rejected rather than ignored: silently
  * returning every source would look like a filter that does not work.
@@ -146,7 +178,11 @@ const asHttpError = (error: unknown): unknown => {
   // A reference that cannot be parsed is a bad request; one that parses but
   // names nobody is a missing thing. Collapsing the two would tell somebody who
   // typed a bare name to go and look for a user that was never asked for.
-  if (error instanceof MalformedEntityRefError || error instanceof NotAUserReferenceError) {
+  if (
+    error instanceof MalformedEntityRefError ||
+    error instanceof MalformedPersonKeyError ||
+    error instanceof NotAUserReferenceError
+  ) {
     return new InputError(error.message);
   }
   if (error instanceof UnknownIdentityError || error instanceof UnknownUserError) {
@@ -186,6 +222,12 @@ export interface CodeHealthRouterOptions {
   readonly exclusions: ExcludeIdentity;
   readonly access: AuthorizeAdministrator;
   readonly reset: ResetIngestion;
+  /** The weights each role is scored on, read for everybody. */
+  readonly weights: GetProductivityWeights;
+  /** The two writes to those weights, for administrators. */
+  readonly weightUpdates: UpdateProductivityWeights;
+  /** What a person is scored as, for administrators. */
+  readonly roles: AssignContributorRole;
   /** The furthest back a reset may be asked to reach. */
   readonly retentionDays: number;
   readonly capabilities: IntegrationCapabilities;
@@ -356,6 +398,70 @@ export const createCodeHealthRouter = (options: CodeHealthRouterOptions): expres
     },
   );
 
+  /**
+   * The weights each role is scored on.
+   *
+   * Read for everybody, not only administrators: the contributors table folds
+   * each row's score in the browser and has to fold it through the numbers a
+   * person's trend is folded through here.
+   */
+  router.get(`/${version}/productivity/weights`, async (_request, response) => {
+    response.json({ weights: await options.weights.run() });
+  });
+
+  /**
+   * Replaces one role's weights.
+   *
+   * `PUT` because the whole set arrives every time and sending it twice means
+   * what sending it once meant. Refused for anybody but an administrator the
+   * permission framework also allows, and authorised here on every request —
+   * a control the browser did not draw is not an access control.
+   */
+  router.put(`/${version}/productivity/weights/:role`, async (request, response) => {
+    const credentials = await options.httpAuth.credentials(request, { allow: ["user"] });
+    if (!(await options.access.canManageScoring(credentials))) {
+      throw new NotAllowedError(
+        "only a Code Health administrator may change the productivity weights",
+      );
+    }
+
+    const role = readRole(request.params.role);
+    const parsed = weightsSchema.safeParse(request.body);
+    if (!parsed.success) throw new InputError(parsed.error.message);
+    const weights = parseProductivityWeights(parsed.data.weights);
+    if (weights === null) {
+      throw new InputError(
+        "`weights` must name every component with a finite weight of zero or more, at least one of them above zero",
+      );
+    }
+
+    await options.weightUpdates.update({
+      role,
+      weights,
+      updatedBy: credentials.principal.userEntityRef,
+      now: new Date(),
+    });
+
+    response.status(204).end();
+  });
+
+  /** Sends one role back to the defaults the common package ships. */
+  router.delete(`/${version}/productivity/weights/:role`, async (request, response) => {
+    const credentials = await options.httpAuth.credentials(request, { allow: ["user"] });
+    if (!(await options.access.canManageScoring(credentials))) {
+      throw new NotAllowedError(
+        "only a Code Health administrator may change the productivity weights",
+      );
+    }
+
+    await options.weightUpdates.reset({
+      role: readRole(request.params.role),
+      updatedBy: credentials.principal.userEntityRef,
+    });
+
+    response.status(204).end();
+  });
+
   router.get(`/${version}/coverage`, async (_request, response) => {
     const counts = await options.store.getCoverage();
 
@@ -481,6 +587,38 @@ export const createCodeHealthRouter = (options: CodeHealthRouterOptions): expres
     });
   });
 
+  /**
+   * What a person is scored as.
+   *
+   * `PUT` because a person has one role, and assigning the same one twice
+   * means what assigning it once meant. The key arrives percent-encoded like
+   * the trend's, and is verified before anything is written: a role on a key
+   * nothing carries would change no row, and the administrator would have no
+   * way to tell.
+   */
+  router.put(`/${version}/contributors/:key/role`, async (request, response) => {
+    const credentials = await options.httpAuth.credentials(request, { allow: ["user"] });
+    if (!(await options.access.canManageScoring(credentials))) {
+      throw new NotAllowedError("only a Code Health administrator may assign a role");
+    }
+
+    const parsed = roleSchema.safeParse(request.body);
+    if (!parsed.success) throw new InputError(parsed.error.message);
+
+    try {
+      await options.roles.assign({
+        key: request.params.key,
+        role: readRole(parsed.data.role),
+        assignedBy: credentials.principal.userEntityRef,
+        now: new Date(),
+      });
+    } catch (error) {
+      throw asHttpError(error);
+    }
+
+    response.status(204).end();
+  });
+
   // The repositories a person is responsible for, which is `spec.owner` rather
   // than where they committed.
   router.get(`/${version}/contributors/:key/repositories`, async (request, response) => {
@@ -502,9 +640,14 @@ export const createCodeHealthRouter = (options: CodeHealthRouterOptions): expres
    */
   router.get(`/${version}/access`, async (request, response) => {
     const credentials = await options.httpAuth.credentials(request);
+    const [canResetIngestion, canManageScoring] = await Promise.all([
+      options.access.isAdministrator(credentials),
+      options.access.canManageScoring(credentials),
+    ]);
 
     response.json({
-      canResetIngestion: await options.access.isAdministrator(credentials),
+      canResetIngestion,
+      canManageScoring,
       retentionDays: options.retentionDays,
     });
   });

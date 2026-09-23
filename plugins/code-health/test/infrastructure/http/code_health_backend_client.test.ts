@@ -1,3 +1,4 @@
+import { DEFAULT_PRODUCTIVITY_WEIGHTS } from "@rios0rios0/backstage-plugin-code-health-common";
 import { CodeHealthBackendClient } from "../../../src/infrastructure/http/code_health_backend_client";
 import { StubDiscoveryApi, StubFetchApi } from "../../doubles/stub_backstage_apis";
 import { aCoverageInfo } from "../../doubles/stub_coverage_service";
@@ -160,6 +161,23 @@ describe("CodeHealthBackendClient", () => {
   it("should read what the caller is allowed to do", async () => {
     // given
     const fetchApi = new StubFetchApi().withResponses({
+      body: { canResetIngestion: true, canManageScoring: true, retentionDays: 365 },
+    });
+    const { client } = createClient(fetchApi);
+
+    // when
+    const access = await client.getAccess();
+
+    // then
+    expect(access).toEqual({ canResetIngestion: true, canManageScoring: true, retentionDays: 365 });
+    expect(fetchApi.calls[0].url).toContain("/v1/access");
+  });
+
+  it("should read a backend that says nothing about the scoring as refusing it", async () => {
+    // given
+    // A backend one release behind has no scoring routes, and a control drawn
+    // on a guess would only find a 404 behind it.
+    const fetchApi = new StubFetchApi().withResponses({
       body: { canResetIngestion: true, retentionDays: 365 },
     });
     const { client } = createClient(fetchApi);
@@ -168,8 +186,7 @@ describe("CodeHealthBackendClient", () => {
     const access = await client.getAccess();
 
     // then
-    expect(access).toEqual({ canResetIngestion: true, retentionDays: 365 });
-    expect(fetchApi.calls[0].url).toContain("/v1/access");
+    expect(access.canManageScoring).toBe(false);
   });
 
   it("should POST the reach of a reset and return what the backend did", async () => {
@@ -478,5 +495,98 @@ describe("CodeHealthBackendClient", () => {
         }),
       ).rejects.toThrow("user:default/ghost is not a user in the catalog");
     });
+  });
+});
+
+describe("CodeHealthBackendClient scoring", () => {
+  it("should read the weights each role is scored on", async () => {
+    // given
+    const lead = { ...DEFAULT_PRODUCTIVITY_WEIGHTS.lead, reviewsGiven: 0.6 };
+    const fetchApi = new StubFetchApi().withResponses({
+      body: { weights: { engineer: DEFAULT_PRODUCTIVITY_WEIGHTS.engineer, lead } },
+    });
+    const { client } = createClient(fetchApi);
+
+    // when
+    const weights = await client.getProductivityWeights();
+
+    // then
+    expect(weights.lead).toEqual(lead);
+    expect(fetchApi.calls[0].url).toContain("/v1/productivity/weights");
+  });
+
+  it("should read a set the backend sent half of as that role's defaults", async () => {
+    // given
+    // Parsed rather than trusted: a role that lost a component in transit
+    // scores on its defaults rather than folding half a set.
+    const fetchApi = new StubFetchApi().withResponses({
+      body: { weights: { lead: { reviewsGiven: 0.6 } } },
+    });
+    const { client } = createClient(fetchApi);
+
+    // when
+    const weights = await client.getProductivityWeights();
+
+    // then
+    expect(weights).toEqual(DEFAULT_PRODUCTIVITY_WEIGHTS);
+  });
+
+  it("should PUT one role's whole set of weights", async () => {
+    // given
+    const fetchApi = new StubFetchApi().withResponses({ status: 204 });
+    const { client } = createClient(fetchApi);
+
+    // when
+    await client.updateProductivityWeights("lead", DEFAULT_PRODUCTIVITY_WEIGHTS.lead);
+
+    // then
+    expect(fetchApi.calls[0]).toMatchObject({ method: "PUT" });
+    expect(fetchApi.calls[0].url).toContain("/v1/productivity/weights/lead");
+    expect(JSON.parse(fetchApi.calls[0].body ?? "{}")).toEqual({
+      weights: DEFAULT_PRODUCTIVITY_WEIGHTS.lead,
+    });
+  });
+
+  it("should DELETE a role's weights to restore its defaults", async () => {
+    // given
+    const fetchApi = new StubFetchApi().withResponses({ status: 204 });
+    const { client } = createClient(fetchApi);
+
+    // when
+    await client.resetProductivityWeights("engineer");
+
+    // then
+    expect(fetchApi.calls[0]).toMatchObject({ method: "DELETE" });
+    expect(fetchApi.calls[0].url).toContain("/v1/productivity/weights/engineer");
+  });
+
+  it("should PUT a person's role under their encoded key", async () => {
+    // given
+    // A linked person's key carries a colon and a slash, which spliced in raw
+    // would make the path name a different route.
+    const fetchApi = new StubFetchApi().withResponses({ status: 204 });
+    const { client } = createClient(fetchApi);
+
+    // when
+    await client.assignContributorRole("user:default/jane", "lead");
+
+    // then
+    expect(fetchApi.calls[0]).toMatchObject({ method: "PUT" });
+    expect(fetchApi.calls[0].url).toContain("/v1/contributors/user%3Adefault%2Fjane/role");
+    expect(JSON.parse(fetchApi.calls[0].body ?? "{}")).toEqual({ role: "lead" });
+  });
+
+  it("should surface the backend's refusal of a role", async () => {
+    // given
+    const fetchApi = new StubFetchApi().withResponses({
+      status: 403,
+      body: { error: { message: "only a Code Health administrator may assign a role" } },
+    });
+    const { client } = createClient(fetchApi);
+
+    // when / then
+    await expect(client.assignContributorRole("vcs:jane", "lead")).rejects.toThrow(
+      "only a Code Health administrator may assign a role",
+    );
   });
 });

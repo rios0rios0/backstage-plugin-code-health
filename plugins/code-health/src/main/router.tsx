@@ -11,10 +11,13 @@ import Box from "@material-ui/core/Box";
 import type { ReactNode } from "react";
 import { Route, Routes } from "react-router-dom";
 import { IngestionResetButton } from "../presentation/components/ingestion_reset_button";
+import { ProductivityWeightsButton } from "../presentation/components/productivity_weights_button";
 import { ThemeToggleButton } from "../presentation/components/theme_toggle_button";
 import { RangeSelectionProvider } from "../presentation/hooks/range_selection_context";
+import { useAccess } from "../presentation/hooks/use_access";
 import { useCapabilities } from "../presentation/hooks/use_capabilities";
 import { useCoverage } from "../presentation/hooks/use_coverage";
+import { useProductivityWeights } from "../presentation/hooks/use_productivity_weights";
 import { ContributorDetailPage } from "../presentation/pages/contributor_detail_page";
 import { ContributorsPage } from "../presentation/pages/contributors_page";
 import { DashboardPage } from "../presentation/pages/dashboard_page";
@@ -30,6 +33,7 @@ import {
   codeHealthIntegrationsApiRef,
   codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthScoringApiRef,
   codeHealthTimeSeriesApiRef,
   codeHealthTrendsApiRef,
 } from "./api_refs";
@@ -83,6 +87,12 @@ const TabBody = ({ error, children }: { error: string | null; children: ReactNod
  * away from it and the dashboard looked as though it kept resetting itself.
  * `RangeSelectionProvider` holds the request above the tabs; each tab still
  * resolves it against its own clock and its own reading of the coverage.
+ *
+ * What the caller may do, and the weights the productivity score is read
+ * through, are both asked here once. Two header controls and the contributors
+ * tab read the answer to the first, and the weights editor in the header and
+ * the table on that tab read the second — held above the tabs so the editor
+ * saving a set is the table folding through it on its next render.
  */
 export const Router = () => {
   const config = useApi(codeHealthConfigApiRef);
@@ -95,15 +105,26 @@ export const Router = () => {
   const trendService = useApi(codeHealthTrendsApiRef);
   const ownershipService = useApi(codeHealthOwnershipApiRef);
   const administrationService = useApi(codeHealthAdministrationApiRef);
+  const scoringService = useApi(codeHealthScoringApiRef);
   const coverage = useCoverage(coverageService);
   // Asked once, alongside the reachability probe, so no view has to decide for
   // itself whether an empty column means "off" or "not collected yet".
   const { capabilities } = useCapabilities(integrationsService);
+  const { access } = useAccess(administrationService);
+  const productivityWeights = useProductivityWeights(scoringService);
 
   return (
     <Page themeId="tool">
       <Header title="Code Health" subtitle="Repository health across your catalog">
+        <ProductivityWeightsButton
+          access={access}
+          scoringService={scoringService}
+          weights={productivityWeights.weights}
+          capabilities={capabilities}
+          onSaved={() => void productivityWeights.reload()}
+        />
         <IngestionResetButton
+          access={access}
           administrationService={administrationService}
           onReset={coverage.reload}
         />
@@ -150,9 +171,12 @@ export const Router = () => {
                       <ContributorsPage
                         contributorService={contributorService}
                         dashboardService={dashboardService}
+                        scoringService={scoringService}
                         coverage={coverage}
                         config={config}
                         capabilities={capabilities}
+                        weights={productivityWeights.weights}
+                        canAssignRoles={access.canManageScoring}
                       />
                     }
                   />

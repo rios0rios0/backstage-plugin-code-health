@@ -13,6 +13,7 @@ import {
   codeHealthIntegrationsApiRef,
   codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthScoringApiRef,
   codeHealthTimeSeriesApiRef,
   codeHealthTrendsApiRef,
 } from "../src/main/api_refs";
@@ -25,6 +26,7 @@ import { StubDashboardService } from "./doubles/stub_dashboard_service";
 import { StubIdentityService } from "./doubles/stub_identity_service";
 import { StubIntegrationsService } from "./doubles/stub_integrations_service";
 import { StubOwnershipService } from "./doubles/stub_ownership_service";
+import { StubScoringService } from "./doubles/stub_scoring_service";
 import { StubTimeSeriesService } from "./doubles/stub_time_series_service";
 import { StubTrendService } from "./doubles/stub_trend_service";
 
@@ -48,6 +50,7 @@ const renderPage = (coverageService: StubCoverageService) =>
         [codeHealthTrendsApiRef, new StubTrendService()],
         [codeHealthOwnershipApiRef, new StubOwnershipService()],
         [codeHealthAdministrationApiRef, new StubAdministrationService()],
+        [codeHealthScoringApiRef, new StubScoringService()],
       ]}
     >
       <Routes>

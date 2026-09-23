@@ -11,6 +11,7 @@ import type {
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
   computeRate,
+  DEFAULT_CONTRIBUTOR_ROLE,
   formatDebt,
   mergeConfluenceContributorMetrics,
   mergeJiraContributorMetrics,
@@ -405,6 +406,9 @@ export const aggregateContributorSummaries = (
         // the directory knows, so a row always names at least the account it
         // came from — including one the identity table has not recorded yet.
         identities: mergeIdentities(totals.identities, profile.identities),
+        // Resolved by person, like the exclusion: a role assigned to any of
+        // somebody's accounts is the role of the row they all share.
+        role: context.people.roleOf(key),
         commits: totals.commits,
         linesAdded: totals.linesAdded,
         linesDeleted: totals.linesDeleted,
@@ -452,7 +456,7 @@ export const zeroContributorSummary = (
   key: string,
   identity?: Pick<
     ContributorSummary,
-    "displayName" | "avatarUrl" | "profileUrl" | "entityRef" | "identities"
+    "displayName" | "avatarUrl" | "profileUrl" | "entityRef" | "identities" | "role"
   >,
 ): ContributorSummary => ({
   key,
@@ -461,6 +465,9 @@ export const zeroContributorSummary = (
   profileUrl: identity?.profileUrl ?? null,
   entityRef: identity?.entityRef ?? null,
   identities: identity?.identities ?? [],
+  // The whole window already resolved the role, and a quiet bucket does not
+  // change what somebody is scored as.
+  role: identity?.role ?? DEFAULT_CONTRIBUTOR_ROLE,
   commits: 0,
   linesAdded: 0,
   linesDeleted: 0,

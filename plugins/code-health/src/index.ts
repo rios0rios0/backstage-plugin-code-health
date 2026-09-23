@@ -15,6 +15,7 @@ export {
   codeHealthIntegrationsApiRef,
   codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthScoringApiRef,
   codeHealthTrendsApiRef,
 } from "./main/api_refs";
 
@@ -28,6 +29,7 @@ export type {
   IdentityService,
   IntegrationsService,
   OwnershipService,
+  ScoringService,
   TrendService,
 } from "./domain/services/dashboard_service";
 
@@ -45,11 +47,13 @@ export type {
   ConfluenceContributorMetrics,
   ConfluenceSpaceMetrics,
   ContributorIdentity,
+  ContributorRole,
   ContributorSummary,
   ContributorTrendPoint,
   CoverageInfo,
   GetAccessResponse,
   GetContributorTrendResponse,
+  GetProductivityWeightsResponse,
   GetRepositoryTrendResponse,
   IdentityRow,
   IdentitySource,
@@ -61,6 +65,8 @@ export type {
   OwnershipInfo,
   Platform,
   ProductivityScore,
+  ProductivityWeights,
+  ProductivityWeightsByRole,
   QualityGateStatus,
   Release,
   RepositoryActivity,

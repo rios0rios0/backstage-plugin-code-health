@@ -1,9 +1,29 @@
+import type { GetAccessResponse } from "@rios0rios0/backstage-plugin-code-health-common";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { IngestionResetButton } from "../../../src/presentation/components/ingestion_reset_button";
+import { NO_ADMINISTRATION_ACCESS } from "../../../src/presentation/hooks/use_access";
 import { StubAdministrationService } from "../../doubles/stub_administration_service";
 
-const renderButton = (service: StubAdministrationService, onReset: () => void = () => undefined) =>
-  render(<IngestionResetButton administrationService={service} onReset={onReset} />);
+/** What the backend answers a configured administrator. */
+const administrator = (retentionDays = 365): GetAccessResponse => ({
+  ...NO_ADMINISTRATION_ACCESS,
+  canResetIngestion: true,
+  retentionDays,
+});
+
+/**
+ * The control is handed what the backend answered rather than asking itself:
+ * the page asks once for every administrator control it draws. Whoever the
+ * stub was configured as, the access here is what decides the drawing.
+ */
+const renderButton = (
+  service: StubAdministrationService,
+  onReset: () => void = () => undefined,
+  access: GetAccessResponse = administrator(),
+) =>
+  render(
+    <IngestionResetButton access={access} administrationService={service} onReset={onReset} />,
+  );
 
 /** Clicks the header control and waits for the confirmation to be on screen. */
 const openDialog = async () => {
@@ -20,36 +40,33 @@ const optionStarting = (prefix: string): HTMLOptionElement => {
 };
 
 describe("IngestionResetButton", () => {
-  it("should draw nothing for a reader who may not reset the history", async () => {
+  it("should draw nothing for a reader who may not reset the history", () => {
     // given
-    // The stub refuses by default, which is what a fresh install answers: it
-    // names no administrators until somebody configures one.
+    // What a fresh install answers everybody: it names no administrators
+    // until somebody configures one.
     const service = new StubAdministrationService();
 
     // when
-    renderButton(service);
+    renderButton(service, () => undefined, NO_ADMINISTRATION_ACCESS);
 
     // then
-    await waitFor(() => expect(service.accessCalls).toBe(1));
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Re-collect history" })).not.toBeInTheDocument(),
-    );
+    expect(screen.queryByRole("button", { name: "Re-collect history" })).not.toBeInTheDocument();
   });
 
-  it("should draw nothing when the access probe cannot be reached", async () => {
+  it("should draw nothing for somebody who may change the scoring but not reset", () => {
     // given
-    // A browser that guessed generously would only draw a button the route then
-    // answers with a 403, so an unreachable probe reads as "not an administrator".
-    const service = new StubAdministrationService().withAccessError(new Error("unreachable"));
+    // The two are separate permissions, and a policy can grant one without
+    // the other; the control reads its own flag and nothing else.
+    const service = new StubAdministrationService();
 
     // when
-    renderButton(service);
+    renderButton(service, () => undefined, {
+      ...NO_ADMINISTRATION_ACCESS,
+      canManageScoring: true,
+    });
 
     // then
-    await waitFor(() => expect(service.accessCalls).toBe(1));
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Re-collect history" })).not.toBeInTheDocument(),
-    );
+    expect(screen.queryByRole("button", { name: "Re-collect history" })).not.toBeInTheDocument();
   });
 
   it("should offer an administrator a control in the header", async () => {
@@ -79,7 +96,7 @@ describe("IngestionResetButton", () => {
   it("should offer only the reaches the retention has something behind", async () => {
     // given
     // Sixty days retained leaves a month reachable and nothing longer.
-    renderButton(new StubAdministrationService().withAdministrator(60));
+    renderButton(new StubAdministrationService().withAdministrator(60), () => undefined, administrator(60));
 
     // when
     await openDialog();
@@ -109,9 +126,13 @@ describe("IngestionResetButton", () => {
     // given
     const service = new StubAdministrationService().withAdministrator(400);
     let reloads = 0;
-    renderButton(service, () => {
-      reloads += 1;
-    });
+    renderButton(
+      service,
+      () => {
+        reloads += 1;
+      },
+      administrator(400),
+    );
     await openDialog();
     const quarter = optionStarting("3 months");
     const days = Number(/\((\d+) days\)/.exec(quarter.text)?.[1]);
@@ -164,7 +185,7 @@ describe("IngestionResetButton", () => {
     // given
     // One day retained leaves the full-retention reach as the only one there is.
     const service = new StubAdministrationService().withAdministrator(1).withRepositoryCount(1);
-    renderButton(service);
+    renderButton(service, () => undefined, administrator(1));
     await openDialog();
 
     // when

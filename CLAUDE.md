@@ -81,8 +81,12 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/domain/commands/get_contributor_trend.ts` / `get_repository_trend.ts` | One person's and one repository's history, bucketed, each bucket carrying the summary and the score it earns; each also carries the `fleet` mean rates the Averages card compares against |
 | `src/domain/commands/list_owned_repositories.ts` | The repositories a person owns, through `spec.owner` and their group ancestry |
 | `src/domain/commands/reset_ingestion.ts` | Sends every tracked repository's cursors back over the reach asked for and drops what the walk re-collects |
-| `src/domain/commands/authorize_administrator.ts` | The two gates a reset passes: named in `codeHealth.administrators`, *and* allowed by the permission framework |
-| `src/domain/entities/permissions.ts` | `code-health.ingestion.reset`, registered by the plugin and exported so a policy or the RBAC plugin can name it |
+| `src/domain/commands/authorize_administrator.ts` | The two gates a reset or a scoring change passes: named in `codeHealth.administrators`, *and* allowed by the permission framework — one permission for each, through one private `isAllowed` |
+| `src/domain/entities/permissions.ts` | `code-health.ingestion.reset` and `code-health.scoring.manage`, registered by the plugin and exported so a policy or the RBAC plugin can name them |
+| `src/domain/commands/assign_contributor_role.ts` | The one write to what a person is scored as: verifies the key names a catalog user or an observed account, then stores the role under the row's key |
+| `src/domain/commands/get_productivity_weights.ts` / `update_productivity_weights.ts` | The weights each role is scored on — the stored rows laid over the common package's defaults — and the two writes to them, both logged with who asked |
+| `src/domain/entities/contributor_role.ts` / `productivity_weights.ts` | The stored shapes, `accountOfPersonKey` (an account key splits on the first colon only) and `productivityWeightsByRoleOf` |
+| `migrations/20260923000000_productivity_scoring.js` | The roles table, keyed by person key, and the weights table, one JSON payload per role |
 | `src/domain/entities/bucket.ts` | Where a day's bucket starts and ends — shared by the cadence series and both trends, with the end bounded by the window so no snapshot taken after it is read |
 | `src/domain/entities/contributor_aggregation.ts` | The per-person accumulation the contributors list and a trend's every bucket run through, split from the naming and Sonar pass that needs the catalog |
 | `src/domain/entities/repository_summary_builder.ts` | One repository row from a snapshot and a window's events, built once for the table and once per bucket for a trend |
@@ -133,8 +137,11 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/presentation/hooks/use_contributor_trend.ts` / `use_owned_repositories.ts` | The contributor page's two reads |
 | `src/presentation/components/owned_repositories_card.tsx` | The repositories a person owns, worst health first, sortable and filterable on every column and paged ten at a time; and what to do when they own none |
 | `src/domain/entities/repository_trend.ts` / `src/presentation/hooks/use_repository_trend.ts` | The repository page's series and its one read; a backend 404 reads as "not tracked" rather than as a failure |
-| `src/presentation/components/ingestion_reset_button.tsx` | The administrator's reset — the access probe, the reach and the confirmation |
-| `src/presentation/hooks/use_access.ts` | `/v1/access`, asked once; unreachable reads as "not an administrator" rather than as an error panel |
+| `src/presentation/components/ingestion_reset_button.tsx` | The administrator's reset — the reach and the confirmation; the access it reads is the Router's, asked once for every administrator control |
+| `src/presentation/components/productivity_weights_button.tsx` | The administrator's weights editor: every component beside its weight for each role, the share that weight comes to on this install, a restore per role and one save |
+| `src/presentation/components/contributor_role_cell.tsx` | What a person is scored as — a chip for everybody, a select for whoever may change it |
+| `src/presentation/hooks/use_access.ts` | `/v1/access`, asked once in the Router; unreachable reads as "not an administrator" rather than as an error panel |
+| `src/presentation/hooks/use_productivity_weights.ts` | `/v1/productivity/weights`, asked once and again after the editor saves; unreachable reads as the defaults, which is what such a backend scores on |
 | `src/domain/entities/reset_reach.ts` | Which reaches a reset offers, in months, each converted to days and bounded by the retention |
 
 ### Common (`plugins/code-health-common`)
@@ -146,7 +153,8 @@ The wire contract, and the pure functions both sides have to agree on.
 | `src/api.ts` | Every request and response shape, and the plugin id both packages register under |
 | `src/number_format.ts` | The one place a figure is turned into text — `formatCount`, `formatDecimal`, `formatFixed`, `formatPercent` — in a pinned locale, so the two packages spell one number one way |
 | `src/score.ts` | What a score is — a value, the evidence behind it, the components it was folded from — and `combineScore`, which redistributes the weight of anything unmeasured |
-| `src/productivity_score.ts` | The per-person components and their nominal weights, which integration each needs, the renormalisation over the configured set, and the fleet's **mean daily rate** the relative ones are read against |
+| `src/productivity_score.ts` | The per-person components and their nominal weights, which integration each needs, the renormalisation over the configured set, and the fleet's **mean daily rate** the relative ones are read against; `DEFAULT_PRODUCTIVITY_WEIGHTS` per role, and `parseProductivityWeights`, the one rule a set of weights is accepted by on both sides |
+| `src/contributor_role.ts` | The two roles a person can be scored as, their labels and descriptions, and the default — an engineer |
 | `src/contributor_rates.ts` | A window total turned into a daily, weekly and monthly rate, and the wording every rate is said in |
 | `src/fleet_rates.ts` | The team's mean daily rate for every row of the person's Averages card, built on `fleetReferenceOf` so the card and the score say one average; and `rateDeltaOf`, how far a rate sits from it |
 | `src/repository_rates.ts` | A repository's activity as rates, and the fleet's mean over its active repositories |
@@ -606,14 +614,61 @@ The wire contract, and the pure functions both sides have to agree on.
   on one component passing for one resting on all of them. Defaulting a missing figure to zero would
   turn "we do not know" into "they did badly", on rows people are evaluated by.
 - **Only a configured administrator whom the permission framework also allows may reset the
-  ingestion.** `codeHealth.administrators` is empty by default, so a fresh install is read-only for
-  everybody, and `code-health.ingestion.reset` (from `@backstage/plugin-permission-common`,
-  registered by the backend and exported from its package) can be denied by a policy or the RBAC
-  plugin on top of that. Both must allow: the configuration is where the plugin names its
-  administrators, the permission framework is where an organisation states a rule about them, and
-  neither stands in for the other. The frontend asks `/v1/access` before drawing the control, but
-  the route authorises again on every request — a button the browser did not draw is not an access
-  control.
+  ingestion, or change how the score is read.** `codeHealth.administrators` is empty by default, so
+  a fresh install is read-only for everybody, and `code-health.ingestion.reset` (the reset) or
+  `code-health.scoring.manage` (the weights and the roles), both from
+  `@backstage/plugin-permission-common`, registered by the backend and exported from its package,
+  can be denied by a policy or the RBAC plugin on top of that. Both must allow: the configuration is
+  where the plugin names its administrators, the permission framework is where an organisation
+  states a rule about them, and neither stands in for the other. Two permissions rather than one,
+  because a reset costs a day of provider requests and changes nothing about what a row says, while
+  the weights and the roles cost nothing and change what every row says — an organisation may well
+  want the platform team holding the first and an engineering manager the second. The frontend asks
+  `/v1/access` once, in the Router, before drawing any control, but every route authorises again on
+  every request — a button the browser did not draw is not an access control.
+- **A person is scored as an engineer or a lead, and the role decides the weights.** Read on one
+  set, a lead who spent the month reviewing looked like an engineer who wrote nothing, which is the
+  opposite of what the row is for. `DEFAULT_PRODUCTIVITY_WEIGHTS.engineer` is the set the score
+  always had; `.lead` turns it around — reviews 0.40 of a base install's score and output a
+  quarter, reliability and quality left where they were because a failing pipeline means the same
+  thing whoever's row it lands on, documentation doubled and coding time halved where those are
+  on. Both sets add up to 1.00 with no integration and 1.40 with all three, so switching a role
+  changes how the score is shared and never how much there is. Everybody is an engineer until an
+  administrator says otherwise, because a fleet has far more engineers than leads. The role travels
+  on `ContributorSummary.role`, and `computeProductivityScore(summary, reference, capabilities,
+  weightsByRole)` folds the row through its own role's set, so the table in the browser and the
+  trend on the backend fold the same number as long as both hold the same weights — which is why
+  `GET /v1/productivity/weights` answers everybody, not only administrators. The weights are
+  nominal, so an administrator's set is renormalised over the configured integrations exactly as
+  the defaults are, and a component weighted at zero stays in the workings with no say.
+- **A role is stored under the row's key and resolved through the directory on read.** A role is
+  a statement about a person, recorded under the person key the row carried when it was assigned
+  — a catalog reference for somebody linked, `<source>:<account>` for an account nobody has
+  linked. `PersonDirectory.roleOf` resolves an account-keyed subject through the link table, so a
+  role given before a link follows the account onto the linked row and a role given to a person
+  reaches every account of theirs; newest `assignedAt` wins, unlike an exclusion, because a role
+  describes what somebody does *now*. `AssignContributorRole` verifies the key names a catalog
+  user or an observed account before writing, for the same reason a link is verified: a role on a
+  key nothing carries changes no row and the administrator would have no way to tell. There is no
+  "clear" write — making somebody an engineer again is the same statement as never having said
+  anything, made the same way. `loadPersonDirectory` reads the roles beside the links and the
+  exclusions; a directory built without them scores a lead as an engineer on one screen and not
+  the next.
+- **A role's weights are stored whole or not at all, and restoring the defaults deletes the row.**
+  `parseProductivityWeights` is the one rule on both sides: every component named, every weight a
+  finite number of zero or more, at least one above zero. The route refuses anything else with a
+  400 rather than filling a gap in, because a partial set stored would be weights the
+  administrator never saw; the store skips a row that fails the same rule on the way out, so a
+  payload that lost a component reads as that role on its defaults rather than as a score folded
+  from half a set. Restoring a role's defaults deletes its row rather than writing the defaults
+  back, so a later release's better defaults reach an install that never customised the role.
+- **The contributors table opens on the score, highest first, with the unscored last either
+  way.** It is the column the table exists to answer, and a reader looking for the strongest
+  quarter should not have to find and click it; churn used to lead, which put whoever moved the
+  most lines first whatever the rest of their row said. The unscored sort last through
+  `sortUndefined: "last"` on an accessor that folds a null score to `undefined` — above the lowest
+  score a dash reads as a top ranking, below it as a failing grade, and on the opening column it
+  would be the first thing a reader saw.
 - **An owner is shown as a person or a team, not as a slug.** `spec.owner` is a reference, and a
   directory that names its users after their address turns the repositories table's owner column
   into a page of `e.silva_example.com`. The owning entity's `spec.profile` — which `Group` entities

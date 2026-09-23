@@ -5,7 +5,7 @@ import {
   EMPTY_JIRA_ISSUE_TYPES,
   NO_INTEGRATIONS,
 } from "@rios0rios0/backstage-plugin-code-health-common";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../../src/domain/entities/code_health_config";
 import type { UseCoverageResult } from "../../../src/presentation/hooks/use_coverage";
 import { ContributorsPage } from "../../../src/presentation/pages/contributors_page";
@@ -15,6 +15,7 @@ import { RepositoryBuilder } from "../../builders/repository_builder";
 import { StubContributorService } from "../../doubles/stub_contributor_service";
 import { aCoverageInfo } from "../../doubles/stub_coverage_service";
 import { StubDashboardService } from "../../doubles/stub_dashboard_service";
+import { StubScoringService } from "../../doubles/stub_scoring_service";
 
 const coverageResult = (overrides: Partial<UseCoverageResult> = {}): UseCoverageResult => ({
   coverage: aCoverageInfo(),
@@ -34,19 +35,24 @@ const renderPage = (
   service: StubContributorService,
   overrides: {
     dashboardService?: StubDashboardService;
+    scoringService?: StubScoringService;
     capabilities?: IntegrationCapabilities;
+    canAssignRoles?: boolean;
     enabled?: boolean;
   } = {},
 ) => {
   const dashboardService = overrides.dashboardService ?? new StubDashboardService();
+  const scoringService = overrides.scoringService ?? new StubScoringService();
 
   return renderInTestApp(
     <ContributorsPage
       contributorService={service}
       dashboardService={dashboardService}
+      scoringService={scoringService}
       coverage={coverageResult()}
       config={DEFAULT_CODE_HEALTH_CONFIG}
       capabilities={overrides.capabilities ?? NO_INTEGRATIONS}
+      canAssignRoles={overrides.canAssignRoles ?? false}
       enabled={overrides.enabled ?? true}
     />,
     { mountedRoutes: { "/": rootRouteRef } },
@@ -224,5 +230,65 @@ describe("ContributorsPage integration rankings", () => {
     expect(screen.queryByText("Who spent the time")).not.toBeInTheDocument();
     expect(screen.queryByText("Who closes tickets")).not.toBeInTheDocument();
     expect(screen.queryByText("Who is documenting")).not.toBeInTheDocument();
+  });
+});
+
+describe("ContributorsPage roles", () => {
+  it("should record a role and re-read the rows through it", async () => {
+    // given
+    // The rows are re-read rather than patched: the backend is what resolves
+    // a role to every account of the person, and re-reading is how the table
+    // shows exactly what it now says.
+    const service = new StubContributorService().withContributors([
+      ContributorBuilder.create().withDisplayName("alice").withKey("vcs:alice").build(),
+    ]);
+    const scoringService = new StubScoringService();
+    await renderPage(service, { scoringService, canAssignRoles: true });
+    await waitFor(() => expect(service.calls).toHaveLength(1));
+
+    // when
+    fireEvent.change(screen.getByLabelText("Role of alice"), { target: { value: "lead" } });
+
+    // then
+    await waitFor(() =>
+      expect(scoringService.assignments).toEqual([{ key: "vcs:alice", role: "lead" }]),
+    );
+    await waitFor(() => expect(service.calls).toHaveLength(2));
+  });
+
+  it("should say when a role was not saved, and keep the table", async () => {
+    // given
+    const service = new StubContributorService().withContributors([
+      ContributorBuilder.create().withDisplayName("alice").withKey("vcs:alice").build(),
+    ]);
+    const scoringService = new StubScoringService().withWriteFailure(new Error("403 Forbidden"));
+    await renderPage(service, { scoringService, canAssignRoles: true });
+    await waitFor(() => expect(service.calls).toHaveLength(1));
+
+    // when
+    fireEvent.change(screen.getByLabelText("Role of alice"), { target: { value: "lead" } });
+
+    // then
+    expect(await screen.findByText(/That role was not saved/u)).toBeInTheDocument();
+    expect(screen.getByText("403 Forbidden")).toBeInTheDocument();
+    expect(screen.getAllByText("alice").length).toBeGreaterThan(0);
+    // Nothing to re-read: the write did not take.
+    expect(service.calls).toHaveLength(1);
+  });
+
+  it("should offer no role control to a reader who may not assign one", async () => {
+    // given
+    const service = new StubContributorService().withContributors([
+      ContributorBuilder.create().withDisplayName("alice").withRole("lead").build(),
+    ]);
+
+    // when
+    await renderPage(service);
+
+    // then
+    await waitFor(() => expect(screen.getAllByText("alice").length).toBeGreaterThan(0));
+    expect(screen.queryByLabelText("Role of alice")).not.toBeInTheDocument();
+    // In the body, because the role filter offers the same word.
+    expect(within(screen.getByTestId("tableBody")).getByText("Lead")).toBeInTheDocument();
   });
 });

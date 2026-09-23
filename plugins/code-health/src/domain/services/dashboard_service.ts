@@ -1,4 +1,5 @@
 import type {
+  ContributorRole,
   ContributorSummary,
   CoverageInfo,
   DirectoryUser,
@@ -10,6 +11,8 @@ import type {
   IdentitySource,
   IntegrationCapabilities,
   ListOwnedRepositoriesResponse,
+  ProductivityWeights,
+  ProductivityWeightsByRole,
   RepositorySummary,
   ResetIngestionRequest,
   ResetIngestionResponse,
@@ -155,15 +158,40 @@ export interface OwnershipService {
 }
 
 /**
- * The one thing on the dashboard reserved for administrators.
+ * What is reserved for administrators, and the one write that only needs the
+ * reset half of it.
  *
  * Starting the history collection over throws away every commit, pull
  * request, review and run already stored and re-reads them from the
  * providers, which is a day of rate-limited requests on a large fleet. Who may
- * ask for that is decided by the backend, and asked of it before the button is
- * drawn, so the control and the route can never disagree.
+ * ask for that — and who may change how the productivity score is read — is
+ * decided by the backend, and asked of it before any control is drawn, so the
+ * controls and the routes can never disagree.
  */
 export interface AdministrationService {
   getAccess(): Promise<GetAccessResponse>;
   resetIngestion(request: ResetIngestionRequest): Promise<ResetIngestionResponse>;
+}
+
+/**
+ * How the productivity score is read: the weights each role is scored on,
+ * and which role each person has.
+ *
+ * The read is for everybody. The contributors table folds each row's score in
+ * the browser, so it has to fold it through the same numbers the backend folds
+ * a person's trend through, and a dashboard that guessed would disagree with
+ * the page one click away. The three writes are for administrators, and the
+ * backend authorises each of them again on the way in.
+ */
+export interface ScoringService {
+  getProductivityWeights(): Promise<ProductivityWeightsByRole>;
+
+  /** Replaces one role's whole set of weights. */
+  updateProductivityWeights(role: ContributorRole, weights: ProductivityWeights): Promise<void>;
+
+  /** Sends one role back to the defaults the common package ships. */
+  resetProductivityWeights(role: ContributorRole): Promise<void>;
+
+  /** Records what a person is scored as, under their contributor row's key. */
+  assignContributorRole(key: string, role: ContributorRole): Promise<void>;
 }

@@ -14,8 +14,11 @@ score — productivity for a person, health for a repository, both `0`–`100` �
 number on its own: the components it was folded from are rendered beside it, with anything nothing
 could measure left out and its weight shared among the rest rather than counted as a zero. A
 contributor's page also lists the repositories that person is responsible for, read from the
-catalog's `spec.owner` and the groups they belong to. Administrators, and only administrators, get a
-control in the header for re-collecting the history from scratch.
+catalog's `spec.owner` and the groups they belong to. Every person is scored as an engineer or a
+lead — an engineer's score leans on output, a lead's on reviews — and the contributors table opens
+on the score, highest first. Administrators, and only administrators, get a control in the header
+for re-collecting the history from scratch, another for changing either role's weights, and a role
+select on every row of the contributors table.
 
 See the [repository README](https://github.com/rios0rios0/backstage-plugin-code-health#readme)
 for installation, configuration and architecture.

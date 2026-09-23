@@ -1,11 +1,19 @@
 import { ContentHeader, WarningPanel } from "@backstage/core-components";
 import Box from "@material-ui/core/Box";
 import Grid from "@material-ui/core/Grid";
-import type { IntegrationCapabilities } from "@rios0rios0/backstage-plugin-code-health-common";
+import type {
+  ContributorRole,
+  ContributorSummary,
+  IntegrationCapabilities,
+  ProductivityWeightsByRole,
+} from "@rios0rios0/backstage-plugin-code-health-common";
+import { DEFAULT_PRODUCTIVITY_WEIGHTS } from "@rios0rios0/backstage-plugin-code-health-common";
+import { useCallback, useState } from "react";
 import type { CodeHealthConfig } from "../../domain/entities/code_health_config";
 import type {
   ContributorService,
   DashboardService,
+  ScoringService,
 } from "../../domain/services/dashboard_service";
 import { BackfillProgress } from "../components/backfill_progress";
 import { ContributorsTable } from "../components/contributors_table";
@@ -24,12 +32,21 @@ interface ContributorsPageProps {
   contributorService: ContributorService;
   /** For the repository ranking shown above the table. */
   dashboardService: DashboardService;
+  /** For the one write this tab makes: what a person is scored as. */
+  scoringService: ScoringService;
   coverage: UseCoverageResult;
   config: CodeHealthConfig;
   capabilities: IntegrationCapabilities;
+  /** The weights each role is scored on, as the backend answered. */
+  weights?: ProductivityWeightsByRole;
+  /** Whether the reader may change a person's role, as the backend answered. */
+  canAssignRoles?: boolean;
   /** Skips fetching, used while the coverage probe is still in flight. */
   enabled?: boolean;
 }
+
+const messageOf = (caught: unknown): string =>
+  caught instanceof Error ? caught.message : String(caught);
 
 /**
  * Who worked, and on what.
@@ -49,16 +66,49 @@ interface ContributorsPageProps {
 export const ContributorsPage = ({
   contributorService,
   dashboardService,
+  scoringService,
   coverage,
   config,
   capabilities,
+  weights = DEFAULT_PRODUCTIVITY_WEIGHTS,
+  canAssignRoles = false,
   enabled = true,
 }: ContributorsPageProps) => {
   const range = useTimeRange(coverage.coverage, config.defaultRange);
-  const { contributors, isLoading, error, lastFetchedAt } = useContributors(
+  const { contributors, isLoading, error, lastFetchedAt, refetch } = useContributors(
     contributorService,
     range.window,
     enabled,
+  );
+  const [roleError, setRoleError] = useState<string | null>(null);
+  const [isAssigningRole, setIsAssigningRole] = useState(false);
+
+  // The rows are re-read rather than patched: the role decides which weights
+  // the score is folded through, and the backend is what resolves a role to
+  // every account of the person — re-reading is how the table shows exactly
+  // what the backend now says rather than a second implementation of it.
+  const assignRole = useCallback(
+    async (contributor: ContributorSummary, role: ContributorRole) => {
+      setRoleError(null);
+      setIsAssigningRole(true);
+      try {
+        await scoringService.assignContributorRole(contributor.key, role);
+        await refetch();
+      } catch (caught) {
+        setRoleError(messageOf(caught));
+      } finally {
+        setIsAssigningRole(false);
+      }
+    },
+    [scoringService, refetch],
+  );
+  // Stable between renders on purpose: the table rebuilds its columns — and
+  // throws away every row's cached score — whenever this changes.
+  const onAssignRole = useCallback(
+    (contributor: ContributorSummary, role: ContributorRole) => {
+      void assignRole(contributor, role);
+    },
+    [assignRole],
   );
   // A second request over the same window, for the repository ranking alone.
   // Its failure is kept apart from the contributors' — the table is the tab's
@@ -98,6 +148,17 @@ export const ContributorsPage = ({
         </Box>
       )}
 
+      {roleError === null ? null : (
+        <Box mb={2}>
+          <WarningPanel
+            severity="error"
+            title="That role was not saved"
+            message={roleError}
+            defaultExpanded
+          />
+        </Box>
+      )}
+
       <Box mb={3}>
         <Grid container spacing={3}>
           <ActivityRankings
@@ -126,6 +187,10 @@ export const ContributorsPage = ({
         totalCount={contributors.length}
         isLoading={isLoading}
         capabilities={capabilities}
+        weights={weights}
+        canAssignRoles={canAssignRoles}
+        onAssignRole={onAssignRole}
+        isAssigningRole={isAssigningRole}
       />
     </>
   );

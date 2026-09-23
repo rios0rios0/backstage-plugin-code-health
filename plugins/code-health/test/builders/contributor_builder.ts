@@ -1,6 +1,7 @@
 import type {
   ConfluenceContributorMetrics,
   ContributorIdentity,
+  ContributorRole,
   ContributorSummary,
   JiraContributorMetrics,
   SonarMetrics,
@@ -24,6 +25,7 @@ export class ContributorBuilder {
       identities: [
         { source: "vcs", sourceKey: `user-${counter}`, displayName: `user-${counter}` },
       ],
+      role: "engineer",
       commits: 25,
       linesAdded: 700,
       linesDeleted: 300,
@@ -188,6 +190,11 @@ export class ContributorBuilder {
 
   withIdentities(identities: readonly ContributorIdentity[]): this {
     this.props = { ...this.props, identities };
+    return this;
+  }
+
+  withRole(role: ContributorRole): this {
+    this.props = { ...this.props, role };
     return this;
   }
 
