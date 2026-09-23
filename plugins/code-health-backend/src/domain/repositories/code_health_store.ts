@@ -1,9 +1,11 @@
 import type {
+  ContributorRole,
   EventKind,
   IdentitySource,
   IntegrationId,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthEvent } from "../entities/code_health_event";
+import type { ContributorRoleRecord } from "../entities/contributor_role";
 import type { Day } from "../entities/day";
 import type {
   IdentityExclusionRecord,
@@ -12,6 +14,7 @@ import type {
   IdentityRef,
 } from "../entities/identity";
 import type { IngestionState } from "../entities/ingestion_state";
+import type { ProductivityWeightsRecord } from "../entities/productivity_weights";
 import type { RepositorySnapshot } from "../entities/repository_snapshot";
 import type { ObservedIdentity } from "../services/identity_resolver";
 import type { DiscoveredRepository, TrackedRepository } from "../entities/tracked_repository";
@@ -195,6 +198,27 @@ export interface CodeHealthStore {
   saveIdentityExclusion(exclusion: IdentityExclusionRecord): Promise<void>;
 
   deleteIdentityExclusion(identity: IdentityRef): Promise<void>;
+
+  listContributorRoles(): Promise<ContributorRoleRecord[]>;
+
+  /**
+   * Records which role a person is scored as, replacing whatever was there.
+   *
+   * One answer per person key, so assigning a role twice is a correction to
+   * the first rather than a second role. Nothing collected is touched: the role
+   * is applied when a row is built, so the change reaches every window the
+   * plugin has ever collected.
+   */
+  saveContributorRole(record: ContributorRoleRecord): Promise<void>;
+
+  /** The roles an administrator has given weights of their own; the rest use the defaults. */
+  listProductivityWeights(): Promise<ProductivityWeightsRecord[]>;
+
+  /** Stores one role's whole set of weights, replacing whatever was there. */
+  saveProductivityWeights(record: ProductivityWeightsRecord): Promise<void>;
+
+  /** Sends one role back to the defaults by forgetting what was stored for it. */
+  deleteProductivityWeights(role: ContributorRole): Promise<void>;
 
   /**
    * The day of every repository's most recent snapshot, for the ones that have

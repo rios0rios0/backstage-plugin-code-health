@@ -6,6 +6,7 @@ import codeHealthFrontendPlugin, {
   codeHealthOwnershipApi,
   codeHealthPage,
   codeHealthRepositoriesApi,
+  codeHealthScoringApi,
   codeHealthTrendsApi,
 } from "../src/alpha";
 
@@ -34,6 +35,7 @@ describe("alpha entry point", () => {
       codeHealthTrendsApi,
       codeHealthOwnershipApi,
       codeHealthAdministrationApi,
+      codeHealthScoringApi,
     ];
 
     // when
@@ -48,6 +50,7 @@ describe("alpha entry point", () => {
       "ExtensionDefinition{kind=api,name=trends,attachTo=root@apis}",
       "ExtensionDefinition{kind=api,name=ownership,attachTo=root@apis}",
       "ExtensionDefinition{kind=api,name=administration,attachTo=root@apis}",
+      "ExtensionDefinition{kind=api,name=scoring,attachTo=root@apis}",
     ]);
   });
 
@@ -69,6 +72,7 @@ describe("alpha entry point", () => {
       "api:code-health/trends",
       "api:code-health/ownership",
       "api:code-health/administration",
+      "api:code-health/scoring",
       "page:code-health",
     ] as const;
 

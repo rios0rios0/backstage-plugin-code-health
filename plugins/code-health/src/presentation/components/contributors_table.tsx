@@ -22,14 +22,18 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import type {
+  ContributorRole,
   ContributorSummary,
   FleetReference,
   IntegrationCapabilities,
   ProductivityScore,
+  ProductivityWeightsByRole,
   ScoreBand,
   TimeWindow,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
+  CONTRIBUTOR_ROLE_LABELS,
+  DEFAULT_PRODUCTIVITY_WEIGHTS,
   NO_INTEGRATIONS,
   catalogEntityPath,
   computeProductivityScore,
@@ -47,12 +51,14 @@ import { contributorDetailRouteRef } from "../../routes";
 // that writes one; importing it is what keeps the two spellings identical.
 import { CONTRIBUTOR_KEY_PARAM } from "../pages/contributor_detail_page";
 import { confluenceContributorColumns } from "./columns/confluence_columns";
+import { ROLE_FILTER_OPTIONS } from "./columns/filter_options";
 import { jiraContributorColumns } from "./columns/jira_columns";
 import {
   hasAiMetrics,
   wakaTimeAiColumns,
   wakaTimeContributorColumns,
 } from "./columns/wakatime_columns";
+import { ContributorRoleCell } from "./contributor_role_cell";
 import { DataTable, DEFAULT_PAGE_SIZE, PaginationControls } from "./data_table";
 import { EmptyCell } from "./empty_cell";
 
@@ -78,6 +84,22 @@ interface ContributorsTableProps {
    * until the first nightly pass.
    */
   capabilities?: IntegrationCapabilities;
+  /**
+   * The weights each role is scored on, as the backend answered.
+   *
+   * Passed in rather than read here for the same reason the capabilities are:
+   * the score in this table and the score on a person's page have to be
+   * folded through one set, and only the backend holds it. The defaults apply
+   * until it answers, which is what it answers on an install nobody has
+   * customised.
+   */
+  weights?: ProductivityWeightsByRole;
+  /** Whether the reader may change a person's role, as the backend answered. */
+  canAssignRoles?: boolean;
+  /** Records a new role for the row, when the reader may. */
+  onAssignRole?: (contributor: ContributorSummary, role: ContributorRole) => void;
+  /** True while a role is being written, so a second change waits for the first. */
+  isAssigningRole?: boolean;
 }
 
 const formatRate = (rate: number): string => `${formatFixed(rate)}%`;
@@ -348,6 +370,9 @@ const SONAR_HELP =
 const PRODUCTIVITY_HELP =
   "One score out of 100 over the whole window. Output — commits, merged pull requests, churn and reviews, and the coding time and resolved tickets of whichever integrations are configured — is read as a rate: each total divided by the days the window spans, against the team's average rate over the same period, with twice that average scoring full marks. A quiet month for the whole team is then a quiet month rather than everybody's failure. The denominator is the window rather than the days somebody was active, so a rate is output per elapsed day: a mid-window start or a fortnight of leave lowers it. Documentation written is compared the same way but as a total over Confluence's own trailing window, which the range picker does not move. Reliability and quality — the pipeline success rate, the gate and coverage of the code touched, and how much resolved work stayed resolved — are absolute. Anything that could not be measured is left out rather than scored as zero, so a dash means nothing measurable was recorded. Hover a score for the workings.";
 
+const ROLE_HELP =
+  "What this person is scored as, which decides how the productivity score is weighted: an engineer's leans on commits, merged pull requests and churn, a lead's on reviews given and documentation, because a lead is expected to review more than they write. Everybody is an engineer until an administrator says otherwise, and an administrator can change the weights of either role.";
+
 /** A list a person can read, rather than one joined with commas throughout. */
 const sentenceList = (items: readonly string[]): string =>
   `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
@@ -366,7 +391,7 @@ const productivityHelp = (capabilities: IntegrationCapabilities): string => {
     (definition) => definition.label,
   );
 
-  return `${PRODUCTIVITY_HELP} It is folded from ${sentenceList(labels)}, and those weights are shared out over whatever is configured — switching an integration on moves every one of them.`;
+  return `${PRODUCTIVITY_HELP} It is folded from ${sentenceList(labels)}, weighted for the person's role — an engineer's score leans on output, a lead's on reviews — and those weights are shared out over whatever is configured, so switching an integration on moves every one of them.`;
 };
 
 /** Which of the theme's status colours each band borrows. */
@@ -416,24 +441,35 @@ const ProductivityCell = ({ score }: { score: ProductivityScore }) => {
  * The capabilities are the caller's for the same reason the integration column
  * groups are: which components exist is a fact about the backend's
  * configuration, and a row that carries no ticket count cannot say whether Jira
- * is switched off or simply has not been read yet.
+ * is switched off or simply has not been read yet. The weights are the
+ * caller's for the same reason again — and each row is folded through the
+ * weights of its own role.
+ *
+ * A row nothing could be scored on sorts after every scored one whichever way
+ * the column is turned. Above the lowest score it would read as a top ranking
+ * and below it as a failing grade, and the table opens on this column, so the
+ * first thing a reader would otherwise see is a dash at the head of the list.
  */
 const productivityColumn = (
   reference: FleetReference,
   capabilities: IntegrationCapabilities,
+  weights: ProductivityWeightsByRole,
 ): ColumnDef<ContributorSummary> => {
   const scores = new WeakMap<ContributorSummary, ProductivityScore>();
   const scoreOf = (row: ContributorSummary): ProductivityScore => {
     const known = scores.get(row);
     if (known !== undefined) return known;
-    const score = computeProductivityScore(row, reference, capabilities);
+    const score = computeProductivityScore(row, reference, capabilities, weights);
     scores.set(row, score);
     return score;
   };
 
   return {
     id: "productivity",
-    accessorFn: (row) => scoreOf(row).value,
+    // Undefined rather than null for the unscored, because that is the one
+    // value the table's own sorting knows to keep at the end either way.
+    accessorFn: (row) => scoreOf(row).value ?? undefined,
+    sortUndefined: "last",
     header: () => (
       <HeaderWithHelp label="Productivity" help={productivityHelp(capabilities)} />
     ),
@@ -441,6 +477,38 @@ const productivityColumn = (
     enableColumnFilter: false,
   };
 };
+
+/** What the role column needs from the page: whether it may write, and how. */
+interface RoleActions {
+  readonly canAssign: boolean;
+  readonly isBusy: boolean;
+  readonly onAssign: (contributor: ContributorSummary, role: ContributorRole) => void;
+}
+
+/**
+ * The role column, beside the score it decides the weighting of.
+ *
+ * Sorted and filtered on the label the chip shows, from the same list the
+ * select offers, so "Lead" in the filter and "Lead" in the cell are one word.
+ */
+const roleColumn = (actions: RoleActions): ColumnDef<ContributorSummary> => ({
+  id: "role",
+  accessorFn: (row) => CONTRIBUTOR_ROLE_LABELS[row.role],
+  header: () => <HeaderWithHelp label="Role" help={ROLE_HELP} />,
+  cell: ({ row }) => (
+    <ContributorRoleCell
+      contributor={row.original}
+      canAssign={actions.canAssign}
+      isBusy={actions.isBusy}
+      onAssign={(role) => actions.onAssign(row.original, role)}
+    />
+  ),
+  meta: { filterType: "select", options: ROLE_FILTER_OPTIONS },
+  filterFn: (row, _columnId, filterValue) => {
+    if (!filterValue) return true;
+    return row.original.role === filterValue;
+  },
+});
 
 const columns: ColumnDef<ContributorSummary>[] = [
   {
@@ -586,9 +654,12 @@ const columns: ColumnDef<ContributorSummary>[] = [
 ];
 
 // Productivity sits immediately after the name, because it is the one column
-// that answers the question the table is opened with; everything to its right
-// is a figure the score was composed from.
+// that answers the question the table is opened with, and the role beside it
+// because it says how that answer was weighted; everything to their right is a
+// figure the score was composed from.
 const [nameColumn, ...metricColumns] = columns;
+
+const noAssignment = (): void => undefined;
 
 export const ContributorsTable = ({
   contributors,
@@ -596,9 +667,17 @@ export const ContributorsTable = ({
   isLoading,
   window,
   capabilities = NO_INTEGRATIONS,
+  weights = DEFAULT_PRODUCTIVITY_WEIGHTS,
+  canAssignRoles = false,
+  onAssignRole = noAssignment,
+  isAssigningRole = false,
 }: ContributorsTableProps) => {
+  // Opens on the score, highest first: it is the column the table exists to
+  // answer, and a reader looking for the strongest quarter should not have to
+  // find and click it. Churn used to lead, which put the person who moved the
+  // most lines at the top whatever the rest of their row said.
   const [sorting, setSorting] = useState<SortingState>([
-    { id: "churn", desc: true },
+    { id: "productivity", desc: true },
   ]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
@@ -631,14 +710,15 @@ export const ContributorsTable = ({
   const allColumns = useMemo(
     () => [
       nameColumn,
-      productivityColumn(reference, gates),
+      productivityColumn(reference, gates, weights),
+      roleColumn({ canAssign: canAssignRoles, isBusy: isAssigningRole, onAssign: onAssignRole }),
       ...metricColumns,
       ...(gates.wakatime ? wakaTimeContributorColumns() : []),
       ...(showAiColumns ? wakaTimeAiColumns() : []),
       ...(gates.jira ? jiraContributorColumns() : []),
       ...(gates.confluence ? confluenceContributorColumns() : []),
     ],
-    [reference, gates, showAiColumns],
+    [reference, gates, weights, canAssignRoles, isAssigningRole, onAssignRole, showAiColumns],
   );
 
   const table = useReactTable({

@@ -1,5 +1,6 @@
 import { resolvePackagePath, type DatabaseService } from "@backstage/backend-plugin-api";
 import type {
+  ContributorRole,
   EventKind,
   ExclusionReason,
   IdentityLinkOrigin,
@@ -7,9 +8,14 @@ import type {
   IntegrationId,
   Platform,
 } from "@rios0rios0/backstage-plugin-code-health-common";
+import {
+  isContributorRole,
+  parseProductivityWeights,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import type { Knex } from "knex";
 import type { CodeHealthEvent, EventOutcome } from "../../domain/entities/code_health_event";
 import { eventId } from "../../domain/entities/code_health_event";
+import type { ContributorRoleRecord } from "../../domain/entities/contributor_role";
 import { addDays, daysBetween, fromStoredDate, toDay, type Day } from "../../domain/entities/day";
 import type {
   IdentityExclusionRecord,
@@ -18,6 +24,7 @@ import type {
   IdentityRef,
 } from "../../domain/entities/identity";
 import type { IngestionState } from "../../domain/entities/ingestion_state";
+import type { ProductivityWeightsRecord } from "../../domain/entities/productivity_weights";
 import type {
   RepositorySnapshot,
   RepositorySnapshotPayload,
@@ -50,6 +57,8 @@ const CONTRIBUTOR_MEASURES = "code_health_contributor_measures";
 const IDENTITIES = "code_health_identities";
 const IDENTITY_LINKS = "code_health_identity_links";
 const IDENTITY_EXCLUSIONS = "code_health_identity_exclusions";
+const CONTRIBUTOR_ROLES = "code_health_contributor_roles";
+const PRODUCTIVITY_WEIGHTS = "code_health_productivity_weights";
 
 /** Rows are inserted in batches so a large window does not build one huge statement. */
 const INSERT_BATCH_SIZE = 200;
@@ -149,6 +158,20 @@ interface IdentityExclusionRow {
   reason: string;
   excluded_by: string | null;
   excluded_at: Date | string;
+}
+
+interface ContributorRoleRow {
+  person_key: string;
+  role: string;
+  assigned_by: string | null;
+  assigned_at: Date | string;
+}
+
+interface ProductivityWeightsRow {
+  role: string;
+  payload: string;
+  updated_by: string | null;
+  updated_at: Date | string;
 }
 
 const toDate = (value: Date | string): Date =>
@@ -271,6 +294,40 @@ const toIdentityExclusion = (row: IdentityExclusionRow): IdentityExclusionRecord
   excludedBy: row.excluded_by,
   excludedAt: toDate(row.excluded_at),
 });
+
+/**
+ * A stored role, or nothing for a row naming a role this release does not
+ * know — which reads as the default rather than as a row that breaks every
+ * dashboard load.
+ */
+const toContributorRole = (row: ContributorRoleRow): ContributorRoleRecord | null =>
+  isContributorRole(row.role)
+    ? {
+        personKey: row.person_key,
+        role: row.role,
+        assignedBy: row.assigned_by,
+        assignedAt: toDate(row.assigned_at),
+      }
+    : null;
+
+/**
+ * A stored set of weights, or nothing for a row that cannot be read.
+ *
+ * Parsed with the same rule the route accepts them by, so a payload that lost
+ * a component or a role this release does not know reads as that role on its
+ * defaults rather than as a score folded from half a set.
+ */
+const toProductivityWeights = (row: ProductivityWeightsRow): ProductivityWeightsRecord | null => {
+  if (!isContributorRole(row.role)) return null;
+  const weights = parseProductivityWeights(parsePayload(row.payload));
+  if (weights === null) return null;
+  return {
+    role: row.role,
+    weights,
+    updatedBy: row.updated_by,
+    updatedAt: toDate(row.updated_at),
+  };
+};
 
 /** Adds whole days to an instant, preserving the time of day. */
 const addDaysToDate = (instant: Date, days: number): Date =>
@@ -685,6 +742,52 @@ export class KnexCodeHealthStore implements CodeHealthStore {
     await this.client(IDENTITY_EXCLUSIONS)
       .where({ source: identity.source, source_key: identity.sourceKey })
       .delete();
+  }
+
+  async listContributorRoles(): Promise<ContributorRoleRecord[]> {
+    const rows = await this.client<ContributorRoleRow>(CONTRIBUTOR_ROLES);
+    return rows.flatMap((row) => {
+      const record = toContributorRole(row);
+      return record === null ? [] : [record];
+    });
+  }
+
+  async saveContributorRole(record: ContributorRoleRecord): Promise<void> {
+    await this.client(CONTRIBUTOR_ROLES)
+      .insert({
+        person_key: record.personKey,
+        role: record.role,
+        assigned_by: record.assignedBy,
+        assigned_at: record.assignedAt,
+      })
+      // Assigning a role twice is a correction to the one answer rather than a
+      // second role, so the row is replaced rather than the insert refused.
+      .onConflict(["person_key"])
+      .merge(["role", "assigned_by", "assigned_at"]);
+  }
+
+  async listProductivityWeights(): Promise<ProductivityWeightsRecord[]> {
+    const rows = await this.client<ProductivityWeightsRow>(PRODUCTIVITY_WEIGHTS);
+    return rows.flatMap((row) => {
+      const record = toProductivityWeights(row);
+      return record === null ? [] : [record];
+    });
+  }
+
+  async saveProductivityWeights(record: ProductivityWeightsRecord): Promise<void> {
+    await this.client(PRODUCTIVITY_WEIGHTS)
+      .insert({
+        role: record.role,
+        payload: JSON.stringify(record.weights),
+        updated_by: record.updatedBy,
+        updated_at: record.updatedAt,
+      })
+      .onConflict(["role"])
+      .merge(["payload", "updated_by", "updated_at"]);
+  }
+
+  async deleteProductivityWeights(role: ContributorRole): Promise<void> {
+    await this.client(PRODUCTIVITY_WEIGHTS).where({ role }).delete();
   }
 
   async listLatestSnapshotDays(): Promise<ReadonlyMap<string, Day>> {

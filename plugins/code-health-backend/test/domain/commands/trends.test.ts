@@ -153,6 +153,41 @@ describe("GetContributorTrend", () => {
     expect(quiet?.summary.key).toBe("vcs:dev@example.com");
   });
 
+  it("should keep a lead a lead in a bucket they did nothing in", async () => {
+    // given
+    // A quiet bucket's row is a zero row carrying what the whole window
+    // resolved, the role included; a fortnight off does not change what
+    // somebody is scored as, so every point reads through the same weights.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await ingest(store, repository.id, [
+      commit(repository.id, "2026-08-06T10:00:00.000Z", "dev@example.com"),
+      commit(repository.id, "2026-08-07T10:00:00.000Z", "other@example.com"),
+    ]);
+    await store.saveContributorRole({
+      personKey: "vcs:dev@example.com",
+      role: "lead",
+      assignedBy: null,
+      assignedAt: NOW,
+    });
+
+    // when
+    const trend = await new GetContributorTrend({ store }).run({
+      key: "vcs:dev@example.com",
+      ...WINDOW,
+      bucket: "day",
+    });
+
+    // then
+    const quiet = trend.points.find((point) => point.day === "2026-08-07");
+    expect(quiet?.summary.commits).toBe(0);
+    expect(quiet?.summary.role).toBe("lead");
+    expect(
+      quiet?.score.components.find((component) => component.id === "reviewsGiven")?.weight,
+    ).toBeCloseTo(0.4, 10);
+    expect(trend.summary?.role).toBe("lead");
+  });
+
   it("should carry the whole window's row and its score", async () => {
     // given
     const { store, discovered } = await seed();

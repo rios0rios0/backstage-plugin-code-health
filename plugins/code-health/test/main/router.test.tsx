@@ -1,6 +1,7 @@
 import { appThemeApiRef } from "@backstage/core-plugin-api";
 import { renderInTestApp, TestApiProvider } from "@backstage/test-utils";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { DEFAULT_PRODUCTIVITY_WEIGHTS } from "@rios0rios0/backstage-plugin-code-health-common";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { Route, Routes } from "react-router-dom";
 import { DEFAULT_CODE_HEALTH_CONFIG } from "../../src/domain/entities/code_health_config";
 import {
@@ -12,6 +13,7 @@ import {
   codeHealthIntegrationsApiRef,
   codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthScoringApiRef,
   codeHealthTimeSeriesApiRef,
   codeHealthTrendsApiRef,
 } from "../../src/main/api_refs";
@@ -22,6 +24,7 @@ import { RepositoryBuilder } from "../builders/repository_builder";
 import { StubAdministrationService } from "../doubles/stub_administration_service";
 import { StubAppThemeApi } from "../doubles/stub_app_theme_api";
 import { StubOwnershipService } from "../doubles/stub_ownership_service";
+import { StubScoringService } from "../doubles/stub_scoring_service";
 import {
   aContributorTrend,
   aRepositoryTrend,
@@ -45,6 +48,7 @@ const renderRouter = async (
     trendService?: StubTrendService;
     ownershipService?: StubOwnershipService;
     administrationService?: StubAdministrationService;
+    scoringService?: StubScoringService;
     /** Which tab to land on. Defaults to the root, which is Insights. */
     path?: string;
   } = {},
@@ -59,6 +63,7 @@ const renderRouter = async (
   const ownershipService = overrides.ownershipService ?? new StubOwnershipService();
   const administrationService =
     overrides.administrationService ?? new StubAdministrationService();
+  const scoringService = overrides.scoringService ?? new StubScoringService();
 
   await renderInTestApp(
     <TestApiProvider
@@ -74,6 +79,7 @@ const renderRouter = async (
         [codeHealthTrendsApiRef, trendService],
         [codeHealthOwnershipApiRef, ownershipService],
         [codeHealthAdministrationApiRef, administrationService],
+        [codeHealthScoringApiRef, scoringService],
       ]}
     >
       {/* Mounted behind a splat route, the way a consuming app mounts the
@@ -100,6 +106,7 @@ const renderRouter = async (
     trendService,
     ownershipService,
     administrationService,
+    scoringService,
   };
 };
 
@@ -320,6 +327,90 @@ describe("Router", () => {
     expect(
       screen.queryByRole("button", { name: "Re-collect history" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("should offer the weights editor to somebody who may change the scoring", async () => {
+    // given
+    // Its own flag rather than the reset's: the two are separate permissions,
+    // and a policy can hand the scoring to a manager who cannot reset.
+    const administrationService = new StubAdministrationService().withScoringManager();
+
+    // when
+    await renderRouter({ administrationService });
+
+    // then
+    expect(
+      await screen.findByRole("button", { name: "Productivity score weights" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Re-collect history" }),
+    ).not.toBeInTheDocument();
+    // Asked once for both controls and the contributors tab, not once each.
+    expect(administrationService.accessCalls).toBe(1);
+  });
+
+  it("should let somebody who may change the scoring assign a role from the contributors tab", async () => {
+    // given
+    const administrationService = new StubAdministrationService().withScoringManager();
+    const scoringService = new StubScoringService();
+    const contributorService = new StubContributorService().withContributors([
+      ContributorBuilder.create().withDisplayName("alice").withKey("vcs:alice").build(),
+    ]);
+
+    // when
+    await renderRouter({
+      administrationService,
+      scoringService,
+      contributorService,
+      path: "/contributors",
+    });
+    fireEvent.change(await screen.findByLabelText("Role of alice"), {
+      target: { value: "lead" },
+    });
+
+    // then
+    await waitFor(() =>
+      expect(scoringService.assignments).toEqual([{ key: "vcs:alice", role: "lead" }]),
+    );
+  });
+
+  it("should score the contributors through the weights the backend sent", async () => {
+    // given
+    // Reviews are everything for an engineer on this install, so a reviewer
+    // who wrote nothing has to come out ahead of the writer who reviewed
+    // nothing — the opposite of the defaults.
+    const scoringService = new StubScoringService().withWeights({
+      ...DEFAULT_PRODUCTIVITY_WEIGHTS,
+      engineer: {
+        ...DEFAULT_PRODUCTIVITY_WEIGHTS.engineer,
+        commits: 0,
+        pullRequestsMerged: 0,
+        churn: 0,
+        pipelineSuccessRate: 0,
+        reviewsGiven: 1,
+      },
+    });
+    const contributorService = new StubContributorService().withContributors([
+      ContributorBuilder.create()
+        .withDisplayName("writer")
+        .withCommits(40)
+        .withReviewsGiven(0)
+        .build(),
+      ContributorBuilder.create()
+        .withDisplayName("reviewer")
+        .withCommits(0)
+        .withReviewsGiven(40)
+        .build(),
+    ]);
+
+    // when
+    await renderRouter({ scoringService, contributorService, path: "/contributors" });
+
+    // then
+    await waitFor(() => expect(scoringService.readCalls).toBe(1));
+    const leadingName = () =>
+      within(screen.getAllByRole("row")[2]).getAllByRole("cell")[0].textContent;
+    await waitFor(() => expect(leadingName()).toContain("reviewer"));
   });
 
   it("should explain that the backend is missing when coverage cannot be read", async () => {

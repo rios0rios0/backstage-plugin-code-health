@@ -3,7 +3,10 @@ import type {
   IntegrationCapabilities,
   JiraContributorMetrics,
 } from "@rios0rios0/backstage-plugin-code-health-common";
-import { NO_INTEGRATIONS } from "@rios0rios0/backstage-plugin-code-health-common";
+import {
+  DEFAULT_PRODUCTIVITY_WEIGHTS,
+  NO_INTEGRATIONS,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import { screen, fireEvent, within } from "@testing-library/react";
 import { ContributorsTable } from "../../../src/presentation/components/contributors_table";
 import { rootRouteRef } from "../../../src/routes";
@@ -811,6 +814,28 @@ describe("ContributorsTable productivity column", () => {
     expect(cell).toHaveTextContent("—");
   });
 
+  it("should open on the score, highest first", async () => {
+    // given
+    // The column the table exists to answer, so a reader looking for the
+    // strongest quarter should not have to find and click it. Churn used to
+    // lead, which put whoever moved the most lines first whatever the rest of
+    // their row said.
+    const contributors = [
+      ContributorBuilder.create().withDisplayName("quiet").withCommits(2).build(),
+      ContributorBuilder.create().withDisplayName("busy").withCommits(90).build(),
+    ];
+
+    // when
+    await render(
+      <ContributorsTable window={WINDOW} contributors={contributors} totalCount={2} isLoading={false} />,
+    );
+
+    // then
+    expect(
+      within(screen.getAllByRole("row")[2]).getAllByRole("cell")[0].textContent,
+    ).toContain("busy");
+  });
+
   it("should sort on the score", async () => {
     // given
     const contributors = [
@@ -822,20 +847,53 @@ describe("ContributorsTable productivity column", () => {
     );
     const leadingName = () =>
       within(screen.getAllByRole("row")[2]).getAllByRole("cell")[0].textContent;
-
-    // when
-    // A numeric column leads with its highest, which is what somebody looking
-    // for the strongest quarter expects to see first.
-    fireEvent.click(screen.getByText("Productivity"));
-
-    // then
     expect(leadingName()).toContain("busy");
 
     // when
+    // It opens highest first, so the first click turns it around.
     fireEvent.click(screen.getByText("Productivity"));
 
     // then
     expect(leadingName()).toContain("quiet");
+  });
+
+  it("should keep a row nothing could score last, whichever way the column is turned", async () => {
+    // given
+    // Above the lowest score a dash would read as a top ranking and below it
+    // as a failing grade — and the table opens on this column, so the first
+    // thing a reader would otherwise see is that dash.
+    // Somebody version control never saw, with no Sonar project either: every
+    // component is unmeasured, so the row carries a dash rather than a zero.
+    const contributors = [
+      ContributorBuilder.create()
+        .withDisplayName("idle")
+        .withIdentities([{ source: "jira", sourceKey: "acct-1", displayName: "idle" }])
+        .build(),
+      ContributorBuilder.create().withDisplayName("quiet").withCommits(2).build(),
+      ContributorBuilder.create().withDisplayName("busy").withCommits(90).build(),
+    ];
+    await render(
+      <ContributorsTable window={WINDOW} contributors={contributors} totalCount={3} isLoading={false} />,
+    );
+    expect(
+      within(screen.getAllByRole("row")[4]).getAllByRole("cell")[1],
+    ).toHaveTextContent("—");
+    // The name is the first link in the cell; the icons beside it carry
+    // their own text.
+    const names = () =>
+      screen
+        .getAllByRole("row")
+        .slice(2)
+        .map((row) => within(row).getAllByRole("link")[0].textContent ?? "");
+
+    // then
+    expect(names()).toEqual(["busy", "quiet", "idle"]);
+
+    // when
+    fireEvent.click(screen.getByText("Productivity"));
+
+    // then
+    expect(names()).toEqual(["quiet", "busy", "idle"]);
   });
 
   it("should explain what the score is composed of on its heading", async () => {
@@ -956,9 +1014,9 @@ describe("ContributorsTable header tooltips", () => {
       .getAllByRole("columnheader")
       .flatMap((header) => within(header).queryAllByRole("img"))
       .filter((element) => element.tagName.toLowerCase() === "svg");
-    // Productivity, five rate and count columns, and the seven Sonar columns
-    // that share one explanation.
-    expect(helps).toHaveLength(13);
+    // Productivity, the role beside it, five rate and count columns, and the
+    // seven Sonar columns that share one explanation.
+    expect(helps).toHaveLength(14);
     for (const help of helps) {
       expect(help).toHaveAttribute("tabindex", "0");
       expect(help).not.toHaveAttribute("aria-hidden", "true");
@@ -978,5 +1036,233 @@ describe("ContributorsTable header tooltips", () => {
     // `linesOfCode` is floored at zero, so wording that implies a negative net
     // is describing a value the column can never render.
     expect(screen.getByRole("img", { name: /floored at zero/ })).toBeInTheDocument();
+  });
+});
+
+describe("ContributorsTable role column", () => {
+  /** Each row's name — the first link in its first cell — against its role cell. */
+  const rolesByName = (): Record<string, string> =>
+    Object.fromEntries(
+      screen
+        .getAllByRole("row")
+        .slice(2)
+        .map((row) => {
+          const cells = within(row).getAllByRole("cell");
+          return [
+            within(cells[0]).getAllByRole("link")[0].textContent ?? "",
+            cells[2].textContent ?? "",
+          ];
+        }),
+    );
+
+  it("should say what each person is scored as", async () => {
+    // given
+    // The role decides which weights the score beside it was folded through,
+    // so a reader comparing two scores has to be able to see one is a lead's.
+    const contributors = [
+      ContributorBuilder.create().withDisplayName("alice").withRole("lead").build(),
+      ContributorBuilder.create().withDisplayName("bob").build(),
+    ];
+
+    // when
+    await render(
+      <ContributorsTable window={WINDOW} contributors={contributors} totalCount={2} isLoading={false} />,
+    );
+
+    // then
+    expect(rolesByName()).toEqual({ alice: "Lead", bob: "Engineer" });
+    expect(screen.queryByLabelText("Role of alice")).not.toBeInTheDocument();
+  });
+
+  it("should filter on the role in the words the chip uses", async () => {
+    // given
+    const contributors = [
+      ContributorBuilder.create().withDisplayName("alice").withRole("lead").build(),
+      ContributorBuilder.create().withDisplayName("bob").build(),
+    ];
+    await render(
+      <ContributorsTable window={WINDOW} contributors={contributors} totalCount={2} isLoading={false} />,
+    );
+    const filter = screen.getByLabelText("Filter role") as HTMLSelectElement;
+    expect([...filter.options].map((option) => option.text)).toEqual([
+      "All",
+      "Engineer",
+      "Lead",
+    ]);
+
+    // when
+    fireEvent.change(filter, { target: { value: "lead" } });
+
+    // then
+    expect(Object.keys(rolesByName())).toEqual(["alice"]);
+  });
+
+  it("should let an administrator change a role from the row", async () => {
+    // given
+    const contributors = [ContributorBuilder.create().withDisplayName("alice").build()];
+    const assigned: Array<{ key: string; role: string }> = [];
+
+    // when
+    await render(
+      <ContributorsTable
+        window={WINDOW}
+        contributors={contributors}
+        totalCount={1}
+        isLoading={false}
+        canAssignRoles
+        onAssignRole={(contributor, role) => assigned.push({ key: contributor.key, role })}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Role of alice"), { target: { value: "lead" } });
+
+    // then
+    expect(assigned).toEqual([{ key: "alice", role: "lead" }]);
+  });
+
+  it("should not write the role a person already has", async () => {
+    // given
+    const contributors = [ContributorBuilder.create().withDisplayName("alice").build()];
+    const assigned: string[] = [];
+    await render(
+      <ContributorsTable
+        window={WINDOW}
+        contributors={contributors}
+        totalCount={1}
+        isLoading={false}
+        canAssignRoles
+        onAssignRole={(_contributor, role) => assigned.push(role)}
+      />,
+    );
+
+    // when
+    fireEvent.change(screen.getByLabelText("Role of alice"), { target: { value: "engineer" } });
+
+    // then
+    expect(assigned).toEqual([]);
+  });
+
+  it("should hold the select while a role is being written", async () => {
+    // given
+    const contributors = [ContributorBuilder.create().withDisplayName("alice").build()];
+
+    // when
+    await render(
+      <ContributorsTable
+        window={WINDOW}
+        contributors={contributors}
+        totalCount={1}
+        isLoading={false}
+        canAssignRoles
+        isAssigningRole
+      />,
+    );
+
+    // then
+    // A second change would race the first for the same row.
+    expect(screen.getByLabelText("Role of alice")).toBeDisabled();
+  });
+
+  it("should fold each row through the weights of its own role", async () => {
+    // given
+    // The same reviewer twice, once as a lead and once as an engineer, beside
+    // the same writer: read on a lead's weights the reviewing counts for
+    // forty percent of the score, on an engineer's for fifteen.
+    const reviewer = ContributorBuilder.create()
+      .withDisplayName("reviewer")
+      .withCommits(2)
+      .withPullRequests(1, 1)
+      .withLinesOfCode(50)
+      .withReviewsGiven(40);
+    const writer = ContributorBuilder.create()
+      .withDisplayName("writer")
+      .withCommits(40)
+      .withPullRequests(10, 10)
+      .withLinesOfCode(800)
+      .withReviewsGiven(2)
+      .build();
+    const scoreOf = (name: string): number =>
+      Number(
+        screen
+          .getAllByRole("row")
+          .slice(2)
+          .map((row) => within(row).getAllByRole("cell"))
+          .find((cells) => cells[0].textContent?.includes(name))?.[1].textContent,
+      );
+
+    // when
+    const asLead = await render(
+      <ContributorsTable
+        window={WINDOW}
+        contributors={[reviewer.withRole("lead").build(), writer]}
+        totalCount={2}
+        isLoading={false}
+      />,
+    );
+    const lead = scoreOf("reviewer");
+    asLead.unmount();
+    await render(
+      <ContributorsTable
+        window={WINDOW}
+        contributors={[reviewer.withRole("engineer").build(), writer]}
+        totalCount={2}
+        isLoading={false}
+      />,
+    );
+
+    // then
+    expect(lead).toBeGreaterThan(scoreOf("reviewer"));
+  });
+
+  it("should read the weights it is handed rather than the defaults", async () => {
+    // given
+    // Commits are everything for an engineer here, so the two scores are the
+    // commit component alone: two thirds of full marks for the busier of two
+    // and one third for the quieter, against twice the pair's mean.
+    const weights = {
+      ...DEFAULT_PRODUCTIVITY_WEIGHTS,
+      engineer: {
+        ...Object.fromEntries(
+          Object.keys(DEFAULT_PRODUCTIVITY_WEIGHTS.engineer).map((id) => [id, 0]),
+        ),
+        commits: 1,
+      } as typeof DEFAULT_PRODUCTIVITY_WEIGHTS.engineer,
+    };
+    const contributors = [
+      ContributorBuilder.create().withDisplayName("busy").withCommits(40).build(),
+      ContributorBuilder.create().withDisplayName("quiet").withCommits(20).build(),
+    ];
+
+    // when
+    await render(
+      <ContributorsTable
+        window={WINDOW}
+        contributors={contributors}
+        totalCount={2}
+        isLoading={false}
+        weights={weights}
+      />,
+    );
+
+    // then
+    const scores = screen
+      .getAllByRole("row")
+      .slice(2)
+      .map((row) => within(row).getAllByRole("cell")[1].textContent);
+    expect(scores).toEqual(["67", "33"]);
+  });
+
+  it("should explain the role on its heading", async () => {
+    // given
+    const contributors = [ContributorBuilder.create().build()];
+
+    // when
+    await render(
+      <ContributorsTable window={WINDOW} contributors={contributors} totalCount={1} isLoading={false} />,
+    );
+
+    // then
+    expect(
+      screen.getByRole("img", { name: /a lead is expected to review more than they write/u }),
+    ).toBeInTheDocument();
   });
 });

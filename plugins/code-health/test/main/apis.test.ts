@@ -6,6 +6,7 @@ import {
   codeHealthCoverageApiFactory,
   codeHealthOwnershipApiFactory,
   codeHealthRepositoriesApiFactory,
+  codeHealthScoringApiFactory,
   codeHealthTimeSeriesApiFactory,
   codeHealthTrendsApiFactory,
 } from "../../src/main/apis";
@@ -18,6 +19,7 @@ import {
   codeHealthIdentitiesApiRef,
   codeHealthIntegrationsApiRef,
   codeHealthOwnershipApiRef,
+  codeHealthScoringApiRef,
   codeHealthTimeSeriesApiRef,
   codeHealthTrendsApiRef,
 } from "../../src/main/api_refs";
@@ -51,6 +53,7 @@ describe("codeHealthApis", () => {
       codeHealthTrendsApiRef.id,
       codeHealthOwnershipApiRef.id,
       codeHealthAdministrationApiRef.id,
+      codeHealthScoringApiRef.id,
     ].sort());
   });
 
@@ -64,6 +67,7 @@ describe("codeHealthApis", () => {
       codeHealthTrendsApiFactory.factory(clientDeps()),
       codeHealthOwnershipApiFactory.factory(clientDeps()),
       codeHealthAdministrationApiFactory.factory(clientDeps()),
+      codeHealthScoringApiFactory.factory(clientDeps()),
     ];
 
     // then

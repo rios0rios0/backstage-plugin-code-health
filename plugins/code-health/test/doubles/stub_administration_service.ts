@@ -13,7 +13,11 @@ import type { AdministrationService } from "../../src/domain/services/dashboard_
  * install names no administrators, so the button must not appear until one is.
  */
 export class StubAdministrationService implements AdministrationService {
-  private access: GetAccessResponse = { canResetIngestion: false, retentionDays: 365 };
+  private access: GetAccessResponse = {
+    canResetIngestion: false,
+    canManageScoring: false,
+    retentionDays: 365,
+  };
   private accessError: Error | null = null;
   private resetError: unknown = null;
   private repositories = 3;
@@ -24,7 +28,13 @@ export class StubAdministrationService implements AdministrationService {
   accessCalls = 0;
 
   withAdministrator(retentionDays = 365): this {
-    this.access = { canResetIngestion: true, retentionDays };
+    this.access = { ...this.access, canResetIngestion: true, retentionDays };
+    return this;
+  }
+
+  /** Somebody who may change the weights and the roles, and nothing else. */
+  withScoringManager(): this {
+    this.access = { ...this.access, canManageScoring: true };
     return this;
   }
 

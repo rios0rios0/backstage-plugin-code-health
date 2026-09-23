@@ -1,5 +1,6 @@
 import type { DiscoveryApi, FetchApi } from "@backstage/core-plugin-api";
 import type {
+  ContributorRole,
   ContributorSummary,
   CoverageInfo,
   DirectoryUser,
@@ -7,6 +8,7 @@ import type {
   GetAccessResponse,
   GetCapabilitiesResponse,
   GetContributorTrendResponse,
+  GetProductivityWeightsResponse,
   GetRepositoryTrendResponse,
   GetTimeSeriesResponse,
   IdentityRow,
@@ -17,6 +19,8 @@ import type {
   ListIdentitiesResponse,
   ListOwnedRepositoriesResponse,
   ListRepositoriesResponse,
+  ProductivityWeights,
+  ProductivityWeightsByRole,
   RepositorySummary,
   ResetIngestionRequest,
   ResetIngestionResponse,
@@ -28,6 +32,7 @@ import {
   CODE_HEALTH_API_VERSION,
   CODE_HEALTH_PLUGIN_ID,
   parseIntegrationCapabilities,
+  parseProductivityWeightsByRole,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import type {
   AdministrationService,
@@ -37,6 +42,7 @@ import type {
   IdentityService,
   IntegrationsService,
   OwnershipService,
+  ScoringService,
   TimeSeriesService,
   TrendService,
 } from "../../domain/services/dashboard_service";
@@ -67,7 +73,8 @@ export class CodeHealthBackendClient
     IdentityService,
     TrendService,
     OwnershipService,
-    AdministrationService
+    AdministrationService,
+    ScoringService
 {
   constructor(private readonly options: CodeHealthBackendClientOptions) {}
 
@@ -220,7 +227,42 @@ export class CodeHealthBackendClient
   }
 
   async getAccess(): Promise<GetAccessResponse> {
-    return this.get<GetAccessResponse>("access", {});
+    const body = await this.get<GetAccessResponse>("access", {});
+    // A backend that predates the scoring controls says nothing about them,
+    // and nothing has to read as "may not", never as a control drawn on a
+    // guess: the route behind it would answer 404 rather than 403.
+    return { ...body, canManageScoring: body.canManageScoring === true };
+  }
+
+  async getProductivityWeights(): Promise<ProductivityWeightsByRole> {
+    const body = await this.get<GetProductivityWeightsResponse>("productivity/weights", {});
+    // Parsed rather than trusted, role by role: a set that lost a component
+    // in transit reads as that role on its defaults, not as a table that
+    // fails to score anybody.
+    return parseProductivityWeightsByRole(body.weights);
+  }
+
+  async updateProductivityWeights(
+    role: ContributorRole,
+    weights: ProductivityWeights,
+  ): Promise<void> {
+    await this.send("PUT", `${CODE_HEALTH_API_VERSION}/productivity/weights/${role}`, {
+      weights,
+    });
+  }
+
+  async resetProductivityWeights(role: ContributorRole): Promise<void> {
+    await this.send("DELETE", `${CODE_HEALTH_API_VERSION}/productivity/weights/${role}`);
+  }
+
+  async assignContributorRole(key: string, role: ContributorRole): Promise<void> {
+    // The same encoding the trend uses: a person key carries a colon and, for
+    // somebody linked, a slash.
+    await this.send(
+      "PUT",
+      `${CODE_HEALTH_API_VERSION}/contributors/${encodeURIComponent(key)}/role`,
+      { role },
+    );
   }
 
   async resetIngestion(request: ResetIngestionRequest): Promise<ResetIngestionResponse> {

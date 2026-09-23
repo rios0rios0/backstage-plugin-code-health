@@ -14,6 +14,7 @@ import {
   codeHealthIntegrationsApiFactory,
   codeHealthOwnershipApiFactory,
   codeHealthRepositoriesApiFactory,
+  codeHealthScoringApiFactory,
   codeHealthTimeSeriesApiFactory,
   codeHealthTrendsApiFactory,
 } from "./main/apis";
@@ -78,6 +79,11 @@ export const codeHealthAdministrationApi = ApiBlueprint.make({
   params: (defineParams) => defineParams(codeHealthAdministrationApiFactory),
 });
 
+export const codeHealthScoringApi = ApiBlueprint.make({
+  name: "scoring",
+  params: (defineParams) => defineParams(codeHealthScoringApiFactory),
+});
+
 export const codeHealthPage = PageBlueprint.make({
   params: {
     path: "/code-health",
@@ -103,6 +109,7 @@ export default createFrontendPlugin({
     codeHealthTrendsApi,
     codeHealthOwnershipApi,
     codeHealthAdministrationApi,
+    codeHealthScoringApi,
     codeHealthPage,
   ],
 });

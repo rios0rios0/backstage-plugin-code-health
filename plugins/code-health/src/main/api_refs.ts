@@ -8,6 +8,7 @@ import type {
   IdentityService,
   IntegrationsService,
   OwnershipService,
+  ScoringService,
   TimeSeriesService,
   TrendService,
 } from "../domain/services/dashboard_service";
@@ -73,4 +74,12 @@ export const codeHealthOwnershipApiRef = createApiRef<OwnershipService>({
  */
 export const codeHealthAdministrationApiRef = createApiRef<AdministrationService>({
   id: "plugin.code-health.administration",
+});
+
+/**
+ * How the productivity score is read — the weights per role, and each
+ * person's role — with the writes an administrator makes to both.
+ */
+export const codeHealthScoringApiRef = createApiRef<ScoringService>({
+  id: "plugin.code-health.scoring",
 });

@@ -6,12 +6,15 @@ import {
   type IdentityLinkRecord,
   type IdentityRecord,
 } from "../../../src/domain/entities/identity";
+import type { ContributorRoleRecord } from "../../../src/domain/entities/contributor_role";
 import {
   actorIdentityOf,
+  loadPersonDirectory,
   measuredEvents,
   PersonDirectory,
 } from "../../../src/domain/entities/person_directory";
 import { EventBuilder } from "../../builders/event_builder";
+import { InMemoryCodeHealthStore } from "../../doubles/in_memory_code_health_store";
 
 const NOW = new Date("2026-08-10T12:00:00.000Z");
 
@@ -349,5 +352,125 @@ describe("measuredEvents", () => {
     // when / then
     expect(measuredEvents([anonymous], directory)).toEqual([anonymous]);
     expect(actorIdentityOf(anonymous)).toBeNull();
+  });
+});
+
+describe("PersonDirectory roles", () => {
+  const aRole = (overrides: Partial<ContributorRoleRecord> = {}): ContributorRoleRecord => ({
+    personKey: "vcs:dev@example.com",
+    role: "lead",
+    assignedBy: "user:default/admin",
+    assignedAt: NOW,
+    ...overrides,
+  });
+
+  it("should score everybody as an engineer until somebody says otherwise", () => {
+    // given
+    // A fleet has far more engineers than leads, so the default has to be the
+    // reading most rows want.
+    const directory = new PersonDirectory({ links: [], identities: [] });
+
+    // when / then
+    expect(directory.roleOf("vcs:dev@example.com")).toBe("engineer");
+    expect(directory.roleOf("user:default/felipe")).toBe("engineer");
+  });
+
+  it("should apply a role assigned to an account nobody has linked", () => {
+    // given
+    const directory = new PersonDirectory({
+      links: [],
+      identities: [],
+      roles: [aRole()],
+    });
+
+    // when / then
+    expect(directory.roleOf("vcs:dev@example.com")).toBe("lead");
+    // Two unlinked accounts are two people, and the other one was never named.
+    expect(directory.roleOf("vcs:other@example.com")).toBe("engineer");
+  });
+
+  it("should carry a role assigned to an account onto the linked person's row", () => {
+    // given
+    // The role was recorded before anybody linked the account. Once the link
+    // is made the row's key is the catalog user, and a role left behind on a
+    // key no row carries would read as a demotion nobody asked for.
+    const directory = new PersonDirectory({
+      links: [aLink({ source: "vcs", sourceKey: "dev@example.com" })],
+      identities: [],
+      roles: [aRole()],
+    });
+
+    // when / then
+    expect(directory.roleOf("user:default/felipe")).toBe("lead");
+    expect(directory.roleOf("vcs:dev@example.com")).toBe("engineer");
+  });
+
+  it("should apply a role assigned directly to a catalog user", () => {
+    // given
+    const directory = new PersonDirectory({
+      links: [aLink()],
+      identities: [],
+      roles: [aRole({ personKey: "user:default/felipe" })],
+    });
+
+    // when / then
+    expect(directory.roleOf("user:default/felipe")).toBe("lead");
+  });
+
+  it("should take the newest statement when a person's accounts carry two", () => {
+    // given
+    // A role describes what somebody does now, so the latest word about it is
+    // the true one — the opposite of an exclusion, which names the decision
+    // that first took them out.
+    const earlier = new Date("2026-07-01T00:00:00.000Z");
+    const directory = new PersonDirectory({
+      links: [
+        aLink({ source: "vcs", sourceKey: "dev@example.com" }),
+        aLink({ source: "wakatime", sourceKey: "jrios" }),
+      ],
+      identities: [],
+      roles: [
+        aRole({ personKey: "wakatime:jrios", role: "lead", assignedAt: NOW }),
+        aRole({ personKey: "vcs:dev@example.com", role: "engineer", assignedAt: earlier }),
+      ],
+    });
+
+    // when / then
+    expect(directory.roleOf("user:default/felipe")).toBe("lead");
+  });
+
+  it("should keep the earlier statement when it is the newer of the two", () => {
+    // given
+    // Order in the list is not order in time; only `assignedAt` decides.
+    const earlier = new Date("2026-07-01T00:00:00.000Z");
+    const directory = new PersonDirectory({
+      links: [
+        aLink({ source: "vcs", sourceKey: "dev@example.com" }),
+        aLink({ source: "wakatime", sourceKey: "jrios" }),
+      ],
+      identities: [],
+      roles: [
+        aRole({ personKey: "vcs:dev@example.com", role: "engineer", assignedAt: NOW }),
+        aRole({ personKey: "wakatime:jrios", role: "lead", assignedAt: earlier }),
+      ],
+    });
+
+    // when / then
+    expect(directory.roleOf("user:default/felipe")).toBe("engineer");
+  });
+
+  it("should read the roles along with the links and the exclusions", async () => {
+    // given
+    // Every read that turns events into rows builds its directory through
+    // this one function; a directory built without the roles would score a
+    // lead as an engineer on one screen and not the next.
+    const store = new InMemoryCodeHealthStore();
+    await store.saveContributorRole(aRole());
+
+    // when
+    const directory = await loadPersonDirectory(store);
+
+    // then
+    expect(directory.roleOf("vcs:dev@example.com")).toBe("lead");
   });
 });

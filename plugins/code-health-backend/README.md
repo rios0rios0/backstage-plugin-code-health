@@ -50,8 +50,9 @@ because "owns no repositories" and "not attached to anybody yet" are different c
 
 ## Administrators
 
-One thing on the dashboard is not a read: an administrator can start the history collection over and
-choose how far back it reaches.
+Two things on the dashboard are not reads: an administrator can start the history collection over
+and choose how far back it reaches, and can change how the productivity score is read — the weights
+each role is scored on, and which role each person has.
 
 ```yaml
 codeHealth:
@@ -69,14 +70,31 @@ There are two levers and both have to open:
 
 - **The list** is what makes the restriction real on a stock install. Backstage's default permission
   policy allows everything, so the framework alone cannot say "administrators only".
-- **The permission** `code-health.ingestion.reset` is what lets an installed policy, or the RBAC
-  plugin, veto the reset — including for somebody the list names. It is exported as
-  `codeHealthIngestionResetPermission` so a policy can name what it is deciding about.
+- **A permission** is what lets an installed policy, or the RBAC plugin, veto one of the two by
+  name — including for somebody the list names. `code-health.ingestion.reset` covers the reset and
+  `code-health.scoring.manage` the weights and the roles, exported as
+  `codeHealthIngestionResetPermission` and `codeHealthScoringManagePermission` so a policy can name
+  what it is deciding about. Two permissions rather than one, because a reset costs a day of
+  provider requests and changes nothing about what a row says, while the weights and the roles cost
+  nothing and change what every row says; an organisation may well want different people holding
+  each.
 
 | Route | Answers |
 |---|---|
-| `GET /v1/access` | `{ canResetIngestion, retentionDays }` for the caller. Never a 403: a page asks this before deciding whether to draw a button, and a service principal or an anonymous decision simply reads `false` |
+| `GET /v1/access` | `{ canResetIngestion, canManageScoring, retentionDays }` for the caller. Never a 403: a page asks this before deciding whether to draw a button, and a service principal or an anonymous decision simply reads `false` |
 | `POST /v1/ingestion/reset` | Body `{ days }`, a whole number from 1 to the configured `codeHealth.ingestion.retentionDays`. `403` when the caller is not an administrator, `400` when `days` is out of range |
+| `GET /v1/productivity/weights` | `{ weights: { engineer, lead } }` — every role's weights, the defaults for any role nobody customised. Answered for everybody, because the contributors table folds each row's score in the browser through the same set a trend is folded through here |
+| `PUT /v1/productivity/weights/:role` | Body `{ weights }`, every component named with a finite weight of zero or more and at least one above zero. `403` when the caller may not manage the scoring, `400` for a partial set or a role the plugin does not know |
+| `DELETE /v1/productivity/weights/:role` | Forgets what was stored for the role, so it is scored on the defaults again — deleting rather than writing the defaults back, so a later release's better defaults reach an install that never customised the role |
+| `PUT /v1/contributors/:key/role` | Body `{ role }`, `engineer` or `lead`, under the contributor row's percent-encoded key. `403` when the caller may not manage the scoring, `400` for a malformed key or role, `404` for a catalog user the catalog does not hold or an account nobody has observed |
+
+A role is recorded under the person key the row carried when it was assigned — a catalog reference
+for somebody linked, `<source>:<account>` for an account nobody has linked — and resolved through
+the person directory on read, so a role given to an account before it was linked follows it onto the
+linked row and a role given to a person reaches every account of theirs. Neither a role nor a set of
+weights touches anything collected: both are applied when a row is built, exactly as a link and an
+exclusion are, so every window the plugin has ever collected is scored through the new numbers from
+the next read. A reset keeps both.
 
 A reset, in one transaction per run, sends every **tracked** repository back over the reach that was
 asked for: it deletes the commits, pull requests, reviews and builds inside the reach, forgets the

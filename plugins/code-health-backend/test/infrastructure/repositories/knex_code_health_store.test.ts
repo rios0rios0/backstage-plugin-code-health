@@ -1,4 +1,5 @@
 import { mockServices, TestDatabases } from "@backstage/backend-test-utils";
+import { DEFAULT_PRODUCTIVITY_WEIGHTS } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthEvent } from "../../../src/domain/entities/code_health_event";
 import type { Day } from "../../../src/domain/entities/day";
 import type { RepositorySnapshotPayload } from "../../../src/domain/entities/repository_snapshot";
@@ -1601,6 +1602,201 @@ describe("KnexCodeHealthStore", () => {
       // then
       const [stored] = await store.listIdentityLinks();
       expect(stored?.entityRef).toBe("user:default/right");
+    });
+  });
+
+  describe("productivity scoring", () => {
+    const customLead = () => ({ ...DEFAULT_PRODUCTIVITY_WEIGHTS.lead, reviewsGiven: 0.6 });
+
+    it("should create both tables on migration", async () => {
+      // given / when
+      const store = await createStore();
+
+      // then
+      expect(await store.knex.schema.hasTable("code_health_contributor_roles")).toBe(true);
+      expect(await store.knex.schema.hasTable("code_health_productivity_weights")).toBe(true);
+    });
+
+    it("should store and replace a person's role", async () => {
+      // given
+      const store = await createStore();
+      const earlier = new Date("2026-07-01T00:00:00.000Z");
+
+      // when
+      await store.saveContributorRole({
+        personKey: "vcs:dev@example.com",
+        role: "lead",
+        assignedBy: "user:default/admin",
+        assignedAt: earlier,
+      });
+      // One answer per person: assigning again is a correction, not a
+      // second row.
+      await store.saveContributorRole({
+        personKey: "vcs:dev@example.com",
+        role: "engineer",
+        assignedBy: "user:default/other",
+        assignedAt: NOW,
+      });
+
+      // then
+      const stored = await store.listContributorRoles();
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toEqual({
+        personKey: "vcs:dev@example.com",
+        role: "engineer",
+        assignedBy: "user:default/other",
+        assignedAt: NOW,
+      });
+    });
+
+    it("should keep a role for a person with no link or account row at all", async () => {
+      // given
+      // A role under a catalog reference names no account, and no foreign
+      // key ties it to one — the person is defined by the catalog.
+      const store = await createStore();
+
+      // when
+      await store.saveContributorRole({
+        personKey: "user:default/jane",
+        role: "lead",
+        assignedBy: null,
+        assignedAt: NOW,
+      });
+
+      // then
+      expect(await store.listContributorRoles()).toHaveLength(1);
+      expect(await store.listIdentityLinks()).toEqual([]);
+    });
+
+    it("should skip a stored role this release does not know", async () => {
+      // given
+      // A row written by a later release naming a role this one has no
+      // weights for reads as the default rather than as a row that breaks
+      // every dashboard load.
+      const store = await createStore();
+      await store.knex("code_health_contributor_roles").insert({
+        person_key: "vcs:dev@example.com",
+        role: "manager",
+        assigned_by: null,
+        assigned_at: NOW,
+      });
+      await store.saveContributorRole({
+        personKey: "vcs:other@example.com",
+        role: "lead",
+        assignedBy: null,
+        assignedAt: NOW,
+      });
+
+      // when
+      const stored = await store.listContributorRoles();
+
+      // then
+      expect(stored.map((record) => record.personKey)).toEqual(["vcs:other@example.com"]);
+    });
+
+    it("should store, replace and remove a role's weights", async () => {
+      // given
+      const store = await createStore();
+      const earlier = new Date("2026-07-01T00:00:00.000Z");
+
+      // when
+      await store.saveProductivityWeights({
+        role: "lead",
+        weights: DEFAULT_PRODUCTIVITY_WEIGHTS.lead,
+        updatedBy: "user:default/admin",
+        updatedAt: earlier,
+      });
+      await store.saveProductivityWeights({
+        role: "lead",
+        weights: customLead(),
+        updatedBy: "user:default/other",
+        updatedAt: NOW,
+      });
+
+      // then
+      // Every component round-trips through the JSON payload, and the
+      // bookkeeping says who last moved them.
+      const stored = await store.listProductivityWeights();
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toEqual({
+        role: "lead",
+        weights: customLead(),
+        updatedBy: "user:default/other",
+        updatedAt: NOW,
+      });
+
+      // when
+      await store.deleteProductivityWeights("lead");
+
+      // then
+      expect(await store.listProductivityWeights()).toEqual([]);
+    });
+
+    it("should keep each role's weights apart", async () => {
+      // given
+      const store = await createStore();
+
+      // when
+      await store.saveProductivityWeights({
+        role: "engineer",
+        weights: DEFAULT_PRODUCTIVITY_WEIGHTS.engineer,
+        updatedBy: null,
+        updatedAt: NOW,
+      });
+      await store.saveProductivityWeights({
+        role: "lead",
+        weights: customLead(),
+        updatedBy: null,
+        updatedAt: NOW,
+      });
+      await store.deleteProductivityWeights("engineer");
+
+      // then
+      const stored = await store.listProductivityWeights();
+      expect(stored.map((record) => record.role)).toEqual(["lead"]);
+    });
+
+    it("should skip a stored set that cannot be read whole", async () => {
+      // given
+      // A payload that lost a component reads as that role on its defaults
+      // rather than as a score folded from half a set — the same rule the
+      // route accepts a set by.
+      const store = await createStore();
+      await store.knex("code_health_productivity_weights").insert({
+        role: "lead",
+        payload: JSON.stringify({ commits: 1 }),
+        updated_by: null,
+        updated_at: NOW,
+      });
+      await store.knex("code_health_productivity_weights").insert({
+        role: "engineer",
+        payload: "not json at all",
+        updated_by: null,
+        updated_at: NOW,
+      });
+
+      // when
+      const stored = await store.listProductivityWeights();
+
+      // then
+      expect(stored).toEqual([]);
+    });
+
+    it("should skip a stored set for a role this release does not know", async () => {
+      // given
+      const store = await createStore();
+      await store.knex("code_health_productivity_weights").insert({
+        role: "manager",
+        payload: JSON.stringify(DEFAULT_PRODUCTIVITY_WEIGHTS.lead),
+        updated_by: null,
+        updated_at: NOW,
+      });
+
+      // when
+      const stored = await store.listProductivityWeights();
+
+      // then
+      expect(stored).toEqual([]);
     });
   });
 });

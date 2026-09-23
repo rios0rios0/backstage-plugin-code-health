@@ -13,6 +13,7 @@ import type { AdministrationService } from "../../domain/services/dashboard_serv
  */
 export const NO_ADMINISTRATION_ACCESS: GetAccessResponse = {
   canResetIngestion: false,
+  canManageScoring: false,
   retentionDays: 365,
 };
 

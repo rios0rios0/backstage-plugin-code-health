@@ -9,11 +9,13 @@
 
 export { CODE_HEALTH_API_VERSION, CODE_HEALTH_PLUGIN_ID } from "./api";
 export type {
+  AssignContributorRoleRequest,
   ExcludeIdentityRequest,
   GetAccessResponse,
   GetCapabilitiesResponse,
   GetContributorTrendResponse,
   GetCoverageResponse,
+  GetProductivityWeightsResponse,
   GetRepositoryTrendResponse,
   GetTimeSeriesResponse,
   LinkIdentityRequest,
@@ -26,7 +28,17 @@ export type {
   ResetIngestionRequest,
   ResetIngestionResponse,
   TimeWindow,
+  UpdateProductivityWeightsRequest,
 } from "./api";
+
+export {
+  CONTRIBUTOR_ROLE_DESCRIPTIONS,
+  CONTRIBUTOR_ROLE_LABELS,
+  CONTRIBUTOR_ROLES,
+  DEFAULT_CONTRIBUTOR_ROLE,
+  isContributorRole,
+} from "./contributor_role";
+export type { ContributorRole } from "./contributor_role";
 
 export {
   enabledIntegrations,
@@ -223,10 +235,14 @@ export type { Score, ScoreBand, ScoreComponent, ScoreComponentDefinition } from 
 
 export {
   computeProductivityScore,
+  DEFAULT_PRODUCTIVITY_WEIGHTS,
   EMPTY_FLEET_REFERENCE,
   FLEET_RATE_CEILING,
   fleetReferenceOf,
   meanRate,
+  parseProductivityWeights,
+  parseProductivityWeightsByRole,
+  PRODUCTIVITY_COMPONENT_IDS,
   PRODUCTIVITY_COMPONENTS,
   productivityComponentsFor,
 } from "./productivity_score";
@@ -235,6 +251,8 @@ export type {
   ProductivityComponentDefinition,
   ProductivityComponentId,
   ProductivityScore,
+  ProductivityWeights,
+  ProductivityWeightsByRole,
 } from "./productivity_score";
 
 export {

@@ -36,6 +36,7 @@ describe("codeHealthPlugin", () => {
       "plugin.code-health.integrations",
       "plugin.code-health.ownership",
       "plugin.code-health.repositories",
+      "plugin.code-health.scoring",
       "plugin.code-health.time-series",
       "plugin.code-health.trends",
     ]);

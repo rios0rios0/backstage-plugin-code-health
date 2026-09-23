@@ -16,4 +16,5 @@ export {
 export {
   codeHealthIngestionResetPermission,
   codeHealthPermissions,
+  codeHealthScoringManagePermission,
 } from "./domain/entities/permissions";

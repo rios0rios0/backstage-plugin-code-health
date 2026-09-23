@@ -2,6 +2,7 @@ import { mockServices, startTestBackend, TestDatabases } from "@backstage/backen
 import type { Entity } from "@backstage/catalog-model";
 import { catalogServiceMock } from "@backstage/plugin-catalog-node/testUtils";
 import { AuthorizeResult } from "@backstage/plugin-permission-common";
+import { DEFAULT_PRODUCTIVITY_WEIGHTS } from "@rios0rios0/backstage-plugin-code-health-common";
 import request from "supertest";
 import { codeHealthPlugin } from "../src/plugin";
 
@@ -1002,7 +1003,11 @@ describe("codeHealthPlugin", () => {
 
       // then
       expect(access.status).toBe(200);
-      expect(access.body).toEqual({ canResetIngestion: false, retentionDays: 365 });
+      expect(access.body).toEqual({
+        canResetIngestion: false,
+        canManageScoring: false,
+        retentionDays: 365,
+      });
       expect(reset.status).toBe(403);
     });
 
@@ -1119,6 +1124,265 @@ describe("codeHealthPlugin", () => {
 
       // then
       expect(response.status).toBe(400);
+    });
+  });
+
+  describe("productivity scoring", () => {
+    const customLead = () => ({ ...DEFAULT_PRODUCTIVITY_WEIGHTS.lead, reviewsGiven: 0.6 });
+
+    it("should hand the default weights to anybody", async () => {
+      // given
+      // The contributors table folds each row's score in the browser, so the
+      // weights are a read like any other rather than an administrator's.
+      const { server } = await startBackend([]);
+
+      // when
+      const response = await request(server).get("/api/code-health/v1/productivity/weights");
+
+      // then
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ weights: DEFAULT_PRODUCTIVITY_WEIGHTS });
+    });
+
+    it("should refuse to change the weights for a caller who is not an administrator", async () => {
+      // given
+      const { server } = await startBackend([]);
+
+      // when
+      const put = await request(server)
+        .put("/api/code-health/v1/productivity/weights/lead")
+        .send({ weights: customLead() });
+      const remove = await request(server).delete(
+        "/api/code-health/v1/productivity/weights/lead",
+      );
+
+      // then
+      expect(put.status).toBe(403);
+      expect(remove.status).toBe(403);
+    });
+
+    it("should let an administrator replace a role's weights and restore the defaults", async () => {
+      // given
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const put = await request(server)
+        .put("/api/code-health/v1/productivity/weights/lead")
+        .send({ weights: customLead() });
+      const changed = await request(server).get("/api/code-health/v1/productivity/weights");
+
+      // then
+      expect(put.status).toBe(204);
+      expect(changed.body.weights.lead).toEqual(customLead());
+      expect(changed.body.weights.engineer).toEqual(DEFAULT_PRODUCTIVITY_WEIGHTS.engineer);
+
+      // when
+      const remove = await request(server).delete(
+        "/api/code-health/v1/productivity/weights/lead",
+      );
+      const restored = await request(server).get("/api/code-health/v1/productivity/weights");
+
+      // then
+      expect(remove.status).toBe(204);
+      expect(restored.body).toEqual({ weights: DEFAULT_PRODUCTIVITY_WEIGHTS });
+    });
+
+    it("should report the access to the scoring beside the reset", async () => {
+      // given
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const access = await request(server).get("/api/code-health/v1/access");
+
+      // then
+      expect(access.body).toEqual({
+        canResetIngestion: true,
+        canManageScoring: true,
+        retentionDays: 365,
+      });
+    });
+
+    it("should reject a set with a component missing", async () => {
+      // given
+      // Filling the gap in would store weights the administrator never saw.
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+      const { churn: _churn, ...partial } = customLead();
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/productivity/weights/lead")
+        .send({ weights: partial });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should reject a body carrying no weights at all", async () => {
+      // given
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/productivity/weights/lead")
+        .send({});
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should reject a role it does not know", async () => {
+      // given
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const put = await request(server)
+        .put("/api/code-health/v1/productivity/weights/manager")
+        .send({ weights: customLead() });
+      const remove = await request(server).delete(
+        "/api/code-health/v1/productivity/weights/manager",
+      );
+
+      // then
+      expect(put.status).toBe(400);
+      expect(remove.status).toBe(400);
+    });
+
+    it("should refuse a listed administrator the permission framework denies", async () => {
+      // given
+      // The permission only ever narrows, and the scoring has one of its own.
+      const { server } = await startBackend(
+        [],
+        { administrators: [MOCK_USER] },
+        [mockServices.permissions.factory({ result: AuthorizeResult.DENY })],
+      );
+
+      // when
+      const access = await request(server).get("/api/code-health/v1/access");
+      const put = await request(server)
+        .put("/api/code-health/v1/productivity/weights/lead")
+        .send({ weights: customLead() });
+
+      // then
+      expect(access.body.canManageScoring).toBe(false);
+      expect(put.status).toBe(403);
+    });
+
+    it("should refuse a role assignment from a caller who is not an administrator", async () => {
+      // given
+      const { server } = await startBackend([aUser("jane", "Jane Roe", "jane@acme.com")]);
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/contributors/user%3Adefault%2Fjane/role")
+        .send({ role: "lead" });
+
+      // then
+      expect(response.status).toBe(403);
+    });
+
+    it("should assign a role to a catalog user", async () => {
+      // given
+      const { server } = await startBackend([aUser("jane", "Jane Roe", "jane@acme.com")], {
+        administrators: [MOCK_USER],
+      });
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/contributors/user%3Adefault%2Fjane/role")
+        .send({ role: "lead" });
+
+      // then
+      expect(response.status).toBe(204);
+    });
+
+    it("should reject assigning a role it does not know", async () => {
+      // given
+      const { server } = await startBackend([aUser("jane", "Jane Roe", "jane@acme.com")], {
+        administrators: [MOCK_USER],
+      });
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/contributors/user%3Adefault%2Fjane/role")
+        .send({ role: "manager" });
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should reject a body with no role in it", async () => {
+      // given
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/contributors/user%3Adefault%2Fjane/role")
+        .send({});
+
+      // then
+      expect(response.status).toBe(400);
+    });
+
+    it("should refuse to assign a role to an account nobody has observed", async () => {
+      // given
+      // A role on a key nothing carries changes no row, and the administrator
+      // would have no way to tell it did not take.
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/contributors/vcs%3Aghost/role")
+        .send({ role: "lead" });
+
+      // then
+      expect(response.status).toBe(404);
+    });
+
+    it("should refuse to assign a role to a user the catalog does not hold", async () => {
+      // given
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/contributors/user%3Adefault%2Fnobody/role")
+        .send({ role: "lead" });
+
+      // then
+      expect(response.status).toBe(404);
+    });
+
+    it("should reject a key that names neither an account nor a user", async () => {
+      // given
+      const { server } = await startBackend([], { administrators: [MOCK_USER] });
+
+      // when
+      const malformed = await request(server)
+        .put("/api/code-health/v1/contributors/bogus/role")
+        .send({ role: "lead" });
+      const group = await request(server)
+        .put("/api/code-health/v1/contributors/group%3Adefault%2Fplatform/role")
+        .send({ role: "lead" });
+
+      // then
+      expect(malformed.status).toBe(400);
+      expect(group.status).toBe(400);
+    });
+
+    it("should refuse a role assignment from a service rather than a person", async () => {
+      // given
+      // Saying how colleagues are read is a choice, and a token cannot choose.
+      const { server } = await startBackend([aUser("jane", "Jane Roe", "jane@acme.com")], {
+        administrators: [MOCK_USER],
+      });
+
+      // when
+      const response = await request(server)
+        .put("/api/code-health/v1/contributors/user%3Adefault%2Fjane/role")
+        .set("Authorization", "Bearer mock-service-token")
+        .send({ role: "lead" });
+
+      // then
+      expect(response.status).toBe(403);
     });
   });
 });

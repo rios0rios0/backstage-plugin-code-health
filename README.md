@@ -43,6 +43,7 @@ rather than showing an empty dashboard.
 - **Cards that live with their table**: top contributors, review load and most active repositories sit above the contributors table; documentation, catalog APIs and fleet health sit above the repositories table. A ranking is a way *into* a row, so it belongs beside the rows it ranks — and every entry links straight to that person's or that repository's page
 - **Detail pages**: one person's or one repository's last one to six months, bucketed by day up to forty-five days and by week beyond it, plotting the same figures the tables print and bounded by what the backfill has actually collected
 - **Two scores, never shown without their workings**: a productivity score per person and a health score per repository, each `0`–`100` and each rendered beside the components it was built from. A component nothing could measure is left out and its weight shared among the rest, never counted as a zero
+- **Two roles, two sets of weights**: every person is scored as an **engineer** or a **lead**. An engineer's score leans on commits, merged pull requests and churn; a lead's on reviews given and documentation, because a lead is expected to review more than they write. An administrator assigns the role from the person's row on the Contributors tab and can change either role's weights from the header, and every window ever collected is re-read through the new numbers. The contributors table opens on the score, highest first
 - **Output is scored as a rate against the team's average**: each total divided by the days the range spans, read against the *mean* rate across the people it could be measured on, with twice that mean scoring full marks. One person's extraordinary month no longer pushes every colleague down. The denominator is the range rather than the days somebody was active, so a rate is output per elapsed day and a mid-range start or a spell of leave lowers it
 - **Daily, weekly and monthly averages per person**, on their detail page — the score's own arithmetic written out, so a reader who disagrees with the number can see which row they disagree with — with the team's average under every figure and how far above or below it the person sits
 - **Daily, weekly and monthly averages per repository**, on its detail page: commits, pull requests, reviews, pipeline runs, releases, and the coding time and tickets of whichever integrations are configured, each beside the fleet's average
@@ -106,6 +107,7 @@ sidebar entry; an app that places nav items explicitly needs these extension IDs
 | `api:code-health/trends` | One person's or one repository's history, for the detail pages |
 | `api:code-health/ownership` | The repositories a person owns through the catalog |
 | `api:code-health/administration` | What the caller may do beyond reading, and the reset itself |
+| `api:code-health/scoring` | The weights each role is scored on, each person's role, and the writes an administrator makes to both |
 
 There is no `nav-item:code-health` to reference.
 
@@ -535,19 +537,45 @@ rate means the same thing whoever else happens to be on the team. Churn is only 
 its own unit — GitHub's lines against lines, Azure DevOps's files against files — because the two
 are not the same measurement wearing different labels.
 
-| Component | Weight | Read as |
-|---|---|---|
-| Commits | 20% | rate against twice the team's mean rate |
-| Pull requests merged | 20% | rate against twice the team's mean rate |
-| Code churn | 10% | rate against twice the team's mean rate **in the same unit** |
-| Reviews given | 15% | rate against twice the team's mean rate |
-| Pipeline success | 15% | absolute, over the runs that reached a verdict |
-| Quality gate of code touched | 10% | absolute |
-| Test coverage of code touched | 10% | absolute, against the 80% Sonar gate |
-| Coding time | 10% | **WakaTime only** — rate against twice the team's mean rate |
-| Tickets resolved | 15% | **Jira only** — rate against twice the team's mean rate |
-| Tickets that stayed done | 5% | **Jira only** — absolute, over this person's own resolved tickets |
-| Documentation written | 10% | **Confluence only** — total against twice the team's mean over Confluence's trailing window, which the range picker does not move |
+The weights depend on **what the person is expected to do**. Read on one set, a lead who spent the
+month reviewing looks like an engineer who wrote nothing, which is the opposite of what the row is
+for — so every person is scored as one of two roles, and each role carries its own weights:
+
+| Component | Engineer | Lead | Read as |
+|---|---|---|---|
+| Commits | 20% | 10% | rate against twice the team's mean rate |
+| Pull requests merged | 20% | 10% | rate against twice the team's mean rate |
+| Code churn | 10% | 5% | rate against twice the team's mean rate **in the same unit** |
+| Reviews given | 15% | 40% | rate against twice the team's mean rate |
+| Pipeline success | 15% | 15% | absolute, over the runs that reached a verdict |
+| Quality gate of code touched | 10% | 10% | absolute |
+| Test coverage of code touched | 10% | 10% | absolute, against the 80% Sonar gate |
+| Coding time | 10% | 5% | **WakaTime only** — rate against twice the team's mean rate |
+| Tickets resolved | 15% | 10% | **Jira only** — rate against twice the team's mean rate |
+| Tickets that stayed done | 5% | 5% | **Jira only** — absolute, over this person's own resolved tickets |
+| Documentation written | 10% | 20% | **Confluence only** — total against twice the team's mean over Confluence's trailing window, which the range picker does not move |
+
+An engineer is expected to produce code, so half of a base install's score is output and reviews
+carry fifteen percent behind it. A lead is expected to review more than they write, so reviews carry
+forty percent of theirs and output a quarter; reliability and the quality of the code touched stay
+where they are, because a failing pipeline and a failing gate mean the same thing whoever's row they
+land on; and where the integrations are on a lead's documentation counts double and their coding
+time half. Both sets add up to the same total, so switching a role changes how the score is shared
+and never how much of it there is. **Everybody is an engineer until an administrator says
+otherwise**, because a fleet has far more engineers than leads and the default has to be the reading
+most rows want.
+
+The role is on every row of the Contributors tab and beside the name on a person's page, so a reader
+comparing two scores can see that one is a lead's. Somebody who may manage the scoring (see
+[Administrators](#administrators-resetting-history-and-managing-the-score)) picks the role from the
+row itself, and the rows are re-read through it at once — the role is applied when a row is built,
+exactly as a link or an exclusion is, so it reaches every window ever collected and every account of
+the person. The same administrator can change either role's weights from the **Productivity score
+weights** control in the header: every component beside its weight for each role, with the share of
+the score that weight comes to on this install, a **Restore defaults** per role, and one **Save**.
+A component weighted at zero stays in the workings with no say. The weights are read once for
+everybody, because the table folds each row's score in the browser and has to fold it through the
+numbers a person's page is folded through on the backend.
 
 The two Sonar components describe **the repositories the person changed, not the code they wrote** —
 Sonar measures a project — which is why they carry the least weight and why every Sonar heading says
@@ -566,12 +594,12 @@ is switched off or simply has not been read yet, and grading on the second readi
 freshly configured install look as though half its people had stopped working.
 
 **The weights above are nominal, and are shared out over whatever is enabled.** With every
-integration on they add up to 140%, so each is scaled to bring the total back to one — commits then
-carry about 14% rather than 20%. That way a weight states what its component is worth *against the
-others* instead of against a total that differs per install, and an install with nothing configured
-scores exactly the seven components at exactly the seven weights it always did. `productivityComponentsFor`
-is the one place that arithmetic happens, and the column heading, the score card and this table all
-read from it.
+integration on each role's set adds up to 140%, so each weight is scaled to bring the total back to
+one — an engineer's commits then carry about 14% rather than 20%. That way a weight states what its
+component is worth *against the others* instead of against a total that differs per install, and an
+install with nothing configured scores exactly the seven components at exactly the seven weights it
+always did. `productivityComponentsFor` is the one place that arithmetic happens, and the column
+heading, the score card, the weights editor and this table all read from it.
 
 #### Averages — a person, or a repository, beside the average
 
@@ -696,10 +724,12 @@ It warns, naming the setting to raise, when it left repositories unvisited (they
 pass), when Sonar could not be asked about some of them, or when an integration spent its whole
 allowance and stopped short.
 
-### Re-collecting the history
+### Administrators: resetting history and managing the score
 
-Nobody can start the collection over by default. Two things have to allow it, and the backend checks
-both on every request rather than trusting the browser to have hidden a button:
+Two things on the dashboard are not reads: starting the history collection over, and changing how
+the productivity score is read — the weights each role is scored on, and which role each person
+has. Nobody can do either by default. Two things have to allow it, and the backend checks both on
+every request rather than trusting the browser to have hidden a button:
 
 ```yaml
 codeHealth:
@@ -711,12 +741,22 @@ codeHealth:
     - 'user:default/jane'
 ```
 
-and the `code-health.ingestion.reset` permission, registered with
-`@backstage/plugin-permission-common` and exported from the backend package, which a permission
-policy or the RBAC plugin can deny. Being named in `administrators` is not enough if the policy
-refuses, and passing the policy is not enough if nobody named you. The configuration is where the
-plugin says who its administrators are; the permission framework stays where an organisation
-expresses a rule about them, and neither is asked to stand in for the other.
+and a permission, registered with `@backstage/plugin-permission-common` and exported from the
+backend package, which a permission policy or the RBAC plugin can deny: `code-health.ingestion.reset`
+for the reset and `code-health.scoring.manage` for the weights and the roles. Two permissions
+rather than one, because they are different kinds of decision — a reset costs a day of provider
+requests and changes nothing about what a row says, the weights and the roles cost nothing and change
+what every row says — so a policy can leave the reset with the platform team and the scoring with
+an engineering manager. Being named in `administrators` is not enough if the policy refuses, and
+passing the policy is not enough if nobody named you. The configuration is where the plugin says who
+its administrators are; the permission framework stays where an organisation expresses a rule about
+them, and neither is asked to stand in for the other.
+
+Somebody the scoring permission allows gets a **Productivity score weights** control in the page
+header and a role select on every row of the Contributors tab; see
+[Productivity](#productivity--one-person-over-one-window) for what those decide. Changing a weight
+or a role deletes nothing: both are applied when a row is built, so every window ever collected is
+scored through the new numbers from the next read, and both are logged with who asked.
 
 An administrator gets a **Re-collect history** control in the page header. It asks how far back
 before it does anything, up to `codeHealth.ingestion.retentionDays`, because a year across two
@@ -738,8 +778,12 @@ undoing.
 
 | Route | Answers |
 |---|---|
-| `GET /api/code-health/v1/access` | whether this caller may reset, and the retention in days |
+| `GET /api/code-health/v1/access` | whether this caller may reset, whether they may manage the scoring, and the retention in days |
 | `POST /api/code-health/v1/ingestion/reset` | `{ "days": 365 }` — `403` when either check refuses, `400` outside `1..retentionDays` |
+| `GET /api/code-health/v1/productivity/weights` | the weights each role is scored on, for everybody — the table in the browser folds through them |
+| `PUT /api/code-health/v1/productivity/weights/:role` | `{ "weights": { … } }`, every component named — `403` when either check refuses, `400` for a partial set, a negative weight or a set that scores on nothing |
+| `DELETE /api/code-health/v1/productivity/weights/:role` | sends the role back to the defaults — `403` when either check refuses |
+| `PUT /api/code-health/v1/contributors/:key/role` | `{ "role": "lead" }` — `403` when either check refuses, `404` for a person the catalog or the identity table does not hold, `400` for a malformed key or role |
 
 ## Architecture
 
@@ -780,10 +824,13 @@ The whole API, under `/api/code-health/v1`:
 | `GET /repositories/:id/trend` | one repository's history, bucketed, with the score for each bucket |
 | `GET /access` | what this caller may do beyond reading |
 | `POST /ingestion/reset` | send the ingestion cursors back and re-read |
+| `GET /productivity/weights` | the weights each role is scored on |
+| `PUT /productivity/weights/:role` · `DELETE /productivity/weights/:role` | replace one role's weights, or send them back to the defaults |
+| `PUT /contributors/:key/role` | record what a person is scored as |
 | `POST /refresh` | run the scheduled tasks now |
 
-Of these, `POST /ingestion/reset` is the only one gated on more than being signed in, and the gate
-is the backend's own — a control the browser did not draw is not an access control.
+Of these, the reset, the two weight writes and the role write are gated on more than being signed
+in, and the gate is the backend's own — a control the browser did not draw is not an access control.
 
 ## Development
 

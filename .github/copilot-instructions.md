@@ -78,7 +78,9 @@ GET  /identities/users?q=         (the link picker's directory search)
 PUT  /identities/links            DELETE /identities/links/:source/:key
 PUT  /identities/exclusions       DELETE /identities/exclusions/:source/:key
 GET  /contributors/:key/trend     GET /contributors/:key/repositories
+PUT  /contributors/:key/role      (an administrator: what the person is scored as)
 GET  /repositories/:id/trend
+GET  /productivity/weights        PUT /productivity/weights/:role   DELETE /productivity/weights/:role
 GET  /access                      POST /ingestion/reset        POST /refresh
 ```
 
@@ -86,9 +88,9 @@ New files behind the trends, ownership and administration work:
 
 | Package | Files |
 |---|---|
-| `-common` | `score.ts`, `productivity_score.ts`, `repository_health_score.ts`, `trend.ts`, `ownership.ts`, `identity_exclusion.ts`, `fleet_rates.ts`, `repository_rates.ts`; `searchDirectoryUsers` in `identity.ts` |
-| `-backend` | `domain/commands/get_contributor_trend.ts`, `get_repository_trend.ts`, `list_owned_repositories.ts`, `list_directory_users.ts`, `reset_ingestion.ts`, `authorize_administrator.ts`, `exclude_identity.ts`; `domain/entities/permissions.ts`, `bucket.ts`, `contributor_aggregation.ts`, `repository_summary_builder.ts`, `snapshot_allowances.ts`; `migrations/20260910000000_owner.js`, `migrations/20260915000000_identity_exclusions.js` |
-| frontend | `presentation/pages/contributor_detail_page.tsx`, `repository_detail_page.tsx`; `components/charts/trend_chart.tsx`, `components/score_card.tsx`, `components/trend_range_picker.tsx`, `components/owned_repositories_card.tsx`, `components/ingestion_reset_button.tsx`, `components/contributor_rates_card.tsx`, `components/repository_rates_card.tsx`, `components/rate_comparison.tsx`, `components/data_table.tsx`; `components/identity_exclusion_cell.tsx`, `components/identity_link_cell.tsx`; `hooks/use_trend_window.ts`, `hooks/use_contributor_trend.ts`, `hooks/use_owned_repositories.ts`, `hooks/use_repository_trend.ts`, `hooks/use_access.ts`, `hooks/use_directory_search.ts`; `domain/entities/contributor_trend.ts`, `domain/entities/repository_trend.ts`, `domain/entities/reset_reach.ts`, `domain/entities/repository_audit.ts`; `components/repository_audit_filters.tsx`, `components/columns/filter_options.ts` |
+| `-common` | `score.ts`, `productivity_score.ts`, `contributor_role.ts`, `repository_health_score.ts`, `trend.ts`, `ownership.ts`, `identity_exclusion.ts`, `fleet_rates.ts`, `repository_rates.ts`; `searchDirectoryUsers` in `identity.ts` |
+| `-backend` | `domain/commands/get_contributor_trend.ts`, `get_repository_trend.ts`, `list_owned_repositories.ts`, `list_directory_users.ts`, `reset_ingestion.ts`, `authorize_administrator.ts`, `exclude_identity.ts`, `assign_contributor_role.ts`, `get_productivity_weights.ts`, `update_productivity_weights.ts`; `domain/entities/permissions.ts`, `bucket.ts`, `contributor_aggregation.ts`, `contributor_role.ts`, `productivity_weights.ts`, `repository_summary_builder.ts`, `snapshot_allowances.ts`; `migrations/20260910000000_owner.js`, `migrations/20260915000000_identity_exclusions.js`, `migrations/20260923000000_productivity_scoring.js` |
+| frontend | `presentation/pages/contributor_detail_page.tsx`, `repository_detail_page.tsx`; `components/charts/trend_chart.tsx`, `components/score_card.tsx`, `components/trend_range_picker.tsx`, `components/owned_repositories_card.tsx`, `components/ingestion_reset_button.tsx`, `components/productivity_weights_button.tsx`, `components/contributor_role_cell.tsx`, `components/contributor_rates_card.tsx`, `components/repository_rates_card.tsx`, `components/rate_comparison.tsx`, `components/data_table.tsx`; `components/identity_exclusion_cell.tsx`, `components/identity_link_cell.tsx`; `hooks/use_trend_window.ts`, `hooks/use_contributor_trend.ts`, `hooks/use_owned_repositories.ts`, `hooks/use_repository_trend.ts`, `hooks/use_access.ts`, `hooks/use_productivity_weights.ts`, `hooks/use_directory_search.ts`; `domain/entities/contributor_trend.ts`, `domain/entities/repository_trend.ts`, `domain/entities/reset_reach.ts`, `domain/entities/repository_audit.ts`; `components/repository_audit_filters.tsx`, `components/columns/filter_options.ts` |
 
 ## Things not to change without understanding why
 
@@ -152,10 +154,16 @@ New files behind the trends, ownership and administration work:
   integration is **configured**, it adds components on the same terms — coding time 10%, tickets
   resolved 15% and documentation written 10% relative (the last over Confluence's trailing window,
   never the picked one, and left out of per-bucket scores), tickets that stayed done 5% absolute — and
-  `productivityComponentsFor(capabilities)` renormalises every weight over the enabled set, so those
+  `productivityComponentsFor(capabilities, weights)` renormalises every weight over the enabled set, so those
   percentages are nominal (1.40 with all three on, making commits ~14%). Pass
   `IntegrationCapabilities` to `computeProductivityScore`; never infer it from whether a row carries
-  a value, and never write a share out by hand — build the sentence from that function. Repository health
+  a value, and never write a share out by hand — build the sentence from that function. Those
+  percentages are the **engineer's**; every row carries a `role`, and `computeProductivityScore`
+  takes a `ProductivityWeightsByRole` (defaulting to `DEFAULT_PRODUCTIVITY_WEIGHTS`, where a lead's
+  reviews carry 40% and output a quarter) and folds the row through its own role's set. The backend
+  reads the stored weights per request (`GetProductivityWeights`) and the browser fetches them once
+  (`useProductivityWeights`, `GET /productivity/weights`), so the table and a person's page fold the
+  same numbers. Repository health
   is absolute throughout (gate 15%, coverage 15%, defects 10%, duplication 5%, debt 5%, branch build
   10%, build success 10%, policy 10%, docs 5%, review coverage 10%, PRs landed 5%). The two Sonar
   components on a person describe the repositories they changed, not the code they wrote.
@@ -211,12 +219,32 @@ New files behind the trends, ownership and administration work:
   `measuredContributorMetrics` applies the same rule to the WakaTime rows in
   `list_repository_summaries.ts` and `get_repository_trend.ts`, which aggregate by project and so
   cannot apply it anywhere else.
-- **Only a configured administrator the permission framework also allows may reset the ingestion.**
-  `codeHealth.administrators` is empty by default and `code-health.ingestion.reset` can be denied on
-  top of it; both must allow, and the route authorises on every request rather than trusting that
-  the browser hid the button. A reset discards the stored commits, pull requests, reviews and
-  pipeline runs inside the chosen reach and re-walks them; it keeps releases, tags, the daily
-  snapshots and every identity link.
+- **Only a configured administrator the permission framework also allows may reset the ingestion,
+  or change how the score is read.** `codeHealth.administrators` is empty by default and
+  `code-health.ingestion.reset` (the reset) or `code-health.scoring.manage` (the weights and the
+  roles) can be denied on top of it; both must allow, and every one of those routes authorises on
+  every request rather than trusting that the browser hid the button. Two permissions rather than
+  one, so a policy can hand the reset and the scoring to different people;
+  `AuthorizeAdministrator` answers both through one private `isAllowed(credentials, permission)`,
+  and `/v1/access` reports both flags. A reset discards the stored commits, pull requests, reviews
+  and pipeline runs inside the chosen reach and re-walks them; it keeps releases, tags, the daily
+  snapshots, every identity link and exclusion, every role and every set of weights.
+- **A role is a statement about a person, stored under the row's key and resolved on read.**
+  `code_health_contributor_roles` is keyed by the person key the row carried when the role was
+  assigned — a catalog reference for somebody linked, `<source>:<account>` for an unlinked account —
+  and `PersonDirectory.roleOf` resolves an account-keyed subject through the link table
+  (`accountOfPersonKey` splits on the first colon only), newest `assignedAt` wins, default
+  `engineer`. So a role given before a link follows the account onto the linked row, and a role
+  given to a person reaches every account of theirs. `loadPersonDirectory` reads four tables now;
+  a directory built without the roles scores every lead as an engineer on one screen and not the
+  next. `zeroContributorSummary` copies the role, so a quiet bucket keeps it.
+- **A role's weights are stored whole or not at all.** `code_health_productivity_weights` holds one
+  JSON payload per role, validated by `parseProductivityWeights` on the way in (every component,
+  finite, ≥ 0, at least one > 0) and again on the way out (a row that fails to parse is skipped, so
+  the role falls back to the defaults rather than folding half a set). Restoring defaults deletes
+  the row rather than writing the defaults back, so a later release's better defaults reach an
+  install that never customised the role. The contributors table opens sorted on the score,
+  highest first, with `sortUndefined: "last"` keeping the unscored at the end either way.
 - **The documentation and API grades need both halves of the evidence.** The catalog half comes from
   discovery, the repository half from the daily snapshot, so both read `null` — "not measured" —
   until a snapshot exists. Grading on half of it reports gaps that are not there.

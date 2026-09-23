@@ -10,13 +10,15 @@ import Tooltip from "@material-ui/core/Tooltip";
 import Typography from "@material-ui/core/Typography";
 import { makeStyles } from "@material-ui/core/styles";
 import HistoryIcon from "@material-ui/icons/History";
-import type { ResetIngestionResponse } from "@rios0rios0/backstage-plugin-code-health-common";
+import type {
+  GetAccessResponse,
+  ResetIngestionResponse,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import { formatCount } from "@rios0rios0/backstage-plugin-code-health-common";
 import { useState } from "react";
 import type { ResetReach } from "../../domain/entities/reset_reach";
 import { resetReachOptions } from "../../domain/entities/reset_reach";
 import type { AdministrationService } from "../../domain/services/dashboard_service";
-import { useAccess } from "../hooks/use_access";
 
 const CONFIRMATION_MS = 10000;
 
@@ -27,6 +29,11 @@ const useStyles = makeStyles((theme) => ({
 }));
 
 export interface IngestionResetButtonProps {
+  /**
+   * What the backend said this caller may do, asked once by the page that
+   * draws every administrator control rather than once per control.
+   */
+  readonly access: GetAccessResponse;
   readonly administrationService: AdministrationService;
   /** Called after a reset was accepted, so the caller can re-read coverage. */
   readonly onReset: () => void;
@@ -165,10 +172,10 @@ const IngestionResetDialog = ({
  * single click in a page header.
  */
 export const IngestionResetButton = ({
+  access,
   administrationService,
   onReset,
 }: IngestionResetButtonProps) => {
-  const { access } = useAccess(administrationService);
   const [isOpen, setIsOpen] = useState(false);
   const [outcome, setOutcome] = useState<ResetIngestionResponse | null>(null);
 

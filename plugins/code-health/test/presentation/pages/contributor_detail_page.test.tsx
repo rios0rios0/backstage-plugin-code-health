@@ -178,6 +178,27 @@ describe("ContributorDetailPage", () => {
     );
   });
 
+  it("should say what the person is scored as, beside their name", async () => {
+    // given
+    // The role decides which weights the score below was folded through, so
+    // it sits by the name rather than three cards down.
+    const summary = ContributorBuilder.create()
+      .withKey(KEY)
+      .withDisplayName("Jane Roe")
+      .withRole("lead")
+      .build();
+    const trendService = new StubTrendService().withContributorTrend(
+      aContributorTrend({ key: KEY, summary, score: aTrendPoint("2026-08-01", summary).score }),
+    );
+
+    // when
+    await renderPage({ trendService });
+
+    // then
+    expect(await screen.findByTestId("contributorRole")).toHaveTextContent("Lead");
+    expect(screen.getByText(/The weights are the ones for this person's role/u)).toBeInTheDocument();
+  });
+
   it("should ask for the person named in the query string, bucketed for the range", async () => {
     // given
     // The key carries a colon and a slash, so it travels encoded and has to

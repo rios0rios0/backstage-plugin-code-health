@@ -492,6 +492,39 @@ describe("ListContributorSummaries", () => {
     expect(contributors[0]).toMatchObject({ key: "vcs:dev@example.com", commits: 2 });
   });
 
+  it("should score everybody as an engineer until an administrator says otherwise", async () => {
+    // given
+    // The role is a fact about the person, resolved when the row is built, so
+    // a role recorded today reads through every window already collected.
+    const { store, discovered } = await seed();
+    const [repository] = discovered;
+    await store.commitIngestion({
+      repositoryId: repository.id,
+      events: [
+        commit(repository.id, "2026-08-09T10:00:00.000Z", "dev@example.com").build(),
+        commit(repository.id, "2026-08-09T11:00:00.000Z", "other@example.com").build(),
+      ],
+      chunk: { repositoryId: repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+      status: "active",
+      now: NOW,
+    });
+    const before = await new ListContributorSummaries({ store }).run(WINDOW);
+
+    // when
+    await store.saveContributorRole({
+      personKey: "vcs:dev@example.com",
+      role: "lead",
+      assignedBy: "user:default/admin",
+      assignedAt: NOW,
+    });
+    const after = await new ListContributorSummaries({ store }).run(WINDOW);
+
+    // then
+    expect(before.map((row) => row.role)).toEqual(["engineer", "engineer"]);
+    expect(after.find((row) => row.key === "vcs:dev@example.com")?.role).toBe("lead");
+    expect(after.find((row) => row.key === "vcs:other@example.com")?.role).toBe("engineer");
+  });
+
   it("should aggregate the Sonar metrics of the repositories a contributor touched", async () => {
     // given
     // Sonar measures projects, not people, so a contributor row can only report

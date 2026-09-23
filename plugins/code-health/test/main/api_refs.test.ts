@@ -5,6 +5,7 @@ import {
   codeHealthCoverageApiRef,
   codeHealthOwnershipApiRef,
   codeHealthRepositoriesApiRef,
+  codeHealthScoringApiRef,
   codeHealthTrendsApiRef,
 } from "../../src/main/api_refs";
 
@@ -16,6 +17,7 @@ const refs = [
   codeHealthTrendsApiRef,
   codeHealthOwnershipApiRef,
   codeHealthAdministrationApiRef,
+  codeHealthScoringApiRef,
 ];
 
 describe("api_refs", () => {
@@ -47,5 +49,6 @@ describe("api_refs", () => {
     expect(codeHealthTrendsApiRef.id).toBe("plugin.code-health.trends");
     expect(codeHealthOwnershipApiRef.id).toBe("plugin.code-health.ownership");
     expect(codeHealthAdministrationApiRef.id).toBe("plugin.code-health.administration");
+    expect(codeHealthScoringApiRef.id).toBe("plugin.code-health.scoring");
   });
 });

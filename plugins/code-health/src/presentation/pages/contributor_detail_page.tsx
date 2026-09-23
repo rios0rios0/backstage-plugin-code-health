@@ -4,6 +4,7 @@ import Avatar from "@material-ui/core/Avatar";
 import Box from "@material-ui/core/Box";
 import Grid from "@material-ui/core/Grid";
 import Link from "@material-ui/core/Link";
+import Tooltip from "@material-ui/core/Tooltip";
 import Typography from "@material-ui/core/Typography";
 import { makeStyles } from "@material-ui/core/styles";
 import type {
@@ -12,6 +13,8 @@ import type {
   TimeSeriesBucket,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
+  CONTRIBUTOR_ROLE_DESCRIPTIONS,
+  CONTRIBUTOR_ROLE_LABELS,
   catalogEntityPath,
   enabledIntegrations,
   formatDecimal,
@@ -46,6 +49,7 @@ import { TrendChart } from "../components/charts/trend_chart";
 import { OwnedRepositoriesCard } from "../components/owned_repositories_card";
 import { ContributorRatesCard } from "../components/contributor_rates_card";
 import { ScoreCard } from "../components/score_card";
+import { StateChip } from "../components/state_chip";
 import { TrendRangePicker } from "../components/trend_range_picker";
 import type { UseCoverageResult } from "../hooks/use_coverage";
 import { useContributorTrend } from "../hooks/use_contributor_trend";
@@ -65,6 +69,7 @@ export const CONTRIBUTOR_KEY_PARAM = "key";
 const useStyles = makeStyles((theme) => ({
   person: { display: "flex", alignItems: "center", gap: theme.spacing(2) },
   avatar: { width: 48, height: 48 },
+  name: { display: "flex", alignItems: "center", gap: theme.spacing(1.5) },
   identities: { display: "block" },
   links: { display: "flex", gap: theme.spacing(2), flexWrap: "wrap" },
   explanation: { color: theme.palette.text.secondary, padding: theme.spacing(2, 0) },
@@ -97,7 +102,7 @@ const SONAR_CAVEAT =
  * reliability means the same thing whoever else is on the team.
  */
 const PRODUCTIVITY_SUBHEADER =
-  "Output — commits, merged pull requests, churn and reviews — is read as a rate: the totals below divided by the days this range spans, each against the team's average rate over the same period, with twice that average scoring full marks. A quiet month for the whole team is then a quiet month rather than everybody's failure. The denominator is the range rather than the days this person was active, so these are figures per elapsed day: a mid-range start or a fortnight of leave lowers them. Reliability and quality — the pipeline success rate, and the gate and coverage of the code touched — are absolute. Anything that could not be measured is left out rather than scored as zero, and the weight below says how much of the score survived.";
+  "Output — commits, merged pull requests, churn and reviews — is read as a rate: the totals below divided by the days this range spans, each against the team's average rate over the same period, with twice that average scoring full marks. A quiet month for the whole team is then a quiet month rather than everybody's failure. The denominator is the range rather than the days this person was active, so these are figures per elapsed day: a mid-range start or a fortnight of leave lowers them. Reliability and quality — the pipeline success rate, and the gate and coverage of the code touched — are absolute. The weights are the ones for this person's role, shown beside their name: an engineer's lean on output, a lead's on reviews. Anything that could not be measured is left out rather than scored as zero, and the weight below says how much of the score survived.";
 
 /**
  * What the configured integrations add to the reading above.
@@ -233,7 +238,24 @@ const ContributorHeader = ({
           {initialsOf(name)}
         </Avatar>
         <Box>
-          <Typography variant="h5">{name}</Typography>
+          <Box className={classes.name}>
+            <Typography variant="h5">{name}</Typography>
+            {/* The role decides which weights the score below was folded
+                through, so it sits beside the name the score is about rather
+                than three cards down where a reader comparing two people would
+                never find it. */}
+            {summary === null ? null : (
+              <Tooltip title={CONTRIBUTOR_ROLE_DESCRIPTIONS[summary.role]}>
+                <span>
+                  <StateChip
+                    tone={summary.role === "lead" ? "info" : "neutral"}
+                    label={CONTRIBUTOR_ROLE_LABELS[summary.role]}
+                    testId="contributorRole"
+                  />
+                </span>
+              </Tooltip>
+            )}
+          </Box>
           {identities.length > 0 ? (
             <Typography
               variant="caption"

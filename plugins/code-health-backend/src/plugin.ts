@@ -3,9 +3,11 @@ import { ScmIntegrations } from "@backstage/integration";
 import { catalogServiceRef } from "@backstage/plugin-catalog-node";
 import type { Platform } from "@rios0rios0/backstage-plugin-code-health-common";
 import { CODE_HEALTH_PLUGIN_ID } from "@rios0rios0/backstage-plugin-code-health-common";
+import { AssignContributorRole } from "./domain/commands/assign_contributor_role";
 import { AuthorizeAdministrator } from "./domain/commands/authorize_administrator";
 import { CaptureRepositorySnapshots } from "./domain/commands/capture_repository_snapshots";
 import { GetContributorTrend } from "./domain/commands/get_contributor_trend";
+import { GetProductivityWeights } from "./domain/commands/get_productivity_weights";
 import { GetRepositoryTimeSeries } from "./domain/commands/get_repository_time_series";
 import { GetRepositoryTrend } from "./domain/commands/get_repository_trend";
 import { DiscoverRepositories } from "./domain/commands/discover_repositories";
@@ -19,6 +21,7 @@ import { ListOwnedRepositories } from "./domain/commands/list_owned_repositories
 import { ListRepositorySummaries } from "./domain/commands/list_repository_summaries";
 import { ReconcileIdentities } from "./domain/commands/reconcile_identities";
 import { ResetIngestion } from "./domain/commands/reset_ingestion";
+import { UpdateProductivityWeights } from "./domain/commands/update_productivity_weights";
 import {
   integrationCapabilitiesOf,
   isAtlassianConfigured,
@@ -117,6 +120,11 @@ export const codeHealthPlugin = createBackendPlugin({
         // ticket would be two answers to one question.
         const capabilities = integrationCapabilitiesOf(settings);
 
+        // One reader for the weights each role is scored on, shared by the
+        // route that hands them to the browser and the trend that folds a
+        // person's score here, so the table and the page read one set.
+        const weights = new GetProductivityWeights(store);
+
         httpRouter.use(
           createCodeHealthRouter({
             store,
@@ -132,6 +140,7 @@ export const codeHealthPlugin = createBackendPlugin({
               store,
               directory: catalogReader,
               capabilities,
+              weights,
             }),
             // Given the table's own command, so the fleet average a repository's
             // page compares against is the average of the rows the table shows —
@@ -158,6 +167,12 @@ export const codeHealthPlugin = createBackendPlugin({
               store,
               logger: logger.child({ component: "ingestion-reset" }),
             }),
+            weights,
+            weightUpdates: new UpdateProductivityWeights({
+              store,
+              logger: logger.child({ component: "productivity-weights" }),
+            }),
+            roles: new AssignContributorRole(store, catalogReader),
             retentionDays: settings.ingestion.retentionDays,
             capabilities,
             refreshableTaskIds: [DISCOVERY_TASK_ID, INGESTION_TASK_ID, SNAPSHOT_TASK_ID],

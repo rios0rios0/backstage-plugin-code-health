@@ -1,10 +1,12 @@
 import type {
+  ContributorRole,
   EventKind,
   IdentitySource,
   IntegrationId,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { CodeHealthEvent } from "../../src/domain/entities/code_health_event";
 import { eventId } from "../../src/domain/entities/code_health_event";
+import type { ContributorRoleRecord } from "../../src/domain/entities/contributor_role";
 import { addDays, daysBetween, toDay, type Day } from "../../src/domain/entities/day";
 import {
   identityKey,
@@ -14,6 +16,7 @@ import {
   type IdentityRef,
 } from "../../src/domain/entities/identity";
 import type { IngestionState } from "../../src/domain/entities/ingestion_state";
+import type { ProductivityWeightsRecord } from "../../src/domain/entities/productivity_weights";
 import type { RepositorySnapshot } from "../../src/domain/entities/repository_snapshot";
 import type {
   DiscoveredRepository,
@@ -60,6 +63,8 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
   private identities = new Map<string, IdentityRecord>();
   private identityLinks = new Map<string, IdentityLinkRecord>();
   private identityExclusions = new Map<string, IdentityExclusionRecord>();
+  private contributorRoles = new Map<string, ContributorRoleRecord>();
+  private productivityWeights = new Map<ContributorRole, ProductivityWeightsRecord>();
 
   /** Number of `commitIngestion` calls, so tests can assert on write volume. */
   commitCount = 0;
@@ -335,6 +340,27 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
 
   async deleteIdentityExclusion(identity: IdentityRef): Promise<void> {
     this.identityExclusions.delete(identityKey(identity));
+  }
+
+  async listContributorRoles(): Promise<ContributorRoleRecord[]> {
+    return [...this.contributorRoles.values()];
+  }
+
+  async saveContributorRole(record: ContributorRoleRecord): Promise<void> {
+    // One answer per person, replaced rather than refused, as the real store.
+    this.contributorRoles.set(record.personKey, record);
+  }
+
+  async listProductivityWeights(): Promise<ProductivityWeightsRecord[]> {
+    return [...this.productivityWeights.values()];
+  }
+
+  async saveProductivityWeights(record: ProductivityWeightsRecord): Promise<void> {
+    this.productivityWeights.set(record.role, record);
+  }
+
+  async deleteProductivityWeights(role: ContributorRole): Promise<void> {
+    this.productivityWeights.delete(role);
   }
 
   async listLatestSnapshotDays(): Promise<ReadonlyMap<string, Day>> {

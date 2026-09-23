@@ -2,6 +2,10 @@ import type {
   ComplianceStatus,
   WorkflowStatus,
 } from "@rios0rios0/backstage-plugin-code-health-common";
+import {
+  CONTRIBUTOR_ROLE_LABELS,
+  CONTRIBUTOR_ROLES,
+} from "@rios0rios0/backstage-plugin-code-health-common";
 import type { FilterOption } from "../data_table";
 
 /**
@@ -74,6 +78,12 @@ export const VISIBILITY_FILTER_OPTIONS: readonly FilterOption[] = [
   { value: "PUBLIC", label: "Public" },
   { value: "PRIVATE", label: "Private" },
 ];
+
+/** The words the Role column's chip and select use, built from the one list of roles. */
+export const ROLE_FILTER_OPTIONS: readonly FilterOption[] = CONTRIBUTOR_ROLES.map((role) => ({
+  value: role,
+  label: CONTRIBUTOR_ROLE_LABELS[role],
+}));
 
 /**
  * The gate cell prints "Passed" and "Failed" and leaves the third state empty,
