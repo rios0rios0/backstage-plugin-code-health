@@ -29,6 +29,7 @@ import type {
   WakaTimeEnricher,
 } from "../services/snapshot_enricher";
 import type { SnapshotContext, VcsCollector } from "../services/vcs_collector";
+import type { CollectClaudeUsage } from "./collect_claude_usage";
 
 export interface SnapshotRunResult {
   readonly captured: number;
@@ -51,6 +52,7 @@ export interface SnapshotRunResult {
 }
 
 export interface CaptureRepositorySnapshotsOptions {
+  readonly claude?: CollectClaudeUsage;
   readonly store: CodeHealthStore;
   readonly collectors: ReadonlyMap<Platform, VcsCollector>;
   readonly sonar: SonarEnricher | null;
@@ -81,6 +83,7 @@ export interface CaptureRepositorySnapshotsOptions {
    * enough annotated spaces.
    */
   readonly requestBudgets: {
+    readonly claude?: number;
     readonly wakaTime: number;
     readonly jira: number;
     readonly confluence: number;
@@ -148,6 +151,7 @@ export class CaptureRepositorySnapshots {
     const annotatedSpaces = confluence === null ? 0 : countAnnotatedSpaces(repositories);
 
     const allowances = new SnapshotAllowances({
+      ...(this.options.claude === undefined ? {} : { claude: this.options.requestBudgets.claude ?? 500 }),
       repositories: settings.requestBudgetPerRun,
       // Sonar is asked once per repository the loop reaches, and the loop
       // cannot reach more repositories than it has requests, so the same
@@ -276,6 +280,7 @@ export class CaptureRepositorySnapshots {
     // cached for the run, so this slices it rather than asking again.
     await this.harvestJira(day, jiraContext, input.now);
     await this.harvestConfluence(day, confluenceContext, input.now);
+    await this.options.claude?.run(input.now, contextFor("claude"));
 
     logger.info(
       `snapshot pass finished: captured ${captured} of ${tracked.length} repositories, ` +

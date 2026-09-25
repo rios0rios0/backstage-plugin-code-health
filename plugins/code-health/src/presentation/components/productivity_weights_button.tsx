@@ -67,6 +67,7 @@ const useStyles = makeStyles((theme) => ({
 
 /** What each integration is called where a component says it needs one. */
 const INTEGRATION_LABELS: Readonly<Record<IntegrationId, string>> = {
+  claude: "Claude Code",
   wakatime: "WakaTime",
   jira: "Jira",
   confluence: "Confluence",

@@ -49,8 +49,9 @@ import { Link as RouterLink } from "react-router-dom";
 import { contributorDetailRouteRef } from "../../routes";
 // The page owns the parameter name it reads, and the table is the only thing
 // that writes one; importing it is what keeps the two spellings identical.
-import { CONTRIBUTOR_KEY_PARAM } from "../pages/contributor_detail_page";
+import { CONTRIBUTOR_KEY_PARAM } from "../../routes";
 import { confluenceContributorColumns } from "./columns/confluence_columns";
+import { claudeContributorColumns } from "./columns/claude_columns";
 import { ROLE_FILTER_OPTIONS } from "./columns/filter_options";
 import { jiraContributorColumns } from "./columns/jira_columns";
 import {
@@ -697,10 +698,11 @@ export const ContributorsTable = ({
   const gates = useMemo<IntegrationCapabilities>(
     () => ({
       wakatime: capabilities.wakatime,
+      claude: capabilities.claude,
       jira: capabilities.jira,
       confluence: capabilities.confluence,
     }),
-    [capabilities.wakatime, capabilities.jira, capabilities.confluence],
+    [capabilities.wakatime, capabilities.jira, capabilities.confluence, capabilities.claude],
   );
 
   // The AI columns are gated on the data as well as on the integration, because
@@ -714,6 +716,7 @@ export const ContributorsTable = ({
       roleColumn({ canAssign: canAssignRoles, isBusy: isAssigningRole, onAssign: onAssignRole }),
       ...metricColumns,
       ...(gates.wakatime ? wakaTimeContributorColumns() : []),
+      ...(gates.claude ? claudeContributorColumns() : []),
       ...(showAiColumns ? wakaTimeAiColumns() : []),
       ...(gates.jira ? jiraContributorColumns() : []),
       ...(gates.confluence ? confluenceContributorColumns() : []),

@@ -304,3 +304,5 @@ export { CI_STATES, isCIState } from "./workflow_status";
 export type { CIState, WorkflowStatus } from "./workflow_status";
 export { catalogEntityPath, parseEntityRef } from "./entity_ref";
 export type { ParsedEntityRef } from "./entity_ref";
+export { claudeTokenTotal, mergeClaudeMetrics, claudeRatesOf, claudeWindowDays } from "./claude_metrics";
+export type { ClaudeTokens, ClaudeDayMetrics, ClaudeMetrics } from "./claude_metrics";

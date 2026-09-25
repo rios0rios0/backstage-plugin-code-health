@@ -9,9 +9,10 @@ import type { ExclusionReason } from "./identity_exclusion";
  * accounts the optional integrations report, which are separate account systems
  * with separate keys.
  */
-export type IdentitySource = "vcs" | "wakatime" | "jira" | "confluence";
+export type IdentitySource = "vcs" | "wakatime" | "jira" | "confluence" | "claude";
 
 export const IDENTITY_SOURCES: readonly IdentitySource[] = [
+  "claude",
   "vcs",
   "wakatime",
   "jira",
@@ -23,6 +24,7 @@ export const isIdentitySource = (value: unknown): value is IdentitySource =>
 
 /** Human-readable name of a source, for the admin screen and its filters. */
 export const IDENTITY_SOURCE_LABELS: Readonly<Record<IdentitySource, string>> = {
+  claude: "Claude Code",
   vcs: "Version control",
   wakatime: "WakaTime",
   jira: "Jira",

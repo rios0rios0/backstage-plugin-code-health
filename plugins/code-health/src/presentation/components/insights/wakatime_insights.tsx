@@ -146,7 +146,7 @@ export const WakaTimeFleetInsights = ({ contributors }: WakaTimeFleetInsightsPro
                 label="AI tokens"
                 value={kpis.aiTokens === null ? "—" : formatTokens(kpis.aiTokens)}
                 caption="prompt and completion"
-                help="The only token count any system here can see. No version control provider knows whether a line was typed or accepted from a completion; WakaTime's editor plugins do."
+                help="Tokens observed by WakaTime's editor plugins. Separate from Claude organization usage; the two sources may overlap and must not be added together."
               />
             </Grid>
           </Grid>

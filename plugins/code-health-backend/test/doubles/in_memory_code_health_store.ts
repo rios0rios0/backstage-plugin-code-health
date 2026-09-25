@@ -51,6 +51,7 @@ const RE_COLLECTED_KINDS = new Set<EventKind>([
  * engine, because only the real engine can prove the schema.
  */
 export class InMemoryCodeHealthStore implements CodeHealthStore {
+  private readonly completedMetricDays = new Map<string, { source: IntegrationId; day: Day }>();
   private repositories = new Map<string, TrackedRepository>();
   private states = new Map<string, IngestionState>();
   private events = new Map<string, CodeHealthEvent>();
@@ -221,11 +222,18 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
   }
 
   async saveContributorMetrics<T>(options: {
+    complete?: boolean;
     source: IntegrationId;
     day: Day;
     capturedAt: Date;
     metrics: ReadonlyMap<string, T>;
   }): Promise<void> {
+    if (options.complete) {
+      this.completedMetricDays.set(`${options.source}:${options.day}`, { source: options.source, day: options.day });
+      for (const [key, row] of this.contributorMeasures) {
+        if (row.source === options.source && row.day === options.day) this.contributorMeasures.delete(key);
+      }
+    }
     for (const [contributorKey, payload] of options.metrics) {
       this.contributorMeasures.set(`${options.source}:${options.day}:${contributorKey}`, {
         source: options.source,
@@ -280,6 +288,9 @@ export class InMemoryCodeHealthStore implements CodeHealthStore {
         )
         .map((row) => row.day),
     );
+    for (const row of this.completedMetricDays.values()) {
+      if (row.source === options.source && row.day >= options.from && row.day <= options.to) days.add(row.day);
+    }
     return [...days].sort();
   }
 

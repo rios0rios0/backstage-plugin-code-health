@@ -7,6 +7,23 @@ import { RecordingLogger } from "../../doubles/recording_logger";
 const read = (data: JsonObject) => readCodeHealthSettings(new ConfigReader(data));
 
 describe("readCodeHealthSettings", () => {
+  it.each([
+    [{}, false],
+    [{ apiKey: "fixture-token-placeholder" }, false],
+    [{ enabled: true }, false],
+    [{ enabled: true, apiKey: "   " }, false],
+    [{ enabled: true, apiKey: "fixture-token-placeholder", historyDays: 999, requestBudgetPerRun: 0.5 }, true],
+  ] as const)("should enable Claude only with opt-in and an organization key (%j)", (claude, enabled) => {
+    // given
+    const config = { codeHealth: { claude } };
+    // when
+    const settings = read(config);
+    // then
+    expect(integrationCapabilitiesOf(settings).claude).toBe(enabled);
+    expect(settings.claude.historyDays).toBeGreaterThanOrEqual(1);
+    expect(settings.claude.historyDays).toBeLessThanOrEqual(365);
+    expect(settings.claude.requestBudgetPerRun).toBeGreaterThanOrEqual(1);
+  });
   it("should fall back to every default when nothing is configured", () => {
     // given / when
     const settings = read({});
@@ -50,7 +67,7 @@ describe("readCodeHealthSettings", () => {
     const capabilities = integrationCapabilitiesOf(read({}));
 
     // then
-    expect(capabilities).toEqual({ wakatime: false, jira: false, confluence: false });
+    expect(capabilities).toEqual({ wakatime: false, jira: false, confluence: false, claude: false });
   });
 
   it("should light up WakaTime on the key alone", () => {
@@ -102,6 +119,7 @@ describe("readCodeHealthSettings", () => {
 
     // when / then
     expect(integrationCapabilitiesOf(settings)).toEqual({
+      claude: false,
       wakatime: false,
       jira: true,
       confluence: false,

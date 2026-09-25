@@ -5,7 +5,8 @@ WakaTime is the only source in this plugin that measures *effort* rather than
 a merged pull request, a green pipeline, a closed ticket — and none of them can
 see the afternoon somebody spent reading code that produced no commit at all.
 
-It is also the only place any system here reports a **token count**. WakaTime's
+It also reports editor-observed **token counts**, separately from the optional
+[Claude Code organization reports](claude.md). WakaTime's
 editor plugins observe whether a line was typed or accepted from a completion;
 no version control provider knows the difference, and none ever will.
 

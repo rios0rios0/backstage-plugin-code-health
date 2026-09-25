@@ -177,6 +177,12 @@ export const readCodeHealthSettings = (
 
   return {
     administrators: readAdministrators(config, logger),
+    claude: {
+      enabled: config?.getOptionalBoolean("claude.enabled") ?? false,
+      apiKey: config?.getOptionalString("claude.apiKey")?.trim() || null,
+      historyDays: Math.min(365, Math.max(1, readPositiveNumber(config?.getOptionalConfig("claude"), "historyDays", 90))),
+      requestBudgetPerRun: Math.max(1, readPositiveNumber(config?.getOptionalConfig("claude"), "requestBudgetPerRun", 500)),
+    },
     ingestion: {
       entityFilters: readEntityFilters(config),
       retentionDays: readPositiveNumber(ingestion, "retentionDays", DEFAULT_RETENTION_DAYS),

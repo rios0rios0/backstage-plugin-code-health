@@ -199,7 +199,7 @@ export const wakaTimeAiColumns = (): ColumnDef<ContributorSummary>[] => [
     header: () => (
       <HeaderWithHelp
         label="AI tokens"
-        help="Prompt and completion tokens WakaTime's editor plugins recorded, input and output beneath. This is the only place any system here can see a token count — no version control provider knows whether a line was typed or accepted from a completion."
+        help="Prompt and completion tokens WakaTime's editor plugins recorded, input and output beneath. Separate from Claude organization usage: the two sources may overlap and must not be added together."
       />
     ),
     cell: ({ row }) => {

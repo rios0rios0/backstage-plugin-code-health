@@ -1,4 +1,5 @@
 import type {
+  ClaudeMetrics,
   ChurnUnit,
   ConfluenceContributorMetrics,
   ContributorIdentity,
@@ -10,6 +11,7 @@ import type {
   WakaTimeMetrics,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
+  mergeClaudeMetrics,
   computeRate,
   DEFAULT_CONTRIBUTOR_ROLE,
   formatDebt,
@@ -57,6 +59,7 @@ export interface ContributorTotals {
    */
   codeRepositories: Set<string>;
   wakaTime: WakaTimeMetrics[];
+  claude: ClaudeMetrics[];
   jira: JiraContributorMetrics[];
   confluence: ConfluenceContributorMetrics[];
 }
@@ -95,6 +98,7 @@ const empty = (): ContributorTotals => ({
   repositories: new Set(),
   codeRepositories: new Set(),
   wakaTime: [],
+  claude: [],
   jira: [],
   confluence: [],
 });
@@ -264,6 +268,7 @@ const mergeIdentities = (
 
 /** Everything a window's rows are accumulated from. */
 export interface ContributorAggregationInput {
+  readonly claude?: readonly ContributorMetricRow<ClaudeMetrics>[];
   readonly events: readonly CodeHealthEvent[];
   readonly wakaTime: readonly ContributorMetricRow<WakaTimeMetrics>[];
   readonly jira: readonly ContributorMetricRow<JiraContributorMetrics>[];
@@ -353,6 +358,15 @@ export const accumulateContributors = (
     totals.wakaTime.push(row.payload);
   }
 
+  for (const row of input.claude ?? []) {
+    const identity: IdentityRef = { source: "claude", sourceKey: row.contributorKey };
+    if (!input.people.isMeasured(identity)) continue;
+    const totals = enrichOnly(identity);
+    if (totals === undefined) continue;
+    remember(totals, identity, null);
+    totals.claude.push(row.payload);
+  }
+
   for (const row of input.jira) {
     const identity: IdentityRef = { source: "jira", sourceKey: row.contributorKey };
     const totals = enrichOnly(identity);
@@ -437,6 +451,7 @@ export const aggregateContributorSummaries = (
         repositories: totals.repositories.size,
         sonarMetrics: aggregateSonar(totals.codeRepositories, context.sonarByRepository),
         wakaTimeMetrics: mergeWakaTimeMetrics(totals.wakaTime),
+        claudeMetrics: mergeClaudeMetrics(totals.claude),
         jiraMetrics: mergeJiraContributorMetrics(totals.jira),
         confluenceMetrics: mergeConfluence(totals.confluence),
       };
@@ -487,6 +502,7 @@ export const zeroContributorSummary = (
   repositories: 0,
   sonarMetrics: null,
   wakaTimeMetrics: null,
+  claudeMetrics: null,
   jiraMetrics: null,
   confluenceMetrics: null,
 });

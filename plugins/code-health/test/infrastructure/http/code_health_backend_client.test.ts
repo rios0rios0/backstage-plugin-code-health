@@ -335,7 +335,7 @@ describe("CodeHealthBackendClient", () => {
       const capabilities = await client.getCapabilities();
 
       // then
-      expect(capabilities).toEqual({ wakatime: true, jira: false, confluence: true });
+      expect(capabilities).toEqual({ wakatime: true, jira: false, confluence: true, claude: false });
     });
 
     it("should report an integration the backend never mentioned as disabled", async () => {
@@ -350,6 +350,7 @@ describe("CodeHealthBackendClient", () => {
 
       // when / then
       expect(await client.getCapabilities()).toEqual({
+        claude: false,
         wakatime: true,
         jira: false,
         confluence: false,

@@ -131,6 +131,8 @@ export interface CodeHealthStore {
    * Storing the resolved person instead would bake a guess into the history.
    */
   saveContributorMetrics<T>(options: {
+    /** Atomically replaces the whole day and records completion, even when empty. */
+    complete?: boolean;
     source: IntegrationId;
     day: Day;
     capturedAt: Date;

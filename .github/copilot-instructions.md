@@ -15,7 +15,8 @@ application's `integrations` configuration, ingests a year of history in a rate-
 job, and stores it in the Backstage database. The browser talks only to `/api/code-health` and holds
 no credential.
 
-Four optional integrations enrich that history and are absent unless configured: **Sonar** (through
+Five optional integrations enrich that history and are absent unless configured: **Claude Code**
+(organization token consumption, excluded from productivity scoring), **Sonar** (through
 the community backend plugin), **WakaTime** (coding time and AI token counts), and **Jira** and
 **Confluence** (one Atlassian credential lights up both). Each identifies people under its own
 account system, which is why a contributor row is a *person* rather than an account and why the

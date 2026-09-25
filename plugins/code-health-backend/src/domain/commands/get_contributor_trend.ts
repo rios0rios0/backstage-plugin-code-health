@@ -1,4 +1,5 @@
 import type {
+  ClaudeMetrics,
   ConfluenceContributorMetrics,
   ContributorFleetRates,
   ContributorSummary,
@@ -12,6 +13,7 @@ import type {
   WakaTimeMetrics,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import {
+  claudeWindowDays,
   computeProductivityScore,
   contributorFleetRatesOf,
   DEFAULT_PRODUCTIVITY_WEIGHTS,
@@ -180,6 +182,7 @@ export class GetContributorTrend {
       rangeSnapshots,
       people,
       weights,
+      claudeRows,
     ] = await Promise.all([
       this.options.store.listEvents({ from: input.from, to: input.to }),
       this.options.store.listContributorMetrics<WakaTimeMetrics>({
@@ -204,6 +207,7 @@ export class GetContributorTrend {
       this.options.store.listSnapshots({ from, to }),
       loadPersonDirectory(this.options.store),
       this.options.weights?.run() ?? DEFAULT_PRODUCTIVITY_WEIGHTS,
+      this.options.store.listContributorMetrics<ClaudeMetrics>({ source: "claude", from, to }),
     ]);
 
     const sonar = sonarTimeline(baseline, rangeSnapshots);
@@ -211,6 +215,7 @@ export class GetContributorTrend {
     const wholeWindow = accumulateContributors({
       events,
       wakaTime: wakaTimeRows,
+      claude: claudeRows,
       jira: jiraRows,
       confluence: confluenceRows,
       people,
@@ -242,10 +247,13 @@ export class GetContributorTrend {
             capabilities,
             weights,
           );
-    // The same rows and the same day count the score's reference was taken
-    // over, so the team column on the card and the sentence behind each score
-    // component are one figure printed twice.
-    const fleet = contributorFleetRatesOf(windowRows, windowDays);
+    // Scored quantities retain the score's elapsed-day reference. Claude
+    // consumption uses UTC report dates because the provider cannot slice hours.
+    const fleet = contributorFleetRatesOf(
+      windowRows,
+      windowDays,
+      claudeWindowDays({ from: input.from.toISOString(), to: input.to.toISOString() }),
+    );
 
     const points = bucketsInWindow(input.from, input.to, input.bucket).map((start) => {
       const last = bucketEnd(start, input.bucket, to);
@@ -257,6 +265,7 @@ export class GetContributorTrend {
           accumulateContributors({
             events: eventsWithin(events, start, last),
             wakaTime: rowsWithin(wakaTimeRows, start, last),
+            claude: rowsWithin(claudeRows, start, last),
             jira: rowsWithin(jiraRows, start, last),
             confluence: new Map<string, ConfluenceContributorMetrics>(),
             people,

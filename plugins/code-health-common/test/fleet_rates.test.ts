@@ -54,6 +54,18 @@ const jira = (issuesResolved: number) => ({
 });
 
 describe("contributorFleetRatesOf", () => {
+  it("should average Claude consumption only over measured people and UTC report dates", () => {
+    // given
+    const measured = aContributor({ claudeMetrics: {
+      inputTokens: 100, outputTokens: 20, cacheReadTokens: 60, cacheCreationTokens: 10, daily: [],
+    } });
+    const missing = aContributor();
+    // when
+    const fleet = contributorFleetRatesOf([measured, missing], 1 / 24, 1);
+    // then
+    expect(fleet.claudeTokens).toBe(190);
+    expect(contributorFleetRatesOf([missing], 1).claudeTokens).toBeNull();
+  });
   it("should take the mean of every row as a daily rate, and count the people", () => {
     // given
     // Ten and thirty commits over ten days: a mean of twenty, so two a day.

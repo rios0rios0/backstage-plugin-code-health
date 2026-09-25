@@ -8,6 +8,7 @@ import { RequestBudget } from "./request_budget";
  * per-space reports with how many spaces the catalog names.
  */
 export type SnapshotSource =
+  | "claude"
   | "repositories"
   | "sonar"
   | "wakatime"
@@ -16,6 +17,7 @@ export type SnapshotSource =
   | "confluence-spaces";
 
 export const SNAPSHOT_SOURCES: readonly SnapshotSource[] = [
+  "claude",
   "repositories",
   "sonar",
   "wakatime",
@@ -26,6 +28,7 @@ export const SNAPSHOT_SOURCES: readonly SnapshotSource[] = [
 
 /** How each source is named in a log line. */
 export const SNAPSHOT_SOURCE_LABELS: Readonly<Record<SnapshotSource, string>> = {
+  claude: "Claude Code",
   repositories: "The repository loop",
   sonar: "Sonar",
   wakatime: "WakaTime",
@@ -44,6 +47,7 @@ export const SNAPSHOT_SOURCE_LABELS: Readonly<Record<SnapshotSource, string>> = 
  * so the repository allowance bounds both.
  */
 export const SNAPSHOT_ALLOWANCE_SETTINGS: Readonly<Record<SnapshotSource, string>> = {
+  claude: "codeHealth.claude.requestBudgetPerRun",
   repositories: "codeHealth.ingestion.requestBudgetPerRun",
   sonar: "codeHealth.ingestion.requestBudgetPerRun",
   wakatime: "codeHealth.wakaTime.requestBudgetPerRun",

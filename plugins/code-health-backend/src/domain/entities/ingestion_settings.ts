@@ -2,6 +2,7 @@ import type { SchedulerServiceTaskScheduleDefinition } from "@backstage/backend-
 import type { IntegrationCapabilities } from "@rios0rios0/backstage-plugin-code-health-common";
 import type { ConfluenceSettings } from "./confluence_settings";
 import type { JiraSettings } from "./jira_settings";
+import { isClaudeConfigured, type ClaudeSettings } from "./claude_settings";
 
 /** Catalog filters, in the shape `catalog.getEntities` expects. */
 export type EntityFilter = Record<string, string | string[]>;
@@ -100,6 +101,7 @@ export interface AtlassianSettings {
 }
 
 export interface CodeHealthSettings {
+  readonly claude: ClaudeSettings;
   /**
    * Catalog entity references — users or groups — allowed to start the history
    * collection over. Empty means nobody, which is the default.
@@ -165,6 +167,7 @@ export const integrationCapabilitiesOf = (
   const atlassian = isAtlassianConfigured(settings.atlassian);
 
   return {
+    claude: isClaudeConfigured(settings.claude),
     wakatime: isWakaTimeConfigured(settings.wakaTime),
     jira: atlassian && settings.atlassian.jira.enabled,
     confluence: atlassian && settings.atlassian.confluence.enabled,
