@@ -1,3 +1,4 @@
+import type { ClaudeMetrics } from "./claude_metrics";
 import type { ConfluenceContributorMetrics } from "./confluence_metrics";
 import type { ContributorRole } from "./contributor_role";
 import type { ContributorIdentity } from "./identity";
@@ -125,6 +126,8 @@ export interface ContributorSummary {
    */
   readonly sonarMetrics: SonarMetrics | null;
   readonly wakaTimeMetrics: WakaTimeMetrics | null;
+  /** Optional for compatibility with backends predating Claude collection. */
+  readonly claudeMetrics?: ClaudeMetrics | null;
   readonly jiraMetrics: JiraContributorMetrics | null;
   readonly confluenceMetrics: ConfluenceContributorMetrics | null;
 }

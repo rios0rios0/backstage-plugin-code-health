@@ -1,4 +1,5 @@
 import type {
+  ClaudeMetrics,
   ConfluenceContributorMetrics,
   ContributorSummary,
   JiraContributorMetrics,
@@ -53,7 +54,7 @@ export class ListContributorSummaries {
     // The day before `to` when the window ends at midnight — see `lastDayOf`.
     const day = lastDayOf(input.to);
 
-    const [events, wakaTimeRows, jiraRows, confluenceRows, snapshots, people] =
+    const [events, wakaTimeRows, jiraRows, confluenceRows, snapshots, people, claudeRows] =
       await Promise.all([
         this.options.store.listEvents({
           from: input.from,
@@ -83,11 +84,13 @@ export class ListContributorSummaries {
         }),
         this.options.store.listLatestSnapshots({ day }),
         loadPersonDirectory(this.options.store),
+        this.options.store.listContributorMetrics<ClaudeMetrics>({ source: "claude", from: toDay(input.from), to: day }),
       ]);
 
     const byPerson = accumulateContributors({
       events,
       wakaTime: wakaTimeRows,
+      claude: claudeRows,
       jira: jiraRows,
       confluence: confluenceRows,
       people,

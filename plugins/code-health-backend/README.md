@@ -119,9 +119,11 @@ the provider cannot answer:
 - [WakaTime](docs/wakatime.md) — coding time, language and editor breakdowns, branches, and AI
   token counts
 - [Jira](docs/jira.md) — tickets, interactions, story points, cycle and lead time
+- [Claude Code](docs/claude.md) — optional organization token consumption, daily history,
+  identity linking and exclusions; informational and excluded from productivity scores
 - [Confluence](docs/confluence.md) — pages, written volume, comments and page views
 
-All three report people under account systems that agree with neither each other nor the catalog, so
+These sources report people under account systems that agree with neither each other nor the catalog, so
 a contributor row is a **person** rather than an account. The `Identities` screen is where an account
 is attached to a catalog `User`; the WakaTime reference explains the rules that screen applies, and
 they are the same for every source.

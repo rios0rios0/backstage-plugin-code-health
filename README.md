@@ -55,6 +55,7 @@ rather than showing an empty dashboard.
 - **Not every account is a person being measured**: a build service, a bot, an outside contributor to a public repository, somebody who has left. Exclude one from the Identities tab, under one of four reasons, and it leaves every figure the plugin reports — the contributors table, both detail pages, the repository counters, the fleet cadence, and the fleet totals everybody's output is scored against. Nothing is deleted, so measuring it again restores every window already collected
 - **WakaTime integration**: coding time, active days, language and editor breakdowns, branches touched, files opened, and — where WakaTime's editor plugins report them — **AI token counts and the share of lines written by AI rather than typed**. It is the only source here that measures effort rather than output, and the only one that can see the difference between a line typed and a line accepted from a completion
 - **Jira integration**: tickets created and closed, interactions, story points estimated and finished, cycle and lead time, throughput, bug ratio, rework, and the open backlog by priority and age
+- **Claude Code usage**: optional input, output and cache-token totals from the organization Admin API, with daily, weekly and monthly averages, identity linking, exclusions and trends. This informational KPI never enters the productivity score. See [Claude Code setup and measurement rules](plugins/code-health-backend/docs/claude.md)
 - **Confluence integration**: pages created and edited, words written, comments, attachments, spaces contributed to, stale-page counts, and page views on Premium sites. One Atlassian credential lights up both products
 - **Documentation audit**: which repositories publish TechDocs, which already write documentation nobody wired up, and which have none
 - **Catalog API audit**: repositories shipping an OpenAPI, AsyncAPI, GraphQL or protobuf definition that declare no `spec.providesApis`
@@ -204,6 +205,25 @@ on its own. With the defaults — a 500-request budget every five minutes — 50
 four days to reach a full year. Raising `backfillChunk` to `P7D` brings that under a day. The dashboard is useful
 throughout: the actor collects the recent window before it starts walking backwards, so the last day
 is answerable from the first run and wider ranges unlock as the backfill advances.
+
+### Claude Code
+
+```yaml
+codeHealth:
+  claude:
+    enabled: true
+    apiKey: "${ANTHROPIC_ADMIN_KEY}"
+    historyDays: 90
+    requestBudgetPerRun: 500
+```
+
+Use an organization **Admin API key**. Claude collection is off by default and
+runs with the snapshot task on its own request allowance. Reports are daily in
+UTC: shorter selections include the reports for the dates they touch, not an
+estimated hourly count. Tokens include input, output, cache read and cache
+creation; they are separate from WakaTime AI tokens and never affect scores.
+See [Claude Code](plugins/code-health-backend/docs/claude.md) for backfill,
+account linking, exclusions, missing data and repository-scope rules.
 
 ### Sonar, WakaTime and Atlassian
 

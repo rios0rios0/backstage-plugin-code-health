@@ -1,4 +1,5 @@
 import type { ChurnUnit, ContributorSummary } from "./contributor_summary";
+import { claudeTokenTotal } from "./claude_metrics";
 import type { ContributorRates, ContributorRateSet } from "./contributor_rates";
 import { RATE_PERIODS } from "./contributor_rates";
 import { formatCount } from "./number_format";
@@ -24,6 +25,8 @@ import { fleetReferenceOf, meanRate, versionControl } from "./productivity_score
  * `null` is measured on nobody, never a rate of nothing.
  */
 export interface ContributorFleetRates {
+  /** Mean consumption per UTC date across measured people; never used in scores. */
+  readonly claudeTokens?: number | null;
   /** Days the window spans, which every figure below is a per-day rate over. */
   readonly days: number;
   /** How many people the window measured, quiet ones included. */
@@ -62,14 +65,22 @@ const anyMeasured = (
 export const contributorFleetRatesOf = (
   contributors: readonly ContributorSummary[],
   windowDays: number,
+  claudeDays: number = windowDays,
 ): ContributorFleetRates => {
   const reference = fleetReferenceOf(contributors, windowDays);
   const lines = (row: ContributorSummary) => (row.churnUnit === "lines" ? row.linesOfCode : null);
   const files = (row: ContributorSummary) => (row.churnUnit === "files" ? row.changedFiles : null);
   const coding = (row: ContributorSummary) => row.wakaTimeMetrics?.totalSeconds ?? null;
   const tickets = (row: ContributorSummary) => row.jiraMetrics?.issuesResolved ?? null;
+  const claude = (row: ContributorSummary) =>
+    row.claudeMetrics === undefined || row.claudeMetrics === null
+      ? null
+      : claudeTokenTotal(row.claudeMetrics);
 
   return {
+    claudeTokens: anyMeasured(contributors, claude)
+      ? meanRate(contributors, Math.max(1, claudeDays), claude)
+      : null,
     days: reference.days,
     people: contributors.length,
     commits: reference.commits,

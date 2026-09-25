@@ -18,7 +18,8 @@ application's existing **`integrations`** configuration, ingests a year of histo
 background job, and stores it in the Backstage database. The browser talks only to
 `/api/code-health` and holds no credential at all.
 
-Four optional integrations enrich that history and are absent unless configured: **Sonar** (through
+Five optional integrations enrich that history and are absent unless configured: **Claude Code**
+(organization token consumption, explicitly excluded from productivity scoring), **Sonar** (through
 the community backend plugin), **WakaTime** (coding time and AI token counts), and **Jira** and
 **Confluence** (one Atlassian credential lights up both). They each identify people under their own
 account system, which is why a contributor row is a *person* rather than an account and why the
@@ -165,6 +166,15 @@ The wire contract, and the pure functions both sides have to agree on.
 | `src/identity.ts` | Besides the suggestion ranking, `searchDirectoryUsers` — the "like" search the link picker and the backend share, every word matched in any order |
 
 ## Decisions worth not re-litigating
+
+- **Claude usage is informational.** `claudeMetrics` never enters productivity components or
+  weights. The opt-in `codeHealth.claude` integration uses the organization Admin API, daily UTC
+  reports and its own snapshot request budget. Account links and exclusions resolve on read.
+  Complete report days replace rows and record collection markers in one database transaction;
+  incomplete pagination never overwrites a previous reading. No Claude repository attribution is
+  invented. Range reads select UTC dates touched by the range, and Claude averages use that same
+  date count rather than dividing a daily report by an hour. See
+  `plugins/code-health-backend/docs/claude.md` for the integration contract and limitations.
 
 - **Every figure the plugin prints goes through `number_format.ts`, in a pinned locale.** A figure
   here is read, not parsed: `76604.9` in the monthly column of the Averages card is five digits a

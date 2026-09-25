@@ -21,6 +21,8 @@ import {
   formatPercent,
 } from "@rios0rios0/backstage-plugin-code-health-common";
 import { useMemo } from "react";
+import { claudeTokenSeries } from "../../domain/entities/claude_insights";
+import { ClaudeUsageInsights } from "../components/insights/claude_insights";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 import type { TrendValues } from "../../domain/entities/contributor_trend";
 import {
@@ -43,7 +45,7 @@ import type {
   OwnershipService,
   TrendService,
 } from "../../domain/services/dashboard_service";
-import { contributorsRouteRef } from "../../routes";
+import { CONTRIBUTOR_KEY_PARAM, contributorsRouteRef } from "../../routes";
 import type { TrendSeries } from "../components/charts/trend_chart";
 import { TrendChart } from "../components/charts/trend_chart";
 import { OwnedRepositoriesCard } from "../components/owned_repositories_card";
@@ -62,9 +64,6 @@ export interface ContributorDetailPageProps {
   readonly coverage: UseCoverageResult;
   readonly capabilities: IntegrationCapabilities;
 }
-
-/** The query parameter the Contributors tab links a person's detail page with. */
-export const CONTRIBUTOR_KEY_PARAM = "key";
 
 const useStyles = makeStyles((theme) => ({
   person: { display: "flex", alignItems: "center", gap: theme.spacing(2) },
@@ -372,6 +371,7 @@ export const ContributorDetailPage = ({
   const defects = useMemo(() => sonarDefectSeries(points), [points]);
   const sonarCoverage = useMemo(() => sonarCoverageSeries(points), [points]);
   const codingTime = useMemo(() => codingTimeSeries(points), [points]);
+  const claudeTokens = useMemo(() => claudeTokenSeries(points), [points]);
   const tickets = useMemo(() => ticketsResolvedSeries(points), [points]);
 
   // Every hook above runs before this: a page opened without a key still has to
@@ -533,6 +533,14 @@ export const ContributorDetailPage = ({
             scaleMax={100}
           />
 
+          {capabilities.claude ? (
+            <>
+              <ClaudeUsageInsights contributors={summary === null ? [] : [summary]} window={range.window} fleetDailyTokens={response?.fleet?.claudeTokens} />
+              <ChartCard title="Claude tokens over time" subheader={`Input, output and cache tokens. Excluded from productivity scores. ${bucketNote}`}
+                points={whenMeasured(claudeTokens, "tokens")} series={[{ key: "tokens", label: "Claude tokens", area: true }]}
+                emptyMessage="No Claude usage reports were collected for this person in this window." />
+            </>
+          ) : null}
           {capabilities.wakatime ? (
             <ChartCard
               title="Coding time"

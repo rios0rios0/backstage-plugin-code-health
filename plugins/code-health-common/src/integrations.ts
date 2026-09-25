@@ -9,20 +9,24 @@
  * declared capability rather than something inferred from whether any row
  * happens to carry a value.
  */
-export type IntegrationId = "wakatime" | "jira" | "confluence";
+export type IntegrationId = "wakatime" | "jira" | "confluence" | "claude";
 
-export const INTEGRATION_IDS: readonly IntegrationId[] = ["wakatime", "jira", "confluence"];
+export const INTEGRATION_IDS: readonly IntegrationId[] = ["wakatime", "jira", "confluence", "claude"];
 
 export const isIntegrationId = (value: unknown): value is IntegrationId =>
   typeof value === "string" && (INTEGRATION_IDS as readonly string[]).includes(value);
 
 /** Which integrations the backend was configured with. */
-export type IntegrationCapabilities = Readonly<Record<IntegrationId, boolean>>;
+export type IntegrationCapabilities = Readonly<Record<Exclude<IntegrationId, "claude">, boolean> & {
+  /** Absent on older backends, which means disabled. */
+  claude?: boolean;
+}>;
 
 export const NO_INTEGRATIONS: IntegrationCapabilities = {
   wakatime: false,
   jira: false,
   confluence: false,
+  claude: false,
 };
 
 /**
@@ -37,7 +41,7 @@ export const parseIntegrationCapabilities = (value: unknown): IntegrationCapabil
   if (typeof value !== "object" || value === null) return NO_INTEGRATIONS;
   const record = value as Record<string, unknown>;
 
-  return INTEGRATION_IDS.reduce<Record<IntegrationId, boolean>>(
+  return INTEGRATION_IDS.reduce<IntegrationCapabilities>(
     (capabilities, id) => ({ ...capabilities, [id]: record[id] === true }),
     { ...NO_INTEGRATIONS },
   );

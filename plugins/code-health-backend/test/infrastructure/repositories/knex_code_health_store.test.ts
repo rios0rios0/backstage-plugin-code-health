@@ -63,6 +63,38 @@ const anEvent = (overrides: Partial<CodeHealthEvent> = {}): CodeHealthEvent => (
 });
 
 describe("KnexCodeHealthStore", () => {
+  it("should atomically replace a complete integration day and remember an empty one", async () => {
+    // given
+    const store = await createStore();
+    const day = "2026-09-25";
+    await store.saveContributorMetrics({ source: "claude", day, capturedAt: NOW, complete: true, metrics: new Map([["old", { inputTokens: 10 }]]) });
+    // when
+    await store.saveContributorMetrics({ source: "claude", day, capturedAt: NOW, complete: true, metrics: new Map([["new", { inputTokens: 20 }]]) });
+    const replaced = await store.listContributorMetrics({ source: "claude", from: day, to: day });
+    await store.saveContributorMetrics({ source: "claude", day, capturedAt: NOW, complete: true, metrics: new Map() });
+    // then
+    expect(replaced).toEqual([{ day, contributorKey: "new", payload: { inputTokens: 20 } }]);
+    expect(await store.listContributorMetrics({ source: "claude", from: day, to: day })).toEqual([]);
+    expect(await store.listContributorMetricDays({ source: "claude", from: day, to: day })).toEqual([day]);
+    expect(await store.listContributorMetricDays({ source: "jira", from: day, to: day })).toEqual([]);
+  });
+
+  it("should roll back a day replacement when writing its collection marker fails", async () => {
+    // given
+    const store = await createStore();
+    const day = "2026-09-25";
+    await store.saveContributorMetrics({ source: "claude", day, capturedAt: NOW, metrics: new Map([["old", { inputTokens: 10 }]]) });
+    await store.knex.schema.dropTable("code_health_metric_collection_days");
+    // when
+    const write = store.saveContributorMetrics({ source: "claude", day, capturedAt: NOW, complete: true, metrics: new Map([["new", { inputTokens: 20 }]]) });
+    // then
+    // Native SQLite errors may originate in another Jest realm; assert the
+    // database failure itself rather than JavaScript's Error constructor.
+    await expect(write).rejects.toMatchObject({
+      message: expect.stringContaining("no such table: code_health_metric_collection_days"),
+    });
+    expect(await store.listContributorMetrics({ source: "claude", from: day, to: day })).toEqual([{ day, contributorKey: "old", payload: { inputTokens: 10 } }]);
+  });
   describe("syncRepositories", () => {
     it("should insert a repository with a cursor spanning the retention window", async () => {
       // given

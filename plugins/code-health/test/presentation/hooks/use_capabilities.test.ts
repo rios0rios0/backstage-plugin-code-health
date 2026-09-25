@@ -14,6 +14,7 @@ describe("useCapabilities", () => {
     // then
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.capabilities).toEqual({
+      claude: false,
       wakatime: true,
       jira: true,
       confluence: false,

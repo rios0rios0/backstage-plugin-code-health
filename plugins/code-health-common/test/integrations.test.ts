@@ -35,7 +35,7 @@ describe("parseIntegrationCapabilities", () => {
     const capabilities = parseIntegrationCapabilities(body);
 
     // then
-    expect(capabilities).toEqual({ wakatime: true, jira: false, confluence: true });
+    expect(capabilities).toEqual({ wakatime: true, jira: false, confluence: true, claude: false });
   });
 
   it("should report an integration the backend never mentioned as disabled", () => {
@@ -48,7 +48,7 @@ describe("parseIntegrationCapabilities", () => {
     const capabilities = parseIntegrationCapabilities(body);
 
     // then
-    expect(capabilities).toEqual({ wakatime: true, jira: false, confluence: false });
+    expect(capabilities).toEqual({ wakatime: true, jira: false, confluence: false, claude: false });
   });
 
   it("should treat a non-boolean flag as disabled", () => {

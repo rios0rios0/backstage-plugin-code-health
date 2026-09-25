@@ -1,5 +1,8 @@
 import { createRouteRef, createSubRouteRef } from "@backstage/core-plugin-api";
 
+/** Shared by detail pages and links, without importing a page into its own cards. */
+export const CONTRIBUTOR_KEY_PARAM = "key";
+
 /**
  * The plugin root, which renders the **Insights** tab.
  *

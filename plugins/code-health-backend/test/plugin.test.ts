@@ -470,9 +470,21 @@ describe("codeHealthPlugin", () => {
       expect(response.status).toBe(200);
       expect(response.body.integrations).toEqual({
         wakatime: false,
+        claude: false,
         jira: false,
         confluence: false,
       });
+    });
+
+    it("should expose Claude capability without exposing its Admin API key", async () => {
+      // given
+      const { server } = await startBackend([], { claude: { enabled: true, apiKey: "fixture-token-placeholder" } });
+      // when
+      const response = await request(server).get("/api/code-health/v1/capabilities");
+      // then
+      expect(response.status).toBe(200);
+      expect(response.body.integrations.claude).toBe(true);
+      expect(JSON.stringify(response.body)).not.toContain("fixture-token-placeholder");
     });
 
     it("should light up both Atlassian products from one credential", async () => {
@@ -492,6 +504,7 @@ describe("codeHealthPlugin", () => {
       // then
       expect(response.body.integrations).toEqual({
         wakatime: true,
+        claude: false,
         jira: true,
         confluence: true,
       });

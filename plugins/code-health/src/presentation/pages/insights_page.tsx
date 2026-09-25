@@ -32,6 +32,7 @@ import { StatTile } from "../components/charts/stat_tile";
 import { StatusBreakdown } from "../components/charts/status_breakdown";
 import { DashboardToolbar } from "../components/dashboard_toolbar";
 import { ConfluenceFleetInsights } from "../components/insights/confluence_insights";
+import { ClaudeUsageInsights } from "../components/insights/claude_insights";
 import { JiraFleetInsights } from "../components/insights/jira_insights";
 import { WakaTimeFleetInsights } from "../components/insights/wakatime_insights";
 import { useAutoRefresh } from "../hooks/use_auto_refresh";
@@ -264,6 +265,9 @@ export const InsightsPage = ({
               name — the same split the version control cards already follow. */}
           {capabilities.wakatime ? (
             <WakaTimeFleetInsights contributors={contributors} />
+          ) : null}
+          {capabilities.claude ? (
+            <ClaudeUsageInsights contributors={contributors} window={range.window} />
           ) : null}
 
           {capabilities.jira ? (

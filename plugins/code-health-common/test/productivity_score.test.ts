@@ -57,6 +57,22 @@ const aContributor = (overrides: Partial<ContributorSummary> = {}): ContributorS
   ...overrides,
 });
 
+describe("Claude score exclusion", () => {
+  it.each(["engineer", "lead"] as const)("should leave every %s score and weight unchanged when Claude is enabled", (role) => {
+    // given
+    const original = aContributor({ role });
+    const withUsage = { ...original, claudeMetrics: { inputTokens: 1e9, outputTokens: 1e8, cacheReadTokens: 1e10, cacheCreationTokens: 1e7, daily: [] } };
+    const claudeOnly = aContributor({ key: "claude:someone", identities: [{ source: "claude", sourceKey: "someone", displayName: null }], commits: 0, linesOfCode: 0, churnUnit: "none", pullRequestsMerged: 0, reviewsGiven: 0 });
+    const baseline = computeProductivityScore(original, fleetReferenceOf([original], 30));
+    // when
+    const enabled = computeProductivityScore(withUsage, fleetReferenceOf([withUsage, claudeOnly], 30), { ...NO_INTEGRATIONS, claude: true });
+    // then
+    expect(enabled).toEqual(baseline);
+    expect(productivityComponentsFor({ ...NO_INTEGRATIONS, claude: true })).toEqual(productivityComponentsFor(NO_INTEGRATIONS));
+    expect(PRODUCTIVITY_COMPONENT_IDS).not.toContain("claude");
+  });
+});
+
 const sonar = (overrides: Partial<SonarMetrics> = {}): SonarMetrics => ({
   bugs: 0,
   codeSmells: 0,

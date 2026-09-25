@@ -644,6 +644,7 @@ describe("CaptureRepositorySnapshots", () => {
     // Jira is asked twice — once per repository set, once per day — and the
     // stub spends on both.
     expect(result.requestsBySource).toEqual({
+      claude: 0,
       repositories: 6,
       sonar: 3,
       wakatime: 0,

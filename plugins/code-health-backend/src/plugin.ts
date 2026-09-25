@@ -6,6 +6,9 @@ import { CODE_HEALTH_PLUGIN_ID } from "@rios0rios0/backstage-plugin-code-health-
 import { AssignContributorRole } from "./domain/commands/assign_contributor_role";
 import { AuthorizeAdministrator } from "./domain/commands/authorize_administrator";
 import { CaptureRepositorySnapshots } from "./domain/commands/capture_repository_snapshots";
+import { CollectClaudeUsage } from "./domain/commands/collect_claude_usage";
+import { isClaudeConfigured } from "./domain/entities/claude_settings";
+import { ClaudeApiEnricher } from "./infrastructure/services/claude_enricher";
 import { GetContributorTrend } from "./domain/commands/get_contributor_trend";
 import { GetProductivityWeights } from "./domain/commands/get_productivity_weights";
 import { GetRepositoryTimeSeries } from "./domain/commands/get_repository_time_series";
@@ -254,6 +257,13 @@ export const codeHealthPlugin = createBackendPlugin({
           : null;
 
         const snapshots = new CaptureRepositorySnapshots({
+          claude: isClaudeConfigured(settings.claude)
+            ? new CollectClaudeUsage({
+                store, identities: identityObserver, logger,
+                historyDays: settings.claude.historyDays,
+                enricher: new ClaudeApiEnricher({ gateway, apiKey: settings.claude.apiKey! }),
+              })
+            : undefined,
           store,
           collectors,
           sonar: settings.sonar.enabled
@@ -298,6 +308,7 @@ export const codeHealthPlugin = createBackendPlugin({
           // Each optional source spends an allowance of its own during the
           // pass. The repository loop and Sonar spend the ingestion budget.
           requestBudgets: {
+            claude: settings.claude.requestBudgetPerRun,
             wakaTime: settings.wakaTime.requestBudgetPerRun,
             jira: settings.jira.requestBudgetPerRun,
             confluence: settings.confluence.requestBudgetPerRun,

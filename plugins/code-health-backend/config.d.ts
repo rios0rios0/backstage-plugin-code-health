@@ -9,6 +9,20 @@
  */
 export interface Config {
   codeHealth?: {
+    /** @visibility backend */
+    claude?: {
+      /** Opt-in Claude Code usage; never affects productivity scores. @visibility backend */
+      enabled?: boolean;
+      /**
+       * Organization Admin API key.
+       * @visibility secret
+       */
+      apiKey?: string;
+      /** UTC days to backfill, 1–365; default 90. @visibility backend */
+      historyDays?: number;
+      /** Independent request allowance per snapshot pass; default 500. @visibility backend */
+      requestBudgetPerRun?: number;
+    };
     /**
      * Who may start the history collection over, and who may change how the
      * productivity score is read — the weights each role is scored on and

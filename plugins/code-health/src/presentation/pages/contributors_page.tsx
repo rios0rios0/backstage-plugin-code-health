@@ -22,6 +22,7 @@ import { ActivityRankings } from "../components/insights/activity_rankings";
 import { ConfluenceContributorInsights } from "../components/insights/confluence_insights";
 import { JiraContributorInsights } from "../components/insights/jira_insights";
 import { WakaTimeContributorInsights } from "../components/insights/wakatime_insights";
+import { ClaudeContributorInsights } from "../components/insights/claude_insights";
 import { useAutoRefresh } from "../hooks/use_auto_refresh";
 import { useContributors } from "../hooks/use_contributors";
 import type { UseCoverageResult } from "../hooks/use_coverage";
@@ -170,6 +171,8 @@ export const ContributorsPage = ({
           {capabilities.wakatime ? (
             <WakaTimeContributorInsights contributors={contributors} />
           ) : null}
+
+          {capabilities.claude ? <ClaudeContributorInsights contributors={contributors} /> : null}
 
           {capabilities.jira ? (
             <JiraContributorInsights contributors={contributors} />

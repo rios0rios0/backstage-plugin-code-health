@@ -1,7 +1,7 @@
 import { useRouteRef } from "@backstage/core-plugin-api";
 import type { RankedItem } from "../../../domain/entities/insights";
 import { contributorDetailRouteRef, repositoryDetailRouteRef } from "../../../routes";
-import { CONTRIBUTOR_KEY_PARAM } from "../../pages/contributor_detail_page";
+import { CONTRIBUTOR_KEY_PARAM } from "../../../routes";
 
 /**
  * Where a ranked row goes when it names somebody or something this plugin has

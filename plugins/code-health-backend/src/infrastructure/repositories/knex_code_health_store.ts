@@ -54,6 +54,7 @@ const EVENTS = "code_health_events";
 const CHUNKS = "code_health_ingested_chunks";
 const SNAPSHOTS = "code_health_snapshots";
 const CONTRIBUTOR_MEASURES = "code_health_contributor_measures";
+const METRIC_COLLECTION_DAYS = "code_health_metric_collection_days";
 const IDENTITIES = "code_health_identities";
 const IDENTITY_LINKS = "code_health_identity_links";
 const IDENTITY_EXCLUSIONS = "code_health_identity_exclusions";
@@ -557,6 +558,7 @@ export class KnexCodeHealthStore implements CodeHealthStore {
   }
 
   async saveContributorMetrics<T>(options: {
+    complete?: boolean;
     source: IntegrationId;
     day: Day;
     capturedAt: Date;
@@ -569,6 +571,21 @@ export class KnexCodeHealthStore implements CodeHealthStore {
       captured_at: options.capturedAt,
       payload: JSON.stringify(metrics),
     }));
+    if (options.complete) {
+      await this.client.transaction(async (transaction) => {
+        await transaction(CONTRIBUTOR_MEASURES)
+          .where({ source: options.source, day: options.day })
+          .delete();
+        for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
+          await transaction(CONTRIBUTOR_MEASURES).insert(rows.slice(index, index + INSERT_BATCH_SIZE));
+        }
+        await transaction(METRIC_COLLECTION_DAYS)
+          .insert({ source: options.source, day: options.day, captured_at: options.capturedAt })
+          .onConflict(["source", "day"])
+          .merge(["captured_at"]);
+      });
+      return;
+    }
     if (rows.length === 0) return;
 
     for (let index = 0; index < rows.length; index += INSERT_BATCH_SIZE) {
@@ -629,7 +646,12 @@ export class KnexCodeHealthStore implements CodeHealthStore {
       .distinct("day")
       .orderBy("day", "asc");
 
-    return rows.map((row) => fromStoredDate(row.day));
+    const completed = await this.client(METRIC_COLLECTION_DAYS)
+      .where({ source: options.source })
+      .andWhere("day", ">=", options.from)
+      .andWhere("day", "<=", options.to)
+      .select<{ day: Date | string }[]>("day");
+    return [...new Set([...rows, ...completed].map((row) => fromStoredDate(row.day)))].sort();
   }
 
   async recordObservedIdentities(options: {
