@@ -65,9 +65,6 @@ export interface ContributorDetailPageProps {
   readonly capabilities: IntegrationCapabilities;
 }
 
-/** The query parameter the Contributors tab links a person's detail page with. */
-export { CONTRIBUTOR_KEY_PARAM } from "../../routes";
-
 const useStyles = makeStyles((theme) => ({
   person: { display: "flex", alignItems: "center", gap: theme.spacing(2) },
   avatar: { width: 48, height: 48 },
