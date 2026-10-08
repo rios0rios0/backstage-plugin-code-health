@@ -382,6 +382,29 @@ describe("AzureDevOpsCollector", () => {
       ...overrides,
     });
 
+    /**
+     * The source branch's history listed from a commit, which is the only
+     * place Azure DevOps reports a pull request's commits with change counts.
+     */
+    const withSourceHistory = (commits: Record<string, unknown>[]) =>
+      server.route((request) =>
+        request.path.endsWith("/commits") &&
+        request.query.get("searchCriteria.itemVersion.versionType") === "commit"
+          ? { body: { value: commits } }
+          : undefined,
+      );
+
+    const sourceLookups = () =>
+      server.requests.filter(
+        (request) => request.query.get("searchCriteria.itemVersion.versionType") === "commit",
+      );
+
+    const pullRequestCommits = (count: number) =>
+      Array.from({ length: count }, (_unused, index) => ({
+        commitId: `work-${index + 1}`,
+        author: { email: "author@example.com", date: "2026-08-06T10:00:00Z" },
+      }));
+
     const withClosed = (pullRequest: Record<string, unknown>, commits: Record<string, unknown>[]) =>
       server
         .onPath("/repositories/gateway", () => ({ body: { id: "guid-1" } }))
@@ -462,15 +485,11 @@ describe("AzureDevOpsCollector", () => {
             ],
           },
         }))
-        .on("/commitsbatch", (request) => ({
-          body: {
-            value: (JSON.parse(request.body) as { ids: string[] }).ids.map((commitId) => ({
-              commitId,
-              changeCounts: { Edit: commitId === "work-1" ? 4 : 400 },
-            })),
-          },
-        }));
-      withClosed(completed({}), [
+      withSourceHistory([
+        { commitId: "work-2", changeCounts: { Edit: 400 } },
+        { commitId: "work-1", changeCounts: { Edit: 4 } },
+      ]);
+      withClosed(completed({ lastMergeSourceCommit: { commitId: "source-tip" } }), [
         {
           commitId: "landed",
           comment: "Merged PR 42: add the thing",
@@ -492,9 +511,99 @@ describe("AzureDevOpsCollector", () => {
         occurredAt: new Date("2026-08-06T10:00:00Z"),
         changedFiles: 4,
       });
-      const batch = server.requests.find((request) => request.path.endsWith("/commitsbatch"));
-      expect(batch?.method).toBe("POST");
-      expect(JSON.parse(batch!.body)).toEqual({ ids: ["work-1", "work-2"] });
+    });
+
+    it("should read a plain merge's change counts off the history at its source commit", async () => {
+      // given
+      // Neither the pull request's commit list, nor a single commit, nor
+      // `commitsbatch` reports change counts; only the commit list does.
+      server.onPath("/pullrequests/42/commits", () => ({ body: { value: pullRequestCommits(1) } }));
+      withSourceHistory([
+        { commitId: "unrelated", changeCounts: { Add: 9 } },
+        { commitId: "work-1", changeCounts: { Add: 1, Edit: 2, Delete: 3 } },
+      ]);
+      withClosed(completed({ lastMergeSourceCommit: { commitId: "source-tip" } }), []);
+
+      // when
+      const result = await collect();
+
+      // then
+      const commits = result.events.filter((event) => event.kind === "commit");
+      expect(commits.map((event) => [event.externalId, event.changedFiles])).toEqual([["work-1", 6]]);
+      const [lookup] = sourceLookups();
+      expect(lookup.path).toBe("/example-org/platform/_apis/git/repositories/guid-1/commits");
+      expect(lookup.query.get("searchCriteria.itemVersion.version")).toBe("source-tip");
+      expect(lookup.query.get("searchCriteria.fromDate")).toBeNull();
+      expect(server.requests.filter((request) => request.path.endsWith("/commitsbatch"))).toEqual([]);
+    });
+
+    it.each([
+      [1, "50"],
+      [30, "120"],
+      [60, "200"],
+    ])(
+      "should read deep enough into the source history for %i commits",
+      async (count, top) => {
+        // given
+        // What was merged into the branch from the target on the way sits
+        // between the pull request's own commits, so they are not the newest few.
+        server.onPath("/pullrequests/42/commits", () => ({ body: { value: pullRequestCommits(count) } }));
+        withSourceHistory([]);
+        withClosed(completed({ lastMergeSourceCommit: { commitId: "source-tip" } }), []);
+
+        // when
+        await collect();
+
+        // then
+        expect(sourceLookups().map((request) => request.query.get("searchCriteria.$top"))).toEqual([top]);
+      },
+    );
+
+    it("should leave a commit the source history does not reach without a count", async () => {
+      // given
+      server.onPath("/pullrequests/42/commits", () => ({ body: { value: pullRequestCommits(2) } }));
+      withSourceHistory([{ commitId: "work-1", changeCounts: { Edit: 2 } }]);
+      withClosed(completed({ lastMergeSourceCommit: { commitId: "source-tip" } }), []);
+
+      // when
+      const result = await collect();
+
+      // then
+      const commits = result.events.filter((event) => event.kind === "commit");
+      expect(commits.map((event) => [event.externalId, event.changedFiles])).toEqual([
+        ["work-1", 2],
+        ["work-2", null],
+      ]);
+    });
+
+    it("should not look the counts up when the pull request names no source commit", async () => {
+      // given
+      server.onPath("/pullrequests/42/commits", () => ({ body: { value: pullRequestCommits(1) } }));
+      withSourceHistory([{ commitId: "work-1", changeCounts: { Edit: 2 } }]);
+      withClosed(completed({}), []);
+
+      // when
+      const result = await collect();
+
+      // then
+      expect(result.events.find((event) => event.kind === "commit")?.changedFiles).toBeNull();
+      expect(sourceLookups()).toEqual([]);
+    });
+
+    it("should charge the change-count lookup to the request budget", async () => {
+      // given
+      server.onPath("/pullrequests/42/commits", () => ({ body: { value: pullRequestCommits(1) } }));
+      withSourceHistory([{ commitId: "work-1", changeCounts: { Edit: 2 } }]);
+      withClosed(completed({ lastMergeSourceCommit: { commitId: "source-tip" } }), []);
+      const budget = new RequestBudget(50);
+      const { collector } = createCollector();
+
+      // when
+      await collector.collect(anAzureRepository(server.baseUrl), WINDOW, { budget });
+
+      // then
+      expect(sourceLookups()).toHaveLength(1);
+      expect(budget.spent).toBe(server.requests.length);
     });
 
     it("should not ask for change counts the pull request's commit list already carried", async () => {

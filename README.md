@@ -181,6 +181,11 @@ codeHealth:
     # Day by day. `P7D` finishes the backfill roughly seven times sooner, at the
     # cost of coarser resume granularity when a run is interrupted.
     backfillChunk: 'P1D'
+    # Hours behind the forward cursor every incremental run reads again. Azure
+    # DevOps dates a rebased commit when it prepared the merge, which can be
+    # hours before the commit reaches the branch; without the overlap a run in
+    # between steps past it for good. Re-reading stores nothing twice.
+    incrementalOverlapHours: 24
     # Hard ceiling on provider requests per ingestion run, and per snapshot
     # pass on the repository loop. When it is spent the run stops and the next
     # one resumes from the same cursors; a snapshot pass that stops short takes

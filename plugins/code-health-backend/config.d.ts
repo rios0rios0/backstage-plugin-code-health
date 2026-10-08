@@ -86,6 +86,21 @@ export interface Config {
       backfillChunk?: string;
 
       /**
+       * Hours behind the forward cursor that every incremental run reads
+       * again. Defaults to 24.
+       *
+       * Azure DevOps dates a commit a rebase completion writes when it
+       * prepared the merge, which can be hours before the commit is on the
+       * branch. A run in that gap moves the cursor past the commit before it
+       * can be seen, and only a window reaching back over it ever returns it.
+       * Re-reading is idempotent; the cost is a wider date range per request,
+       * not more requests.
+       *
+       * @visibility backend
+       */
+      incrementalOverlapHours?: number;
+
+      /**
        * Hard ceiling on provider requests issued per scheduled run of the
        * ingestion actor, and per snapshot pass on the repository loop — the
        * provider snapshots and the Sonar readings taken beside them. Defaults

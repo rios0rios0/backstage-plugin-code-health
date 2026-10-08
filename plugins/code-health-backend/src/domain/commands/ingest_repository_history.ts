@@ -25,6 +25,9 @@ import type { VcsCollector } from "../services/vcs_collector";
  */
 const COLLECTED_KINDS: readonly EventKind[] = ["commit", "pull_request", "pr_review", "build"];
 
+const MILLISECONDS_PER_HOUR = 60 * 60 * 1000;
+const MILLISECONDS_PER_DAY = 24 * MILLISECONDS_PER_HOUR;
+
 export interface IngestionRunResult {
   readonly refreshed: number;
   readonly backfilled: number;
@@ -222,11 +225,14 @@ export class IngestRepositoryHistory {
     input: { now: Date; signal?: AbortSignal },
   ): Promise<number> {
     const { repository, state } = entry;
-    const from = state.incrementalThrough;
-    // Capped at one chunk so a backend that was down for a week catches up over
-    // several runs instead of asking one provider for a week in a single call.
+    const from = this.incrementalFrom(state);
+    // Capped at one chunk past the cursor, not past `from`, so a backend that
+    // was down for a week catches up over several runs instead of asking one
+    // provider for a week in a single call, and the overlap never eats the
+    // step forward.
     const capped = new Date(
-      from.getTime() + this.options.settings.backfillChunkDays * 24 * 60 * 60 * 1000,
+      state.incrementalThrough.getTime() +
+        this.options.settings.backfillChunkDays * MILLISECONDS_PER_DAY,
     );
     const to = capped < input.now ? capped : input.now;
 
@@ -292,6 +298,25 @@ export class IngestRepositoryHistory {
     await this.options.identities.observe(actorsIn(collected.events), input.now);
 
     return collected.events.length;
+  }
+
+  /**
+   * The cursor less the overlap, never before the retention floor and never
+   * after the cursor itself.
+   *
+   * A commit can reach the branch dated before a cursor that already passed
+   * it, see `incrementalOverlapHours`. Re-reading the span is idempotent, and
+   * the days it covers end to end are recorded as fetched again, which they
+   * were.
+   */
+  private incrementalFrom(state: IngestionState): Date {
+    const overlapped = new Date(
+      state.incrementalThrough.getTime() -
+        this.options.settings.incrementalOverlapHours * MILLISECONDS_PER_HOUR,
+    );
+    const floor = startOfDay(state.backfillFloor);
+    if (state.incrementalThrough < floor) return state.incrementalThrough;
+    return overlapped < floor ? floor : overlapped;
   }
 
   /** One chunk further back, never past the retention floor. */
