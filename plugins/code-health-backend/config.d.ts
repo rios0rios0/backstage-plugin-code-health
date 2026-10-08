@@ -342,7 +342,9 @@ export interface Config {
         storyPointsField?: string;
 
         /**
-         * Issues fetched per project per run. Defaults to 1000.
+         * Optional ceiling on issues fetched per project per run. Unset by
+         * default, so the scan pages through every issue the window touched and
+         * the run is bounded by `requestBudgetPerRun` instead.
          *
          * @visibility backend
          */
@@ -350,10 +352,10 @@ export interface Config {
 
         /**
          * Requests one snapshot pass may spend on Jira. Defaults to 500,
-         * which is room for about two dozen projects at the default
-         * `maxIssuesPerProject`: a project costs up to ten pages of issues,
-         * two backlog lookups and one count per priority, and three
-         * site-wide lookups are paid once per run.
+         * which is room for about two dozen projects that each update 1,000
+         * issues a window: a project costs one page per hundred issues
+         * updated in the window, two backlog lookups and one count per
+         * priority, and three site-wide lookups are paid once per run.
          *
          * An allowance of its own rather than a share of
          * `ingestion.requestBudgetPerRun`, so a project with a large ticket

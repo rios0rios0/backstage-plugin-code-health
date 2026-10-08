@@ -37,11 +37,13 @@ export interface JiraSettings {
    */
   readonly historyDays: number;
   /**
-   * Ceiling on issues pulled per project scope, per run.
+   * Optional ceiling on issues pulled per project scope, per run.
    *
-   * Bounds the cost of a project with a very large ticket volume, at the price
-   * of measuring only the most recently updated issues in it. The enricher logs
-   * when it hits this, because a silently truncated measurement is one somebody
+   * Unset, the scan pages until Jira reports the last page, so every issue the
+   * window touched is measured however busy the project is; the run's cost is
+   * bounded by `requestBudgetPerRun` instead. Setting it trades completeness for
+   * cost by measuring only the most recently updated issues, and the enricher
+   * logs when it bites, because a silently truncated measurement is one somebody
    * would otherwise compare against a complete one.
    */
   readonly maxIssuesPerProject: number;
@@ -57,12 +59,13 @@ export interface JiraSettings {
 }
 
 export const DEFAULT_JIRA_HISTORY_DAYS = 90;
-export const DEFAULT_JIRA_MAX_ISSUES_PER_PROJECT = 1000;
+export const DEFAULT_JIRA_MAX_ISSUES_PER_PROJECT = Number.POSITIVE_INFINITY;
 /**
- * Room for about two dozen projects at the default `maxIssuesPerProject`.
+ * Room for about two dozen projects that each update 1,000 issues a window.
  *
- * A project costs at most ten pages of issues, two backlog lookups and one
- * count per priority, and three site-wide lookups are paid once per run.
+ * A project costs one page per hundred issues updated in the window, two
+ * backlog lookups and one count per priority, and three site-wide lookups are
+ * paid once per run.
  */
 export const DEFAULT_JIRA_REQUEST_BUDGET_PER_RUN = 500;
 

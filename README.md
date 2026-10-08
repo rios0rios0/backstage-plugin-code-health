@@ -257,7 +257,7 @@ codeHealth:
     jira:
       enabled: true
       # Jira's own allowance per snapshot pass, room for about two dozen
-      # projects at the default `maxIssuesPerProject`.
+      # projects that each update 1,000 issues a window.
       requestBudgetPerRun: 500
     confluence:
       enabled: true

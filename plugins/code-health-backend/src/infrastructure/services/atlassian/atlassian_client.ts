@@ -105,8 +105,10 @@ export class AtlassianClient {
     readonly context: EnrichmentContext;
     readonly fetchPage: (cursor: string | null) => Promise<AtlassianPage<TItem>>;
     readonly limit?: number;
+    readonly limitSetting?: string;
   }): Promise<TItem[]> {
     const limit = options.limit ?? this.maxResultsPerRun;
+    const limitSetting = options.limitSetting ?? "codeHealth.atlassian.maxResultsPerRun";
     const collected: TItem[] = [];
     let cursor: string | null = null;
 
@@ -126,7 +128,7 @@ export class AtlassianClient {
         if (cursor !== null) {
           this.options.logger.info(
             `stopped paginating at ${collected.length} results; raise ` +
-              `codeHealth.atlassian.maxResultsPerRun to collect the rest`,
+              `${limitSetting} to collect the rest`,
           );
         }
         return collected.slice(0, limit);

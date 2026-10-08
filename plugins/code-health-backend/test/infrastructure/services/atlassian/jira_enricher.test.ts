@@ -334,7 +334,73 @@ describe("JiraApiEnricher", () => {
 
       // then
       expect(contributors.size).toBe(0);
-      expect(logger.at("info").join("\n")).toContain("Jira scan stopped");
+      expect(logger.at("warn").join("\n")).toContain(
+        "Jira scan stopped at project PLAT after 2 requests",
+      );
+      expect(logger.at("warn").join("\n")).toContain(
+        "Raise codeHealth.atlassian.jira.requestBudgetPerRun to measure the rest",
+      );
+    });
+
+    it("should measure every issue past a thousand when no ceiling is set", async () => {
+      // given
+      withSiteMetadata([]);
+      const issues = Array.from({ length: 1001 }, (_, index) =>
+        aResolvedIssue(`PLAT-${index + 1}`, "dev-1"),
+      );
+      server.on("/search/jql", (request) => {
+        const body = JSON.parse(request.body) as { jql: string; nextPageToken?: string };
+        if (body.jql.includes("statusCategory != Done")) {
+          return { body: { issues: [], isLast: true } };
+        }
+        const start = Number(body.nextPageToken ?? "0");
+        const next = start + 100;
+        return {
+          body: {
+            issues: issues.slice(start, next),
+            isLast: next >= issues.length,
+            nextPageToken: String(next),
+          },
+        };
+      });
+      withCounts(0);
+      const { enricher, logger, context } = createEnricher();
+
+      // when
+      const contributors = await enricher.fetchContributors(context);
+
+      // then
+      expect(contributors.get("dev-1")?.issuesResolved).toBe(1001);
+      expect(logger.at("info").join("\n")).not.toContain("stopped paginating");
+    });
+
+    it("should keep the most recent issues and name the setting to raise when a project exceeds maxIssuesPerProject", async () => {
+      // given
+      withSiteMetadata([]);
+      server.on("/search/jql", (request) => {
+        const body = JSON.parse(request.body) as { jql: string };
+        if (body.jql.includes("statusCategory != Done")) {
+          return { body: { issues: [], isLast: true } };
+        }
+        return {
+          body: {
+            issues: [aResolvedIssue("PLAT-2", "dev-1"), aResolvedIssue("PLAT-1", "dev-1")],
+            isLast: false,
+            nextPageToken: "page-2",
+          },
+        };
+      });
+      withCounts(0);
+      const { enricher, logger, context } = createEnricher({ settings: { maxIssuesPerProject: 1 } });
+
+      // when
+      const contributors = await enricher.fetchContributors(context);
+
+      // then
+      expect(contributors.get("dev-1")?.issuesResolved).toBe(1);
+      expect(logger.at("info").join("\n")).toContain(
+        "raise codeHealth.atlassian.jira.maxIssuesPerProject to collect the rest",
+      );
     });
 
     it("should carry on with story points unmeasured when the field list cannot be read", async () => {

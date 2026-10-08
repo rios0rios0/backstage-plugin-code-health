@@ -327,9 +327,10 @@ export class JiraApiEnricher implements JiraEnricher {
         if (error instanceof BudgetExhaustedError) {
           // The run stops where it is rather than retrying: the projects it did
           // reach are measured, and the next run starts with a fresh allowance.
-          this.options.logger.info(
-            `Jira scan stopped after ${error.spent} requests; ` +
-              `${issuesByScope.size} of ${scopes.length} projects were measured`,
+          this.options.logger.warn(
+            `Jira scan stopped at project ${scope.projectKey} after ${error.spent} requests; ` +
+              `${issuesByScope.size} of ${scopes.length} projects were measured. Raise ` +
+              `codeHealth.atlassian.jira.requestBudgetPerRun to measure the rest`,
           );
           break;
         }
@@ -389,6 +390,7 @@ export class JiraApiEnricher implements JiraEnricher {
     const nodes = await this.options.client.paginate({
       context,
       limit: this.options.settings.maxIssuesPerProject,
+      limitSetting: "codeHealth.atlassian.jira.maxIssuesPerProject",
       fetchPage: async (cursor) => {
         const response = await this.options.client.post<JiraSearchResponse>(
           "/rest/api/3/search/jql",

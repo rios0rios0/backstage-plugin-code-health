@@ -203,7 +203,7 @@ a row that stayed separate.
 Every request goes through the shared provider gateway: a per-host concurrency cap that
 lowers itself when the site reports it is close to throttling, jittered retry, and a
 circuit breaker. The request allowance is Jira's own — `requestBudgetPerRun`, 500 by
-default, room for about two dozen projects at the default `maxIssuesPerProject` — and
+default, room for about two dozen projects that each update 1,000 issues a window — and
 nothing else in the snapshot pass draws on it, so a project with a large ticket volume
 costs the pass its Jira figures and never a repository snapshot.
 
@@ -214,7 +214,7 @@ Per run, per **project** (not per repository):
 | 1 per run | the field list, unless `storyPointsField` is pinned |
 | 1 per run | the status list, which maps status ids to Jira's three categories |
 | 1 per run | the priority list |
-| 1–10 per project | the window's issues, 100 per page, capped by `maxIssuesPerProject` (1000) |
+| 1 per 100 issues, per project | the window's issues, 100 per page, until Jira reports the last page (or `maxIssuesPerProject`, when set) |
 | 1 per project | the open-issue count |
 | 1 per project | the oldest open issue |
 | 1 per priority, per project | the priority breakdown |
