@@ -21,6 +21,9 @@ const settings = (overrides: Partial<IngestionSettings> = {}): IngestionSettings
   entityFilters: [{ kind: "Component" }],
   retentionDays: 365,
   backfillChunkDays: 1,
+  // None, so the window arithmetic the other tests pin reads from the cursor;
+  // the overlap has tests of its own.
+  incrementalOverlapHours: 0,
   requestBudgetPerRun: 500,
   concurrencyPerHost: 4,
   schedule: DEFAULT_INGESTION_SCHEDULE,
@@ -133,6 +136,94 @@ describe("IngestRepositoryHistory", () => {
       const [first] = collector.calls;
       expect(first.from).toEqual(new Date("2026-08-03T12:00:00.000Z"));
       expect(first.to).toEqual(new Date("2026-08-04T12:00:00.000Z"));
+    });
+
+    it("should read the overlap behind the cursor again", async () => {
+      // given
+      // A rebase completion dates its commits when the merge was prepared,
+      // hours before they are on the branch. A run in between has already
+      // stepped past that date, so only reading back over it finds them.
+      const { actor, collector } = await createActor({
+        overrides: { incrementalOverlapHours: 24 },
+      });
+
+      // when
+      await actor.run({ now: NOW });
+
+      // then
+      const [first] = collector.calls;
+      expect(first.from).toEqual(new Date("2026-08-08T12:00:00.000Z"));
+      expect(first.to).toEqual(NOW);
+    });
+
+    it("should still step a stale cursor a whole chunk forward with an overlap", async () => {
+      // given
+      // Capping one chunk past the overlapped start rather than past the
+      // cursor would spend an overlap as long as the chunk standing still.
+      const { actor, store, collector } = await createActor({
+        overrides: { incrementalOverlapHours: 24 },
+      });
+      const [tracked] = await store.listTrackedRepositories();
+      await store.commitIngestion({
+        repositoryId: tracked.repository.id,
+        events: [],
+        chunk: { repositoryId: tracked.repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+        incrementalThrough: new Date("2026-08-03T12:00:00.000Z"),
+        status: "active",
+        now: NOW,
+      });
+
+      // when
+      await actor.run({ now: NOW });
+
+      // then
+      const [first] = collector.calls;
+      expect(first.from).toEqual(new Date("2026-08-02T12:00:00.000Z"));
+      expect(first.to).toEqual(new Date("2026-08-04T12:00:00.000Z"));
+      const [after] = await store.listTrackedRepositories();
+      expect(after.state.incrementalThrough).toEqual(new Date("2026-08-04T12:00:00.000Z"));
+    });
+
+    it("should not read behind the retention floor for the overlap", async () => {
+      // given
+      const { actor, store, collector } = await createActor({
+        overrides: { incrementalOverlapHours: 24 },
+      });
+      const [tracked] = await store.listTrackedRepositories();
+      const floor = new Date(`${tracked.state.backfillFloor}T00:00:00.000Z`);
+      await store.commitIngestion({
+        repositoryId: tracked.repository.id,
+        events: [],
+        chunk: { repositoryId: tracked.repository.id, kinds: ["commit"], days: [], ingestedAt: NOW },
+        incrementalThrough: new Date(floor.getTime() + 2 * 60 * 60 * 1000),
+        status: "active",
+        now: NOW,
+      });
+
+      // when
+      await actor.run({ now: NOW });
+
+      // then
+      expect(collector.calls[0].from).toEqual(floor);
+    });
+
+    it("should record the days the overlap covered end to end as fetched", async () => {
+      // given
+      // Midday to midday covers no day whole; the overlap reaches back over the
+      // whole of yesterday, which was therefore fetched again.
+      const collector = new StubVcsCollector().withRequestCost(1);
+      const { actor, store } = await createActor({
+        collector,
+        overrides: { incrementalOverlapHours: 24, requestBudgetPerRun: 1 },
+      });
+
+      // when
+      await actor.run({ now: NOW });
+
+      // then
+      const coverage = await store.getCoverage();
+      expect(coverage.earliestDay).toBe("2026-08-09");
+      expect(coverage.latestDay).toBe("2026-08-09");
     });
 
     it("should serve the stalest repository first", async () => {

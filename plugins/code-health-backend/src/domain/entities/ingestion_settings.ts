@@ -13,6 +13,16 @@ export interface IngestionSettings {
   /** Days fetched per backfill step. 1 walks the history a day at a time. */
   readonly backfillChunkDays: number;
   /**
+   * Hours behind the forward cursor every incremental run reads again.
+   *
+   * Azure DevOps dates a rebased commit when it prepared the merge, which can
+   * be hours before the completion put the commit on the branch. A run in
+   * between moves the cursor past that date while the commit is not there yet,
+   * and only a window reaching back over it ever returns the commit. Events
+   * are upserted by identifier, so reading a span twice stores nothing twice.
+   */
+  readonly incrementalOverlapHours: number;
+  /**
    * Provider requests one run of the ingestion actor may issue, and one
    * snapshot pass may spend on the repository loop — the provider snapshots
    * and the Sonar readings taken beside them.
@@ -131,6 +141,7 @@ export const DEFAULT_ENTITY_FILTERS: readonly EntityFilter[] = [{ kind: "Compone
 
 export const DEFAULT_RETENTION_DAYS = 365;
 export const DEFAULT_BACKFILL_CHUNK = "P1D";
+export const DEFAULT_INCREMENTAL_OVERLAP_HOURS = 24;
 export const DEFAULT_REQUEST_BUDGET_PER_RUN = 500;
 export const DEFAULT_CONCURRENCY_PER_HOST = 4;
 export const DEFAULT_WAKATIME_BASE_URL = "https://wakatime.com/api/v1";

@@ -64,6 +64,12 @@ export interface AdoPullRequestNode {
    */
   readonly lastMergeCommit?: { readonly commitId?: string } | null;
   /**
+   * The tip of the source branch the completion merged. The commit list read
+   * from it is the only endpoint that reports the pull request's commits with
+   * their change counts.
+   */
+  readonly lastMergeSourceCommit?: { readonly commitId?: string } | null;
+  /**
    * How the pull request was completed. `mergeStrategy` is the current field;
    * `squashMerge` is the boolean it replaced and is still set on older
    * completions.

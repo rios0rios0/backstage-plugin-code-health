@@ -53,8 +53,20 @@ const PAGE_SIZE = 200;
 /** Guards against an unbounded loop if a page ever fails to advance. */
 const MAX_PAGES = 25;
 
-/** Commit ids looked up per `commitsbatch` request. */
-const COMMIT_BATCH = 100;
+/**
+ * How deep the source branch's history is read for a pull request's change
+ * counts: four commits per commit of the pull request, never fewer than fifty,
+ * never more than one page.
+ *
+ * The source branch's history interleaves the pull request's commits with
+ * whatever was merged into it from the target on the way, so they are not
+ * simply the newest few. The margin is what keeps them inside the page.
+ */
+const CHANGE_COUNT_LOOKUP_FLOOR = 50;
+const CHANGE_COUNT_LOOKUP_FACTOR = 4;
+
+const changeCountLookupSize = (commits: number): number =>
+  Math.min(PAGE_SIZE, Math.max(CHANGE_COUNT_LOOKUP_FLOOR, CHANGE_COUNT_LOOKUP_FACTOR * commits));
 
 /**
  * Reviewer votes, as Azure DevOps encodes them.
@@ -136,9 +148,11 @@ const identityName = (identity: AdoIdentityNode | undefined): string | null =>
  * strategy attribution ends up with rather than the name the provider used —
  * whatever is dropped as a merge commit has to be asked for, or the work it
  * carried is lost. A squash writes one new commit on the branch and a rebase
- * rewrites the commits onto it with new committer dates at the completion —
- * the date both the provider's filter and this collector go by — so neither
- * needs asking.
+ * rewrites the commits onto it with new committer dates — the date both the
+ * provider's filter and this collector go by — so neither needs asking. Those
+ * dates are when Azure DevOps prepared the merge, which can be hours before the
+ * completion put the commits on the branch; the ingestion's incremental overlap
+ * is what reads that span again once they are there.
  *
  * With no completion options at all the completion was a plain merge, which is
  * what Azure DevOps does when nothing says otherwise; `squashMerge` is the
@@ -170,16 +184,17 @@ const isoOrNull = (value: string | undefined): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
-const chunked = <T>(items: readonly T[], size: number): T[][] =>
-  Array.from({ length: Math.ceil(items.length / size) }, (_unused, index) =>
-    items.slice(index * size, (index + 1) * size),
-  );
+/** A pull request completed with a merge commit, whose commits have to be asked for. */
+interface PullRequestNeedingCommits {
+  readonly pullRequestId: number;
+  /** Where its change counts are read from, see `lastMergeSourceCommit`. */
+  readonly sourceCommitId: string | null;
+}
 
 interface CollectedPullRequests {
   readonly events: CodeHealthEvent[];
   readonly merged: MergedPullRequest[];
-  /** Completed with a merge commit, so their commits have to be asked for. */
-  readonly needingCommits: number[];
+  readonly needingCommits: PullRequestNeedingCommits[];
 }
 
 export interface AzureDevOpsCollectorOptions {
@@ -195,7 +210,8 @@ export interface AzureDevOpsCollectorOptions {
  * number of requests regardless of how much history exists — four plus
  * pagination, against the five *per repository per dashboard load* the browser
  * used to issue — plus one or two per pull request completed with a merge
- * commit, whose commits the branch history never returns. The organisation-wide
+ * commit, whose commits the branch history never returns, and whose change
+ * counts only the commit list reports. The organisation-wide
  * project and repository enumeration is gone entirely: the catalog already
  * knows which repositories exist.
  *
@@ -480,25 +496,6 @@ export class AzureDevOpsCollector implements VcsCollector {
     return JSON.parse(response.body) as T;
   }
 
-  private async postJson<T>(
-    url: string,
-    body: unknown,
-    headers: Record<string, string>,
-    context: CollectorContext,
-  ): Promise<T> {
-    const response = await this.options.gateway.request(
-      {
-        url,
-        method: "POST",
-        headers: { ...headers, "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-        ...(context.signal === undefined ? {} : { signal: context.signal }),
-      },
-      context.budget,
-    );
-    return JSON.parse(response.body) as T;
-  }
-
   /**
    * Resolves the repository once per window, which is also where the GUID and
    * the default branch come from. Both are needed by the calls below and
@@ -622,7 +619,7 @@ export class AzureDevOpsCollector implements VcsCollector {
   ): Promise<CollectedPullRequests> {
     const events: CodeHealthEvent[] = [];
     const merged: MergedPullRequest[] = [];
-    const needingCommits: number[] = [];
+    const needingCommits: PullRequestNeedingCommits[] = [];
 
     for (let page = 0; page < MAX_PAGES; page += 1) {
       const parameters = new URLSearchParams({
@@ -704,7 +701,12 @@ export class AzureDevOpsCollector implements VcsCollector {
               actorAvatarUrl: node.createdBy?.imageUrl ?? null,
             },
           });
-          if (completion.fetchesCommits) needingCommits.push(node.pullRequestId);
+          if (completion.fetchesCommits) {
+            needingCommits.push({
+              pullRequestId: node.pullRequestId,
+              sourceCommitId: node.lastMergeSourceCommit?.commitId ?? null,
+            });
+          }
         }
       }
 
@@ -719,79 +721,121 @@ export class AzureDevOpsCollector implements VcsCollector {
    *
    * They keep the dates they were committed on, so they are stored where they
    * happened. The pull request's commit list carries no change counts, which
-   * are what the churn column is made of, so the same commits are read back
-   * through `commitsbatch` — which does — unless the list already had them.
+   * are what the churn column is made of, so they are read off the source
+   * branch's history, see `withChangeCounts`.
    */
   private async collectPullRequestCommits(
     repository: TrackedRepository,
     repositoryId: string,
-    pullRequestIds: readonly number[],
+    pullRequests: readonly PullRequestNeedingCommits[],
     headers: Record<string, string>,
     context: CollectorContext,
   ): Promise<CollectedCommit[]> {
-    const refs: AdoCommitNode[] = [];
+    const commits: CollectedCommit[] = [];
 
-    for (const pullRequestId of pullRequestIds) {
-      let continuationToken: string | null = null;
-
-      for (let page = 0; page < MAX_PAGES; page += 1) {
-        const parameters = new URLSearchParams({
-          "api-version": API_VERSION,
-          $top: String(PAGE_SIZE),
-        });
-        if (continuationToken) parameters.set("continuationToken", continuationToken);
-
-        const url =
-          `${this.projectUrl(repository)}/_apis/git/repositories/` +
-          `${encodeURIComponent(repositoryId)}/pullrequests/${pullRequestId}/commits` +
-          `?${parameters.toString()}`;
-
-        const response = await this.options.gateway.request(
-          { url, headers, ...(context.signal === undefined ? {} : { signal: context.signal }) },
-          context.budget,
-        );
-        const body = JSON.parse(response.body) as AdoListResponse<AdoCommitNode>;
-        const nodes = body.value ?? [];
-        refs.push(...nodes);
-
-        continuationToken = response.header("x-ms-continuationtoken");
-        if (!continuationToken || nodes.length === 0) break;
+    for (const pullRequest of pullRequests) {
+      const refs = await this.pullRequestCommitRefs(
+        repository,
+        repositoryId,
+        pullRequest.pullRequestId,
+        headers,
+        context,
+      );
+      const counted = await this.withChangeCounts(
+        repository,
+        repositoryId,
+        pullRequest.sourceCommitId,
+        refs,
+        headers,
+        context,
+      );
+      for (const node of counted) {
+        const commit = this.commitOf(repository, node);
+        if (commit) commits.push(commit);
       }
     }
 
-    const counted = await this.withChangeCounts(repository, repositoryId, refs, headers, context);
-    return counted.flatMap((node) => {
-      const commit = this.commitOf(repository, node);
-      return commit === null ? [] : [commit];
-    });
+    return commits;
   }
 
+  private async pullRequestCommitRefs(
+    repository: TrackedRepository,
+    repositoryId: string,
+    pullRequestId: number,
+    headers: Record<string, string>,
+    context: CollectorContext,
+  ): Promise<AdoCommitNode[]> {
+    const refs: AdoCommitNode[] = [];
+    let continuationToken: string | null = null;
+
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const parameters = new URLSearchParams({
+        "api-version": API_VERSION,
+        $top: String(PAGE_SIZE),
+      });
+      if (continuationToken) parameters.set("continuationToken", continuationToken);
+
+      const url =
+        `${this.projectUrl(repository)}/_apis/git/repositories/` +
+        `${encodeURIComponent(repositoryId)}/pullrequests/${pullRequestId}/commits` +
+        `?${parameters.toString()}`;
+
+      const response = await this.options.gateway.request(
+        { url, headers, ...(context.signal === undefined ? {} : { signal: context.signal }) },
+        context.budget,
+      );
+      const body = JSON.parse(response.body) as AdoListResponse<AdoCommitNode>;
+      const nodes = body.value ?? [];
+      refs.push(...nodes);
+
+      continuationToken = response.header("x-ms-continuationtoken");
+      if (!continuationToken || nodes.length === 0) break;
+    }
+
+    return refs;
+  }
+
+  /**
+   * Fills in the change counts the pull request's commit list left out.
+   *
+   * Only the commit *list* reports them. The pull request's commits, a single
+   * commit and `commitsbatch` all answer without, so the source branch's
+   * history is listed from the commit the completion merged, which holds every
+   * commit of the pull request. A commit that list does not reach keeps no
+   * count rather than an invented one.
+   */
   private async withChangeCounts(
     repository: TrackedRepository,
     repositoryId: string,
+    sourceCommitId: string | null,
     refs: readonly AdoCommitNode[],
     headers: Record<string, string>,
     context: CollectorContext,
   ): Promise<AdoCommitNode[]> {
-    const missing = refs.filter((ref) => ref.changeCounts === undefined && ref.commitId);
-    if (missing.length === 0) return [...refs];
+    const isMissingCounts = refs.some((ref) => ref.changeCounts === undefined && ref.commitId);
+    if (!isMissingCounts || sourceCommitId === null) return [...refs];
+
+    const parameters = new URLSearchParams({
+      "api-version": API_VERSION,
+      "searchCriteria.itemVersion.versionType": "commit",
+      "searchCriteria.itemVersion.version": sourceCommitId,
+      "searchCriteria.$top": String(changeCountLookupSize(refs.length)),
+    });
+    const body = await this.getJson<AdoListResponse<AdoCommitNode>>(
+      `${this.projectUrl(repository)}/_apis/git/repositories/` +
+        `${encodeURIComponent(repositoryId)}/commits?${parameters.toString()}`,
+      headers,
+      context,
+    );
 
     const counts = new Map<string, AdoCommitNode["changeCounts"]>();
-    for (const batch of chunked(missing, COMMIT_BATCH)) {
-      const body = await this.postJson<AdoListResponse<AdoCommitNode>>(
-        `${this.projectUrl(repository)}/_apis/git/repositories/` +
-          `${encodeURIComponent(repositoryId)}/commitsbatch?api-version=${API_VERSION}`,
-        { ids: batch.map((ref) => ref.commitId) },
-        headers,
-        context,
-      );
-      for (const node of body.value ?? []) {
-        if (node.commitId && node.changeCounts) counts.set(node.commitId, node.changeCounts);
-      }
+    for (const node of body.value ?? []) {
+      if (node.commitId && node.changeCounts) counts.set(node.commitId, node.changeCounts);
     }
 
     return refs.map((ref) => {
-      const changeCounts = ref.commitId === undefined ? undefined : counts.get(ref.commitId);
+      if (ref.changeCounts !== undefined || ref.commitId === undefined) return ref;
+      const changeCounts = counts.get(ref.commitId);
       return changeCounts === undefined ? ref : { ...ref, changeCounts };
     });
   }

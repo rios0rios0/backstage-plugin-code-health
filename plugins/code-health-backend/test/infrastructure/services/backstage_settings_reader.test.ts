@@ -33,6 +33,7 @@ describe("readCodeHealthSettings", () => {
       entityFilters: [{ kind: "Component" }],
       retentionDays: 365,
       backfillChunkDays: 1,
+      incrementalOverlapHours: 24,
       requestBudgetPerRun: 500,
       concurrencyPerHost: 4,
     });
@@ -309,6 +310,22 @@ describe("readCodeHealthSettings", () => {
 
     // then
     expect(settings.ingestion.backfillChunkDays).toBe(7);
+  });
+
+  it("should read the hours each incremental run reads again", () => {
+    // given / when
+    const settings = read({ codeHealth: { ingestion: { incrementalOverlapHours: 6 } } });
+
+    // then
+    expect(settings.ingestion.incrementalOverlapHours).toBe(6);
+  });
+
+  it("should reject a non-positive incremental overlap", () => {
+    // given / when
+    const settings = read({ codeHealth: { ingestion: { incrementalOverlapHours: -1 } } });
+
+    // then
+    expect(settings.ingestion.incrementalOverlapHours).toBe(24);
   });
 
   it("should reject a non-positive request budget", () => {

@@ -60,13 +60,20 @@ directly and stored **under the dates they were committed**, deduplicated by
 identifier against anything the history already returned. On GitHub that is one
 extra GraphQL document per page of merged pull requests, plus one per further
 hundred commits a single pull request carries beyond its first. On Azure DevOps
-it is one request per such pull request for the commit list, and one more per
-hundred commits to read their change counts, which the list does not carry.
+it is one request per such pull request for the commit list, and one more for
+their change counts, which that list does not carry: the branch history listed
+from the pull request's source commit is the only endpoint that reports them.
+A commit that listing does not reach is stored with no count rather than an
+invented one.
 Both walk a pull request's commits to the end: the ones past the first page
 were committed on days already fetched, and nothing else will ever return them.
 
 A squash or a rebase needs none of this: both put commits dated at the merge on
-the branch, and those the history already returns.
+the branch, and those the history already returns. Azure DevOps dates them
+when it prepared the merge, which can be hours before the completion, so every
+incremental run reads `ingestion.incrementalOverlapHours` (24 by default)
+behind its cursor again; without that, a run in between would step past them
+for good.
 
 ### What this cannot do
 

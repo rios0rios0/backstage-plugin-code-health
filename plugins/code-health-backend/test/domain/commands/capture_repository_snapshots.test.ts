@@ -40,6 +40,7 @@ const settings = (overrides: Partial<IngestionSettings> = {}): IngestionSettings
   entityFilters: [{ kind: "Component" }],
   retentionDays: 365,
   backfillChunkDays: 1,
+  incrementalOverlapHours: 24,
   requestBudgetPerRun: 500,
   concurrencyPerHost: 4,
   schedule: DEFAULT_INGESTION_SCHEDULE,

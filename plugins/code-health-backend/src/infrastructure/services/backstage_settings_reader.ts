@@ -27,6 +27,7 @@ import {
   DEFAULT_CONCURRENCY_PER_HOST,
   DEFAULT_DISCOVERY_SCHEDULE,
   DEFAULT_ENTITY_FILTERS,
+  DEFAULT_INCREMENTAL_OVERLAP_HOURS,
   DEFAULT_INGESTION_SCHEDULE,
   DEFAULT_REQUEST_BUDGET_PER_RUN,
   DEFAULT_RETENTION_DAYS,
@@ -189,6 +190,11 @@ export const readCodeHealthSettings = (
       backfillChunkDays: parseChunkDays(
         ingestion?.getOptionalString("backfillChunk") ?? DEFAULT_BACKFILL_CHUNK,
         1,
+      ),
+      incrementalOverlapHours: readPositiveNumber(
+        ingestion,
+        "incrementalOverlapHours",
+        DEFAULT_INCREMENTAL_OVERLAP_HOURS,
       ),
       requestBudgetPerRun: readPositiveNumber(
         ingestion,

@@ -1,0 +1,3 @@
+kind: 'Fixed'
+body: 'fixed Azure DevOps commits from a rebase completion never being collected when an ingestion run fell between the moment Azure DevOps prepared the merge, which is the committer date it writes, and the moment the commits reached the branch, typically minutes and sometimes hours later: the run moved its cursor past that date while the commits were not there yet, and no later window looked back. Every incremental run now reads `codeHealth.ingestion.incrementalOverlapHours` behind its cursor again, 24 by default, never past the retention floor; events are upserted by identifier, so the re-read stores nothing twice'
+time: '2026-10-08T22:35:40.048872200Z'
