@@ -1,0 +1,3 @@
+kind: 'Security'
+body: 'raised undici, zod and launch-editor to their first patched release for 6 high-severity yarn-audit findings, and suppressed body-parser GHSA-27r3-jxmh-p828 for the week its fix needs to clear npmMinimalAgeGate'
+time: '2026-10-28T22:52:48.108869647Z'
