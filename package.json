@@ -47,9 +47,15 @@
     "browserslist": "^4.28.8",
     "adm-zip@npm:0.5.10": "^0.6.0",
     "prismjs@npm:~1.27.0": "^1.30.0",
-    "undici@npm:7.28.0": "^7.29.0",
+    "undici@npm:7.28.0": "^7.30.1",
     "nanoid@npm:^3.3.16": "^3.3.18",
-    "nanoid@npm:^3.3.17": "^3.3.18"
+    "nanoid@npm:^3.3.17": "^3.3.18",
+    "zod@npm:^3.25.76": "^4.6.6",
+    "zod@npm:^3.25.76 || ^4.0.0": "^4.6.6",
+    "zod@npm:^4.0.0": "^4.6.6",
+    "zod@npm:^4.4.3": "^4.6.6",
+    "launch-editor@npm:^2.14.1": "^2.14.2",
+    "launch-editor@npm:^2.6.1": "^2.14.2"
   },
   "devDependencies": {
     "@backstage/cli": "^0.36.4",
