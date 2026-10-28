@@ -1,0 +1,3 @@
+kind: 'Changed'
+body: 'moved the agent instructions from `CLAUDE.md` to `AGENTS.md`, keeping a `CLAUDE.md` that imports it, and refreshed `AGENTS.md`, `CONTRIBUTING.md`, `.github/copilot-instructions.md` and `.github/skills/code-review/SKILL.md`: pointed the stale `CLAUDE.md` references at `AGENTS.md`, listed the Claude Code files and the `metric_collection_days` migration, described the release as compiling chlog fragments with `--breaking` deciding a major, dropped the frontend `service/` layer that does not exist, and set the AutoBump floor in `CONTRIBUTING.md` to 3.0.3 in place of the interim `~/.autobump.yaml` step'
+time: '2026-10-28T22:31:50.696865373Z'

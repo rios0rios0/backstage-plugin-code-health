@@ -68,7 +68,7 @@ plugins/code-health-backend/src/
   plugin.ts
 
 plugins/code-health/src/
-  domain/ service/ infrastructure/ presentation/ main/
+  domain/entities|services/ infrastructure/ presentation/ main/
 ```
 
 The whole read API lives under `/api/code-health/v1`:
@@ -84,14 +84,6 @@ GET  /repositories/:id/trend
 GET  /productivity/weights        PUT /productivity/weights/:role   DELETE /productivity/weights/:role
 GET  /access                      POST /ingestion/reset        POST /refresh
 ```
-
-New files behind the trends, ownership and administration work:
-
-| Package | Files |
-|---|---|
-| `-common` | `score.ts`, `productivity_score.ts`, `contributor_role.ts`, `repository_health_score.ts`, `trend.ts`, `ownership.ts`, `identity_exclusion.ts`, `fleet_rates.ts`, `repository_rates.ts`; `searchDirectoryUsers` in `identity.ts` |
-| `-backend` | `domain/commands/get_contributor_trend.ts`, `get_repository_trend.ts`, `list_owned_repositories.ts`, `list_directory_users.ts`, `reset_ingestion.ts`, `authorize_administrator.ts`, `exclude_identity.ts`, `assign_contributor_role.ts`, `get_productivity_weights.ts`, `update_productivity_weights.ts`; `domain/entities/permissions.ts`, `bucket.ts`, `contributor_aggregation.ts`, `contributor_role.ts`, `productivity_weights.ts`, `repository_summary_builder.ts`, `snapshot_allowances.ts`; `migrations/20260910000000_owner.js`, `migrations/20260915000000_identity_exclusions.js`, `migrations/20260923000000_productivity_scoring.js` |
-| frontend | `presentation/pages/contributor_detail_page.tsx`, `repository_detail_page.tsx`; `components/charts/trend_chart.tsx`, `components/score_card.tsx`, `components/trend_range_picker.tsx`, `components/owned_repositories_card.tsx`, `components/ingestion_reset_button.tsx`, `components/productivity_weights_button.tsx`, `components/contributor_role_cell.tsx`, `components/contributor_rates_card.tsx`, `components/repository_rates_card.tsx`, `components/rate_comparison.tsx`, `components/data_table.tsx`; `components/identity_exclusion_cell.tsx`, `components/identity_link_cell.tsx`; `hooks/use_trend_window.ts`, `hooks/use_contributor_trend.ts`, `hooks/use_owned_repositories.ts`, `hooks/use_repository_trend.ts`, `hooks/use_access.ts`, `hooks/use_productivity_weights.ts`, `hooks/use_directory_search.ts`; `domain/entities/contributor_trend.ts`, `domain/entities/repository_trend.ts`, `domain/entities/reset_reach.ts`, `domain/entities/repository_audit.ts`; `components/repository_audit_filters.tsx`, `components/columns/filter_options.ts` |
 
 ## Things not to change without understanding why
 
@@ -290,7 +282,7 @@ New files behind the trends, ownership and administration work:
   carrying `rios0rios0/autobump#348`); nothing has to be set in the releaser's own
   `~/.autobump.yaml`. On anything older the project file's `refresh: true` is warned about and
   dropped and the release ships the stale lockfile, repaired by hand afterwards. See
-  `CLAUDE.md` > Release.
+  `AGENTS.md` > Release.
 - **The snapshot pass gives every source a request allowance of its own** (`SnapshotAllowances`):
   the repository loop and Sonar spend `ingestion.requestBudgetPerRun`, and WakaTime, Jira and
   Confluence each spend the `requestBudgetPerRun` in their own block — Confluence's space reports

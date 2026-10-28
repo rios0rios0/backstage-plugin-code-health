@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents (Claude Code, Codex, Cursor, GitHub Copilot) when working with code in this repository.
 
 ## What This Is
 
@@ -88,6 +88,9 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/domain/commands/get_productivity_weights.ts` / `update_productivity_weights.ts` | The weights each role is scored on — the stored rows laid over the common package's defaults — and the two writes to them, both logged with who asked |
 | `src/domain/entities/contributor_role.ts` / `productivity_weights.ts` | The stored shapes, `accountOfPersonKey` (an account key splits on the first colon only) and `productivityWeightsByRoleOf` |
 | `migrations/20260923000000_productivity_scoring.js` | The roles table, keyed by person key, and the weights table, one JSON payload per role |
+| `migrations/20260925000000_metric_collection_days.js` | `code_health_metric_collection_days`: which `(source, day)` a complete report was stored for, so a day with no usage is told apart from one never collected |
+| `src/domain/commands/collect_claude_usage.ts` | The Claude Code pass: uncollected days first, then the two most recent UTC days repaired |
+| `src/infrastructure/services/claude_enricher.ts` / `claude_node.ts` | One day of the Admin API's Claude Code usage report through the gateway, paged, and validated at the boundary rather than read as zeros |
 | `src/domain/entities/bucket.ts` | Where a day's bucket starts and ends — shared by the cadence series and both trends, with the end bounded by the window so no snapshot taken after it is read |
 | `src/domain/entities/contributor_aggregation.ts` | The per-person accumulation the contributors list and a trend's every bucket run through, split from the naming and Sonar pass that needs the catalog |
 | `src/domain/entities/repository_summary_builder.ts` | One repository row from a snapshot and a window's events, built once for the table and once per bucket for a trend |
@@ -96,7 +99,7 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/infrastructure/services/wakatime_enricher.ts` | Coding time and AI tokens, per member per day |
 | `src/infrastructure/services/atlassian/` | One client, the Jira enricher and the Confluence enricher |
 | `src/infrastructure/controllers/code_health_router.ts` | The read API, the capabilities probe and the identity links |
-| `docs/wakatime.md`, `docs/jira.md`, `docs/confluence.md` | What each integration measures, and what its provider cannot answer |
+| `docs/claude.md`, `docs/wakatime.md`, `docs/jira.md`, `docs/confluence.md` | What each integration measures, and what its provider cannot answer |
 | `docs/attribution.md` | Who a commit, a build and a review belong to, per provider field, and what neither provider can answer |
 
 ### Frontend (`plugins/code-health`)
@@ -164,6 +167,7 @@ The wire contract, and the pure functions both sides have to agree on.
 | `src/ownership.ts` | `OwnershipInfo`, and `ownerEntityRef`, which normalises `spec.owner` exactly as the catalog does |
 | `src/identity_exclusion.ts` | The four reasons an account is not a person being measured, with the wording the menu and the chip are built from |
 | `src/identity.ts` | Besides the suggestion ranking, `searchDirectoryUsers` — the "like" search the link picker and the backend share, every word matched in any order |
+| `src/claude_metrics.ts` | Claude Code token shapes, never a productivity component, and `claudeWindowDays` — the UTC dates a window touches, which every Claude average divides by |
 
 ## Decisions worth not re-litigating
 
@@ -810,9 +814,10 @@ add later, which suppressing the findings by id would not.
 CI runs `rios0rios0/pipelines/.github/workflows/yarn-library.yaml` on every push and pull request.
 There is no deployment target — the artifacts are three npm packages.
 
-Releasing is [AutoBump](https://github.com/rios0rios0/autobump)'s job: `autobump .` reads
-`[Unreleased]`, derives the version, moves the entries under a dated heading, writes that version to
-all four `package.json` files, regenerates `yarn.lock`, branches `chore/bump-x.x.x`, and opens the PR.
+Releasing is [AutoBump](https://github.com/rios0rios0/autobump)'s job: `autobump .` reads the
+pending chlog fragments under `.changes/unreleased/`, derives the version, compiles them into a dated
+section of `CHANGELOG.md`, writes that version to all four `package.json` files, regenerates
+`yarn.lock`, branches `chore/bump-x.x.x`, and opens the PR.
 
 **Requires AutoBump 3.0.3 or newer** — the first release carrying project-layer refresh
 (rios0rios0/autobump#348, merged 2026-09-03). `refresh: true` lives in this repository's
@@ -846,9 +851,9 @@ by contrast, is lenient: an unknown key there is ignored.
    `-common`, and moving it desynchronises `yarn.lock` — see the section below. The version bumps
    themselves are lockfile-neutral, because Yarn records a workspace as `0.0.0-use.local` and never
    writes its version into the lockfile at all.
-4. The bump level comes from the changelog itself: a line **beginning** `- **BREAKING CHANGE:**` is
-   major, `### Added` is minor, everything else patch. A breaking change explained mid-sentence
-   counts for nothing — this is why the `2.0.0` entries lead with the marker.
+4. The bump level comes from the fragments: one created with `chlog new --breaking`
+   (`breaking: true`) is major, an `Added` fragment minor, everything else patch. A breaking change
+   explained only in the body counts for nothing — the kind alone never makes a major.
 5. The merge commit must keep `chore/bump-x.x.x` or `chore(bump): ...version to x.x.x` — that string
    is what the pipeline matches on.
 6. On merge, `delivery-release` (from the shared workflow) cuts the tag and GitHub Release, and

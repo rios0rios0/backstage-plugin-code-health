@@ -20,7 +20,7 @@ The canonical engineering standards live in the
 repo-tailored index into that guide plus the rules that only apply here. Precedence, highest
 first:
 
-1. This repository's `.github/copilot-instructions.md`, `CLAUDE.md`, and `CONTRIBUTING.md` —
+1. This repository's `.github/copilot-instructions.md`, `AGENTS.md`, and `CONTRIBUTING.md` —
    they describe *this* codebase and its load-bearing invariants.
 2. The **rios0rios0/guide** wiki — the shared standard.
 3. General language idiom.
@@ -76,7 +76,7 @@ plugins/code-health-backend/src/
   infrastructure/repositories|services|http|controllers/
   plugin.ts
 plugins/code-health/src/
-  domain/ service/ infrastructure/ presentation/ main/   the five frontend layers
+  domain/entities|services/ infrastructure/ presentation/ main/   the five frontend layers
 plugins/code-health-common/                              shared types
 ```
 
@@ -109,7 +109,7 @@ make sast             # CodeQL, Semgrep, Trivy, Hadolint, Gitleaks (2-4 min)
 the gate. They import the shared targets from
 [rios0rios0/pipelines](https://github.com/rios0rios0/pipelines), which load the correct
 configuration before invoking each tool — so **never invoke the tool binaries directly**
-(`golangci-lint`, `pytest`, `eslint`, `semgrep`, `trivy`, `hadolint`, `gitleaks`). A change
+(`jest`, `eslint`, `codeql`, `semgrep`, `trivy`, `hadolint`, `gitleaks`). A change
 that adds a direct binary invocation to a script or workflow, or that edits a tool
 configuration to make a finding disappear, is itself a finding.
 
@@ -213,7 +213,7 @@ hand.
 - Fragment bodies start with a lowercase verb in simple past tense, capitalise proper nouns
   (GitHub, Go, Docker), and wrap code identifiers and versions in backticks.
 - `README.md` is updated whenever usage, setup, configuration, or architecture changes;
-  `.github/copilot-instructions.md` and `CLAUDE.md` whenever the workflow, commands, or
+  `.github/copilot-instructions.md` and `AGENTS.md` whenever the workflow, commands, or
   structure changes. Documentation and code ship in one commit.
 
 ## Git Flow and pull-request hygiene
@@ -277,7 +277,7 @@ A review that raises noise gets ignored. Do not report these:
 ### Change-control checklist
 - [ ] Changelog entry present for every behavioural change
 - [ ] `README.md` updated if usage, setup, or architecture changed
-- [ ] `.github/copilot-instructions.md` and `CLAUDE.md` updated if the workflow, commands, or structure changed
+- [ ] `.github/copilot-instructions.md` and `AGENTS.md` updated if the workflow, commands, or structure changed
 - [ ] Commit messages follow `type(SCOPE): message` in simple past tense
 - [ ] Breaking changes flagged in the commit footer, the changelog, and the PR description
 

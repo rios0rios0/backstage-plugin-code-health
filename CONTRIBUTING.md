@@ -113,36 +113,37 @@ Provider access sits behind two ports, so a new forge is an implementation and a
 
 ## Releasing
 
-Releases are cut with [AutoBump](https://github.com/rios0rios0/autobump), which reads `[Unreleased]`,
-works out the next version from it, moves those entries under a dated heading, writes the version to
-every `package.json`, and opens the pull request:
+Releases are cut with [AutoBump](https://github.com/rios0rios0/autobump), which reads the pending
+fragments under `.changes/unreleased/`, works out the next version from them, compiles them into a
+dated section of `CHANGELOG.md`, writes the version to every `package.json`, and opens the pull
+request:
 
 ```bash
 autobump .
 ```
 
-Requires AutoBump 3.0.0 or newer. No `-c` is needed: AutoBump reads your own configuration from
+Requires AutoBump 3.0.3 or newer. No `-c` is needed: AutoBump reads your own configuration from
 `$HOME`, and this repository's `.autobump.yaml` is the last of four configuration layers, merged on
 top of yours rather than mistaken for it.
 
-`refresh: true` under `languages.typescript` now lives in this repository's own `.autobump.yaml`,
-beside the pattern that makes it necessary. The refresh regenerates `yarn.lock` inside the bump
-commit: the bump moves a caret range that is also a resolution descriptor in the lockfile, and
-without it every CI job's `yarn install --immutable` answers `YN0028`.
+`refresh: true` under `languages.typescript` lives in this repository's own `.autobump.yaml`,
+beside the pattern that makes it necessary, and nothing has to be set in your own `~/.autobump.yaml`.
+The refresh regenerates `yarn.lock` inside the bump commit: the bump moves a caret range that is also
+a resolution descriptor in the lockfile, and without it every CI job's `yarn install --immutable`
+answers `YN0028`. AutoBump 3.0.3 is the first release carrying project-layer refresh
+(`rios0rios0/autobump#348`); on anything older the line is warned about and dropped.
 
-**Interim, until `rios0rios0/autobump#348` is released:** on 3.0.2 — the latest tag, cut before that
-PR — a project file's `refresh: true` is warned about and dropped, so you still need the same line in
-your own `~/.autobump.yaml`. Delete the old `refresh_commands` block if you have one: 3.0.0 onwards
-recognises the removed key by name and aborts rather than ignoring it. See `CLAUDE.md` > Release.
+Delete the old `refresh_commands` block from `~/.autobump.yaml` if you have one: 3.0.0 onwards
+recognises the removed key by name and aborts rather than ignoring it. See `AGENTS.md` > Release.
 
 `.autobump.yaml` adds `plugins/*/package.json` to the version files AutoBump knows about. Its
 TypeScript defaults cover only the root `package.json`, which in this workspace is private and never
 published, so without that entry a release would leave all three packages on the previous version
 and fail `delivery-publish`'s tag-versus-`package.json` guard.
 
-The version follows from how the changelog entries are written: an entry that **begins** with
-`- **BREAKING CHANGE:**` makes it a major release, anything under `### Added` a minor one, and the
-rest a patch. A breaking change described mid-sentence does not count — put the marker first.
+The version follows from the fragments: one created with `chlog new --breaking` makes it a major
+release, an `Added` fragment a minor one, and the rest a patch. A breaking change described only in
+the body does not count — pass the flag.
 
 AutoBump names the branch `chore/bump-x.x.x` and the commit `chore(bump): bumped version to x.x.x`.
 Keep both: `delivery-release` matches on that string in the merge commit, and a squash or a rename
