@@ -81,6 +81,7 @@ interface RepositoryRow {
   owner_ref: string | null;
   techdocs_ref: string | null;
   provides_apis: number | null;
+  declares_no_api: boolean | number | null;
   has_external_docs: boolean | number | null;
   jira_project_key: string | null;
   jira_component: string | null;
@@ -214,6 +215,7 @@ const toRepository = (row: RepositoryRow): TrackedRepository => ({
     ownerRef: row.owner_ref ?? null,
     techDocsRef: row.techdocs_ref,
     providesApis: row.provides_apis ?? 0,
+    declaresNoApi: Boolean(row.declares_no_api),
     hasExternalDocs: Boolean(row.has_external_docs),
     jiraProjectKey: row.jira_project_key ?? null,
     jiraComponent: row.jira_component ?? null,
@@ -385,6 +387,7 @@ export class KnexCodeHealthStore implements CodeHealthStore {
           owner_ref: repository.catalogFacts.ownerRef,
           techdocs_ref: repository.catalogFacts.techDocsRef,
           provides_apis: repository.catalogFacts.providesApis,
+          declares_no_api: repository.catalogFacts.declaresNoApi,
           has_external_docs: repository.catalogFacts.hasExternalDocs,
           jira_project_key: repository.catalogFacts.jiraProjectKey,
           jira_component: repository.catalogFacts.jiraComponent,

@@ -22,14 +22,25 @@ const API_TITLES: Record<ApiExposureState, string> = {
   none: "Nothing suggests this repository exposes an API.",
 };
 
+/**
+ * The `None` an owner declared, told apart from the one nothing pointed at:
+ * the chip and the filter stay the same, and only the reason changes.
+ */
+const DECLARED_NONE_TITLE =
+  "The catalog entity declares it exposes no API of its own (`code-health/api-exposure`).";
+
 export const ApiExposureBadge = ({ exposure }: { exposure: ApiExposure | null }) => {
   if (!exposure) return <EmptyCell />;
 
   const { tone, label } = API_STYLES[exposure.state];
+  // Read as a plain truthiness test, because a backend older than the field
+  // leaves it out of the response altogether.
+  const reason =
+    exposure.state === "none" && exposure.declaresNoApi
+      ? DECLARED_NONE_TITLE
+      : API_TITLES[exposure.state];
   const title =
-    exposure.definitionPath === null
-      ? API_TITLES[exposure.state]
-      : `${API_TITLES[exposure.state]}\nFound: ${exposure.definitionPath}`;
+    exposure.definitionPath === null ? reason : `${reason}\nFound: ${exposure.definitionPath}`;
 
   return <StateChip tone={tone} label={label} title={title} />;
 };

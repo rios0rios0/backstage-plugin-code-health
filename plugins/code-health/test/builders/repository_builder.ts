@@ -151,6 +151,7 @@ export class RepositoryBuilder {
       ...this.props,
       apiExposure: {
         declaredApis: state === "declared" ? 1 : 0,
+        declaresNoApi: false,
         definitionPath,
         entityType: state === "expected" ? "service" : null,
         state,

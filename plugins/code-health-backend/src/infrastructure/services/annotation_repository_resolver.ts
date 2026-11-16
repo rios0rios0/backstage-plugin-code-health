@@ -40,6 +40,21 @@ const CONFLUENCE_SPACE_KEY_ANNOTATION = "confluence.io/space-key";
 const WAKATIME_PROJECT_ANNOTATION = "wakatime.com/project";
 
 /**
+ * The owner's declaration that the component exposes no API of its own — a
+ * component running third-party software serves that vendor's API, not one
+ * its team defines, and nothing in the repository or in `spec.type` can say so.
+ * The name is this plugin's own, namespaced by its plugin id, so there is no
+ * constant anywhere to import, and it is a literal like the names above.
+ *
+ * `none` is the only value read, compared trimmed and case-insensitively
+ * because annotations are hand-written YAML. Any other value is ignored rather
+ * than guessed at, so the annotation can learn more values later without
+ * changing what an existing one means.
+ */
+const API_EXPOSURE_ANNOTATION = "code-health/api-exposure";
+const API_EXPOSURE_NONE = "none";
+
+/**
  * Link titles and types that mean "this is the documentation".
  *
  * Backstage puts no vocabulary on `metadata.links`, so the convention has to be
@@ -222,6 +237,9 @@ const countProvidedApis = (entity: Entity): number => {
   return Array.isArray(provides) ? provides.length : 0;
 };
 
+const declaresNoApiOf = (entity: Entity): boolean =>
+  annotation(entity, API_EXPOSURE_ANNOTATION)?.trim().toLowerCase() === API_EXPOSURE_NONE;
+
 /**
  * Who the catalog says is responsible for the entity.
  *
@@ -245,6 +263,7 @@ const catalogFactsOf = (entity: Entity): RepositoryCatalogFacts => {
     ownerRef: ownerRefOf(entity),
     techDocsRef: annotation(entity, TECHDOCS_REF_ANNOTATION) ?? null,
     providesApis: countProvidedApis(entity),
+    declaresNoApi: declaresNoApiOf(entity),
     hasExternalDocs: hasExternalDocs(entity),
     jiraProjectKey: annotation(entity, JIRA_PROJECT_KEY_ANNOTATION) ?? null,
     jiraComponent: annotation(entity, JIRA_COMPONENT_ANNOTATION) ?? null,

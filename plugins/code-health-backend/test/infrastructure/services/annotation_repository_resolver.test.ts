@@ -364,6 +364,62 @@ describe("AnnotationRepositoryResolver catalog facts", () => {
     expect(result?.catalogFacts.providesApis).toBe(0);
   });
 
+  it("should record that the entity declares it exposes no API of its own", () => {
+    // given
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withApiExposure("none")
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.declaresNoApi).toBe(true);
+  });
+
+  it("should read the declaration whatever its case and surrounding spaces", () => {
+    // given
+    // Annotations are hand-written YAML, and `None ` means what `none` means.
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withApiExposure("None ")
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.declaresNoApi).toBe(true);
+  });
+
+  it("should record no declaration when the entity carries no annotation", () => {
+    // given
+    const entity = EntityBuilder.create().withGithubSlug("rios0rios0/pipelines").build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.declaresNoApi).toBe(false);
+  });
+
+  it("should ignore a value the annotation does not define", () => {
+    // given
+    // Only `none` is defined, so anything else is left alone rather than
+    // guessed at, and a later value cannot change what an existing one means.
+    const entity = EntityBuilder.create()
+      .withGithubSlug("rios0rios0/pipelines")
+      .withApiExposure("internal")
+      .build();
+
+    // when
+    const result = resolver().resolve(entity);
+
+    // then
+    expect(result?.catalogFacts.declaresNoApi).toBe(false);
+  });
+
   it("should record the kind and the component type", () => {
     // given
     const entity = EntityBuilder.create()

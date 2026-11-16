@@ -95,6 +95,7 @@ Hexagonal: `domain/` holds entities, commands and ports; `infrastructure/` holds
 | `src/domain/entities/contributor_aggregation.ts` | The per-person accumulation the contributors list and a trend's every bucket run through, split from the naming and Sonar pass that needs the catalog |
 | `src/domain/entities/repository_summary_builder.ts` | One repository row from a snapshot and a window's events, built once for the table and once per bucket for a trend |
 | `migrations/20260910000000_owner.js` | The `owner_ref` column discovery writes the catalog's `spec.owner` to |
+| `migrations/20261116000000_declares_no_api.js` | The `declares_no_api` column discovery writes from the entity's `code-health/api-exposure: none` annotation, false for every row already stored |
 | `src/infrastructure/services/collectors/` | Azure DevOps and GitHub collectors |
 | `src/infrastructure/services/wakatime_enricher.ts` | Coding time and AI tokens, per member per day |
 | `src/infrastructure/services/atlassian/` | One client, the Jira enricher and the Confluence enricher |
@@ -233,11 +234,15 @@ The wire contract, and the pure functions both sides have to agree on.
   change the changelog leads with — an app deep-linking to `/insights` has to move to the plugin
   root, and `codeHealthPlugin.routes.insights` became `routes.repositories`.
 - **Documentation and catalog-API grades combine the entity with the repository.** The catalog half
-  (`backstage.io/techdocs-ref`, `spec.providesApis`, `spec.type`, `metadata.links`) is read by
-  discovery and stored on the repository row, because it changes when somebody edits a YAML file
-  rather than on the snapshot's schedule. The repository half (a `docs/` tree, an API definition) is
-  read by the daily snapshot. Both fields stay `null` until a snapshot exists, because grading on
-  half the evidence reports a gap that is not there.
+  (`backstage.io/techdocs-ref`, `spec.providesApis`, `spec.type`, `metadata.links`,
+  `code-health/api-exposure`) is read by discovery and stored on the repository row, because it
+  changes when somebody edits a YAML file rather than on the snapshot's schedule. The repository
+  half (a `docs/` tree, an API definition) is read by the daily snapshot. Both fields stay `null`
+  until a snapshot exists, because grading on half the evidence reports a gap that is not there.
+  `code-health/api-exposure: none` is the owner's word that the component exposes no API of its
+  own, and it outranks both inferences — a definition file can be a vendor's, and `spec.type` says
+  what a component is rather than whose API it serves — but not `spec.providesApis`, because an API
+  the catalog holds is one the entity has.
 - **The repository file scan is shallow on purpose** — the root, `docs/` and `api/`. On GitHub the
   three trees ride along in the snapshot's existing GraphQL document and cost no request at all; on
   Azure DevOps it is one listing per repository plus one for each of those directories that exists.
