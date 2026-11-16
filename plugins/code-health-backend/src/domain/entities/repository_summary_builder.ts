@@ -159,6 +159,7 @@ const apiExposureOf = (
 
   return buildApiExposure({
     declaredApis: repository.catalogFacts.providesApis,
+    declaresNoApi: repository.catalogFacts.declaresNoApi,
     definitionPath: files.apiDefinitionPath,
     entityType: repository.catalogFacts.entityType,
     isArchived,

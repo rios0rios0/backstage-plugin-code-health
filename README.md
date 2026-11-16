@@ -58,7 +58,7 @@ rather than showing an empty dashboard.
 - **Claude Code usage**: optional input, output and cache-token totals from the organization Admin API, with daily, weekly and monthly averages, identity linking, exclusions and trends. This informational KPI never enters the productivity score. See [Claude Code setup and measurement rules](plugins/code-health-backend/docs/claude.md)
 - **Confluence integration**: pages created and edited, words written, comments, attachments, spaces contributed to, stale-page counts, and page views on Premium sites. One Atlassian credential lights up both products
 - **Documentation audit**: which repositories publish TechDocs, which already write documentation nobody wired up, and which have none
-- **Catalog API audit**: repositories shipping an OpenAPI, AsyncAPI, GraphQL or protobuf definition that declare no `spec.providesApis`
+- **Catalog API audit**: repositories shipping an OpenAPI, AsyncAPI, GraphQL or protobuf definition that declare no `spec.providesApis`, unless the owner has declared with `code-health/api-exposure: none` that the component exposes no API of its own
 - **A year of history**: pick any rolling window from the last hour to the last 365 days, today so far, or any single calendar month
 - **Two platforms**: GitHub (GraphQL) and Azure DevOps (REST), per repository rather than per instance
 - **Filtering, sorting, pagination** on every column of every table — repositories, contributors, identities and the repositories a person owns — with the page size picked once and offered everywhere, plus archived/fork toggles
@@ -705,6 +705,7 @@ snapshot has to have run at least once before either reports anything — until 
 | Documentation sources | a `docs/` tree or an `mkdocs.yml` in the repository |
 | External documentation | a `metadata.links` entry whose type or title names docs or a wiki |
 | Declared APIs | `spec.providesApis` on the entity |
+| Declared no API | `code-health/api-exposure: none` on the entity |
 | API definition | `openapi`, `swagger`, `asyncapi`, `api`, a GraphQL schema or a `.proto`, at the root or under `docs/` or `api/` |
 
 The file scan is deliberately shallow — the root, `docs/` and `api/`. It costs no extra request on
@@ -712,6 +713,45 @@ GitHub, where the trees ride along in the snapshot's existing GraphQL document, 
 repository per day on Azure DevOps, plus one more for each of those two directories that exists. A
 README on its own does not count as documentation: nearly every repository has one, so counting it
 would grade the whole fleet documented and the metric would measure nothing.
+
+#### Declaring that a component exposes no API
+
+Some components serve no API of their own. One that runs third-party software — a vendor's gateway,
+proxy or server, packaged and deployed by the team — serves that vendor's API rather than one the
+team defines, so there is nothing for it to name in `spec.providesApis`. Typed as a `service`, it is
+still graded **Likely** for as long as it exists, and **Undeclared** when the repository keeps a copy
+of the vendor's definition where the scan above looks, to build a client or a configuration from.
+Neither is a gap anybody can close, so the owner says so on the entity:
+
+```yaml
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: example-gateway
+  annotations:
+    github.com/project-slug: example-org/example-gateway
+    code-health/api-exposure: none
+spec:
+  type: service
+  lifecycle: production
+  owner: team-a
+```
+
+`none` is the only value defined. It is read trimmed and case-insensitively, and any other value is
+ignored as though the annotation were absent. The grade is decided in this order:
+
+1. **Declared** — the entity names an API in `spec.providesApis`. The annotation cannot hide one:
+   the catalog holds that API, so an entity carrying both has an annotation that is out of date.
+2. **None** — the repository is archived, as before.
+3. **None** — the entity carries `code-health/api-exposure: none`. It overrides both inferences,
+   **Undeclared** (a definition was found) and **Likely** (the type serves traffic).
+4. Otherwise **Undeclared**, **Likely** or **None**, inferred exactly as without the annotation.
+
+The chip and the **None** filter are the same as for any other repository with no API, and on the
+**Catalog APIs** card the repository counts under "No API, or not measured" and leaves the list of
+missing `providesApis` entries. Only the chip's tooltip changes, to say that the entity declared it.
+Like the other catalog facts, the annotation is read by discovery, so an edit to it shows up after
+the next `code-health.discover` pass rather than the next snapshot.
 
 ## Operating it
 

@@ -29,6 +29,12 @@ export interface RepositoryCatalogFacts {
   readonly techDocsRef: string | null;
   /** How many entries `spec.providesApis` names. */
   readonly providesApis: number;
+  /**
+   * The entity carries `code-health/api-exposure: none`: its owner declares
+   * that the component exposes no API of its own, so the API-exposure grade
+   * stops inferring one from a definition file or from `spec.type`.
+   */
+  readonly declaresNoApi: boolean;
   /** The entity links out to documentation hosted somewhere else. */
   readonly hasExternalDocs: boolean;
   /**
@@ -56,6 +62,7 @@ export const EMPTY_CATALOG_FACTS: RepositoryCatalogFacts = {
   ownerRef: null,
   techDocsRef: null,
   providesApis: 0,
+  declaresNoApi: false,
   hasExternalDocs: false,
   jiraProjectKey: null,
   jiraComponent: null,

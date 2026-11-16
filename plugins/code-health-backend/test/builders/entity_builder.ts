@@ -71,6 +71,11 @@ export class EntityBuilder {
     return this.withAnnotation("backstage.io/techdocs-ref", ref);
   }
 
+  /** `code-health/api-exposure`, written exactly as given so its spelling can be tested. */
+  withApiExposure(value: string): EntityBuilder {
+    return this.withAnnotation("code-health/api-exposure", value);
+  }
+
   withType(type: string | undefined): EntityBuilder {
     this.type = type;
     return this;

@@ -1643,6 +1643,7 @@ describe("ListRepositorySummaries documentation and API exposure", () => {
       state: "candidate",
       definitionPath: "openapi.yaml",
       declaredApis: 0,
+      declaresNoApi: false,
     });
   });
 
@@ -1659,6 +1660,27 @@ describe("ListRepositorySummaries documentation and API exposure", () => {
 
     // then
     expect(summary.apiExposure?.state).toBe("declared");
+  });
+
+  it("should take the owner's word for a service that exposes no API of its own", async () => {
+    // given / when
+    // A component running third-party software can keep the vendor's
+    // definition in its repository, and its type still says `service`.
+    const summary = await run(
+      { entityType: "service", declaresNoApi: true },
+      snapshotWith({
+        hasReadme: true,
+        hasDocsSource: false,
+        apiDefinitionPath: "api/openapi.yaml",
+      }),
+    );
+
+    // then
+    expect(summary.apiExposure).toMatchObject({
+      state: "none",
+      declaresNoApi: true,
+      definitionPath: "api/openapi.yaml",
+    });
   });
 });
 

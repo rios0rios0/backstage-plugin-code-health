@@ -126,6 +126,7 @@ describe("KnexCodeHealthStore", () => {
           ownerRef: "group:default/platform",
           techDocsRef: "dir:.",
           providesApis: 2,
+          declaresNoApi: true,
           hasExternalDocs: true,
         })
         .build();
@@ -145,6 +146,7 @@ describe("KnexCodeHealthStore", () => {
         ownerRef: "group:default/platform",
         techDocsRef: "dir:.",
         providesApis: 2,
+        declaresNoApi: true,
         hasExternalDocs: true,
         jiraProjectKey: null,
         jiraComponent: null,
@@ -230,6 +232,28 @@ describe("KnexCodeHealthStore", () => {
         techDocsRef: "dir:.",
         providesApis: 1,
       });
+    });
+
+    it("should forget the declaration of no API once the entity drops it", async () => {
+      // given
+      // The column is defaulted rather than nullable, so a rediscovery has to
+      // write the false back for a removed annotation to stop counting.
+      const store = await createStore();
+      const before = DiscoveredRepositoryBuilder.create()
+        .withCatalogFacts({ declaresNoApi: true })
+        .build();
+      await store.syncRepositories({ discovered: [before], retentionDays: 365, now: NOW });
+
+      // when
+      await store.syncRepositories({
+        discovered: [DiscoveredRepositoryBuilder.create().withEntityRef(before.entityRef).build()],
+        retentionDays: 365,
+        now: NOW,
+      });
+
+      // then
+      const [tracked] = await store.listTrackedRepositories();
+      expect(tracked.repository.catalogFacts.declaresNoApi).toBe(false);
     });
 
     it("should start the incremental cursor a day back so the first run has a window", async () => {
