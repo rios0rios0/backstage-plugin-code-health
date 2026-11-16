@@ -13,6 +13,24 @@ nothing.
 
 ## [Unreleased]
 
+## [6.1.0] - 2026-11-16
+
+### Added
+
+- added the `code-health/api-exposure` annotation, by which an owner declares with the value `none` that a component exposes no API of its own. A component that runs third-party software serves the API of that vendor rather than one its team defines, yet a `service` with no `spec.providesApis` was graded **Likely** for as long as it existed, and **Undeclared** when the repository kept a copy of the vendor definition; the declaration now grades it **None**, overriding both inferences, while an entity that names an API in `spec.providesApis` stays **Declared** and an archived repository stays **None**. The value is read trimmed and case-insensitively, and any other value is ignored. Discovery stores it in a new `declares_no_api` column on `code_health_repositories`, added with a default of false, so every row already stored keeps its grade until the next discovery pass reads its entity. `ApiExposure` gains a required `declaresNoApi`, which the backend fills, so a frontend against an older backend reads it as absent and shows the usual tooltip; `ApiExposureEvidence` takes it as an optional field that reads as false when absent, so existing callers of `buildApiExposure` and `computeApiExposureState` compile unchanged
+
+### Changed
+
+- moved the agent instructions from `CLAUDE.md` to `AGENTS.md`, keeping a `CLAUDE.md` that imports it, and refreshed `AGENTS.md`, `CONTRIBUTING.md`, `.github/copilot-instructions.md` and `.github/skills/code-review/SKILL.md`: pointed the stale `CLAUDE.md` references at `AGENTS.md`, listed the Claude Code files and the `metric_collection_days` migration, described the release as compiling chlog fragments with `--breaking` deciding a major, dropped the frontend `service/` layer that does not exist, and set the AutoBump floor in `CONTRIBUTING.md` to 3.0.3 in place of the interim `~/.autobump.yaml` step
+
+### Fixed
+
+- withheld the productivity score of anybody with no version-control account linked, who had been scored on whatever else happened to be measured — a Confluence-only account ranked 72 on documentation alone; their components are still shown
+
+### Security
+
+- raised undici, zod and launch-editor to their first patched release for 6 high-severity yarn-audit findings, and suppressed body-parser GHSA-27r3-jxmh-p828 for the week its fix needs to clear npmMinimalAgeGate
+
 ## [6.0.0] - 2026-10-16
 
 ### Added
